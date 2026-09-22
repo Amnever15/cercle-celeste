@@ -1,0 +1,13 @@
+{
+  "name": "cercle-celeste",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Cercle Céleste — PWA et API Systeme.io (un seul process Node)",
+  "main": "host.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node host.js"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "Cercle Céleste",
+  "short_name": "Cercle",
+  "description": "Ton manuscrit, et le ciel de ce mois.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#05020F",
+  "theme_color": "#05020F",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
