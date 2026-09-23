@@ -152,6 +152,8 @@
     if (d.token) state.user.token = d.token;
     else if (prevToken) state.user.token = prevToken;
     syncProfileFlag();
+    /* Ne pas garder un « Relire » local si le serveur n’a pas le fichier. */
+    if (!natalCanRead()) clearNatalLocalBook();
     saveUser();
   }
   /** Recalcule profileComplete à partir des champs (évite un flag localStorage obsolète). */
@@ -553,8 +555,12 @@
           }
           state.busy = null;
           state.natalGenError = null;
-          markBook(kind);
-          openNatalReader(res.data && res.data.pdfUrl);
+          if (natalCanRead()) {
+            openNatalReader();
+          } else {
+            state.natalGenError = 'Le manuscrit n’est pas encore prêt. Réessaie — la génération peut prendre plusieurs minutes.';
+            render();
+          }
           return;
         }
         render();
@@ -606,8 +612,7 @@
           if (natalCanRead()) {
             state.busy = null;
             state.natalGenError = null;
-            markBook('natal');
-            openNatalReader(u.natalPdfUrl || natalPdfUrl());
+            openNatalReader();
             return;
           }
           if (u.natalStatus === 'error') {
@@ -651,11 +656,66 @@
     return !!(u.natalReady && u.natalFileExists);
   }
 
+  function clearNatalLocalBook() {
+    try {
+      var b = loadBooks();
+      if (b.natal) {
+        delete b.natal;
+        saveBooks(b);
+      }
+    } catch (e) {}
+  }
+
   function openNatalReader(url) {
-    var u = url || natalPdfUrl();
-    state.natalPreview = u || true;
-    state.pdf = 'natal';
-    render();
+    if (!natalCanRead()) {
+      clearNatalLocalBook();
+      state.pdf = null;
+      state.natalGenError = 'Ton manuscrit n’est pas encore disponible. Appuie sur « OBTENIR LE MANUSCRIT DE MA VIE ».';
+      render();
+      return;
+    }
+    var u = withAuthQuery(url || natalPdfUrl());
+    if (!u) {
+      state.natalGenError = 'Lien manuscrit manquant. Reconnecte-toi puis réessaie.';
+      render();
+      return;
+    }
+    /* Vérifie le fichier avant l’iframe (évite d’afficher le JSON d’erreur brut). */
+    fetch(u, { headers: authHeaders(false) })
+      .then(function (r) {
+        if (r.ok) {
+          var ct = (r.headers.get('content-type') || '').toLowerCase();
+          if (ct.indexOf('json') >= 0) {
+            return r.json().then(function (j) {
+              throw new Error((j && j.error) || 'aucun fichier natal');
+            });
+          }
+          state.natalPreview = u;
+          state.pdf = 'natal';
+          state.natalGenError = null;
+          render();
+          return null;
+        }
+        return r.json().then(function (j) {
+          throw new Error((j && j.error) || ('HTTP ' + r.status));
+        }).catch(function (e) {
+          if (e && e.message && e.message.indexOf('HTTP') < 0 && e.message !== 'aucun fichier natal') throw e;
+          throw new Error((e && e.message) || 'aucun fichier natal');
+        });
+      })
+      .catch(function (err) {
+        clearNatalLocalBook();
+        if (state.user) {
+          state.user.natalReady = false;
+          state.user.natalFileExists = false;
+          state.user.natalStatus = 'none';
+          state.user.natalPdfUrl = null;
+          saveUser();
+        }
+        state.pdf = null;
+        state.natalGenError = 'Le fichier du manuscrit est introuvable. Relance « OBTENIR LE MANUSCRIT DE MA VIE » (plusieurs minutes).';
+        render();
+      });
   }
 
   function saveProfile() {
@@ -1156,9 +1216,6 @@
       ? '<div class="card stack"><div class="label">' + NATAL.kicker + '</div><h2>' + natalTitleHtml() + '</h2><p class="muted">' + NATAL.pages + ' pages · écrit une fois, à ta demande</p><p>' + NATAL.intro + '</p>' +
         natalStatusLine() +
         (readyProfile ? askBtn('natal', natalCta, natalCta) : '') +
-        (canRead && natalPdfUrl()
-          ? '<a class="btn ghost" href="' + natalPdfUrl() + '" target="_blank" rel="noopener">Ouvrir / télécharger</a>'
-          : '') +
         '</div>'
       : '<div class="card lock stack"><div class="label">Plan Céleste</div><h2>' + natalTitleHtml() + '</h2><p class="muted">28 pages · 59 € / mois</p><p>' + (isPausedPaid() ? 'Abonnement en pause : le natal se rouvre dès que tu reprends.' : 'Ton manuscrit de vie s’ouvre avec l’abonnement Céleste.') + '</p></div>';
     var ultime;
@@ -1183,8 +1240,12 @@
         (kind === 'natal' ? 'Écriture en cours… quelques minutes' : 'Le ciel s’écrit…') +
         '</button>';
     }
-    if (kind === 'natal' && natalCanRead()) {
-      return '<button class="btn" data-ask="natal">' + readLabel + '</button>';
+    /* Natal : jamais data-pdf / cache local books — uniquement fichier confirmé serveur. */
+    if (kind === 'natal') {
+      if (natalCanRead()) {
+        return '<button class="btn" data-ask="natal">' + readLabel + '</button>';
+      }
+      return '<button class="btn" data-ask="natal">' + askLabel + '</button>';
     }
     if (bookReady(kind)) return '<button class="btn" data-pdf="' + kind + '">' + readLabel + '</button>';
     return '<button class="btn" data-ask="' + kind + '">' + askLabel + '</button>';
@@ -1393,13 +1454,14 @@
     }
     var extra = '';
     if (id === 'natal') {
-      var url = natalPdfUrl();
+      var url = (typeof state.natalPreview === 'string' && state.natalPreview) ? state.natalPreview : natalPdfUrl();
       paras = [
-        'Voici l’ouverture de ton manuscrit. Les 28 pages complètes s’écrivent à partir de ton ciel de naissance.',
-        'Ton profil est enregistré pour toujours. Tu peux relire ton manuscrit ici, dans l’application.'
+        'Voici ton Manuscrit Céleste de ta vie. Lecture dans l’app uniquement, tant que ton abonnement est actif.'
       ];
-      if (url) {
+      if (url && natalCanRead()) {
         extra = '<iframe class="natal-frame" title="Manuscrit natal" src="' + url + '"></iframe>';
+      } else {
+        extra = '<p class="muted">Manuscrit indisponible pour le moment. Reviens à l’accueil et appuie sur OBTENIR LE MANUSCRIT DE MA VIE.</p>';
       }
     }
     var body = '<p class="kicker">' + kicker + '</p><h2>' + titleHtml + '</h2>' +

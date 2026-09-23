@@ -64,7 +64,7 @@ const LOG = resolveLogPath();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/natal-file'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/natal-file'];
 const LAST_WEBHOOKS_MAX = 20;
 const IA_MESSAGES_MAX = 1000;
 
@@ -925,6 +925,57 @@ async function handle(req, res) {
       return send(res, 200, {
         ok: true,
         action: 'ADMIN_NATAL_RESET',
+        contact: publicContact(c)
+      }, req);
+    }
+
+    /* POST /admin/natal-start?secret=… — démarre génération 28 pages (owner retest). */
+    if (route === '/admin/natal-start' && req.method === 'POST') {
+      if (!SECRET || url.searchParams.get('secret') !== SECRET) {
+        return send(res, 401, { error: 'secret' }, req);
+      }
+      const body = (await readBody(req)).body;
+      const email = normEmail(body.email);
+      if (!email) return send(res, 400, { error: 'email requis' }, req);
+      const store = readStore();
+      const c = store.contacts[email];
+      if (!c) return send(res, 404, { error: 'compte inconnu' }, req);
+      const needProf = profile.requireForGenerate(c, 'natal');
+      if (!needProf.ok) {
+        return send(res, 403, { error: needProf.error, needProfile: true, contact: publicContact(c) }, req);
+      }
+      if (natalGen.runningJobs[email]) {
+        return send(res, 202, {
+          ok: true,
+          status: 'generating',
+          message: c.natalProgress || 'déjà en cours',
+          contact: publicContact(c)
+        }, req);
+      }
+      ensureNatalFileOrReset(c, store);
+      if (c.natalReady && natalGen.hasNatalFile(c) && !body.force) {
+        return send(res, 200, { ok: true, already: true, contact: publicContact(c) }, req);
+      }
+      if (body.force) natalGen.clearNatal(c);
+      c.natalStatus = 'generating';
+      c.natalReady = false;
+      c.natalError = null;
+      c.natalProgress = 'Le Manuscrit Céleste de ta vie s’écrit… Cela peut prendre plusieurs minutes.';
+      c.natalProgressPct = 2;
+      writeStore(store);
+      try {
+        natalGen.startNatalJob(email);
+      } catch (err) {
+        c.natalStatus = 'error';
+        c.natalError = (err && err.message) || 'Démarrage impossible';
+        writeStore(store);
+        return send(res, 500, { error: c.natalError, contact: publicContact(c) }, req);
+      }
+      logLine('ADMIN_NATAL_START ' + email);
+      return send(res, 202, {
+        ok: true,
+        action: 'ADMIN_NATAL_START',
+        status: 'generating',
         contact: publicContact(c)
       }, req);
     }
