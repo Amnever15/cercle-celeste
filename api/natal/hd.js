@@ -4,22 +4,33 @@
  *
  * HD_API_TOKEN n’est PAS une clé « produit HD » tierce :
  * c’est le Bearer (ou X-API-Key) que TON serveur exige, si auth activée.
- * Si ton serveur est ouvert → laisse HD_API_TOKEN vide + HD_AUTH_STYLE=none.
+ * Si ton serveur est ouvert → HD_AUTH_STYLE=none (token ignoré).
  * Jamais exposé au client APP.
+ *
+ * Défaut = même Bearer que GENERATIONS/manuscrit-celeste-generation.html
+ * (rSecuremdp15*) — le serveur Render renvoie 401 sans Authorization.
  */
 const { requestJson, sleep, fetchWithTimeout } = require('./http');
 
+/** Identique à `var HD_API_TOKEN = window.HD_API_TOKEN || '…'` dans GENERATIONS. */
+const GENERATIONS_HD_TOKEN = 'rSecuremdp15*';
+
 function cfg() {
+  var envTok = String(
+    process.env.HD_API_TOKEN != null && String(process.env.HD_API_TOKEN).trim() !== ''
+      ? process.env.HD_API_TOKEN
+      : (process.env.HD_BEARER_TOKEN || '')
+  ).trim();
+  var usingDefault = !envTok;
+  var token = envTok || GENERATIONS_HD_TOKEN;
+  var style = String(process.env.HD_AUTH_STYLE || 'bearer').toLowerCase().trim();
+  if (style !== 'bearer' && style !== 'x-api-key' && style !== 'none') style = 'bearer';
   return {
     url: String(process.env.HD_API_URL || 'https://humandesign-api-jeqv.onrender.com').replace(/\/$/, ''),
-    /* Même défaut que GENERATIONS si la var Railway n’est pas posée. */
-    token: String(
-      process.env.HD_API_TOKEN ||
-      process.env.HD_BEARER_TOKEN ||
-      'rSecuremdp15*'
-    ).trim(),
+    token: token,
+    tokenSource: usingDefault ? 'generations-default' : 'env',
     path: String(process.env.HD_DATA_PATH || '/calculate'),
-    authStyle: String(process.env.HD_AUTH_STYLE || 'bearer').toLowerCase(),
+    authStyle: style,
     timeoutMs: parseInt(process.env.HD_API_TIMEOUT_MS || '90000', 10) || 90000,
     retries: parseInt(process.env.HD_API_RETRIES || '4', 10) || 4
   };
@@ -28,10 +39,23 @@ function cfg() {
 function hdAuthHeaders() {
   const c = cfg();
   const h = { Accept: 'application/json' };
-  if (!c.token || c.authStyle === 'none') return h;
+  if (c.authStyle === 'none') return h;
+  if (!c.token) return h;
   if (c.authStyle === 'x-api-key') h['X-API-Key'] = c.token;
-  else if (c.authStyle === 'bearer') h.Authorization = 'Bearer ' + c.token;
+  else h.Authorization = 'Bearer ' + c.token;
   return h;
+}
+
+/** Résumé sûr pour /health (jamais le token en clair). */
+function healthHint() {
+  const c = cfg();
+  return {
+    hasHdToken: !!(c.token && c.authStyle !== 'none'),
+    hdAuthStyle: c.authStyle,
+    hdTokenSource: c.tokenSource,
+    hdApiUrl: c.url,
+    hdDataPath: c.path
+  };
 }
 
 function warmUpHDApi() {
@@ -137,9 +161,22 @@ function parseHD(raw) {
   };
 }
 
+function formatHdHttpError(err) {
+  var status = err && err.status;
+  var base = (err && err.message) || String(err || 'Human Design API impossible');
+  if (status === 401 || status === 403 || /HTTP 401|HTTP 403/i.test(base)) {
+    return (
+      'Human Design API HTTP ' + status +
+      ' (auth refusée). Vérifie HD_API_TOKEN / HD_AUTH_STYLE sur Railway ' +
+      '(défaut GENERATIONS = bearer + token intégré). Ou HD_AUTH_STYLE=none si serveur ouvert. ' +
+      'Détail: ' + base.slice(0, 220)
+    );
+  }
+  return base;
+}
+
 async function getHDData(dateStr, place, gender, lat, lon) {
   const c = cfg();
-  /* Token optionnel : serveur ouvert → pas d’Authorization. */
   var path = c.path;
   if (path.charAt(0) !== '/') path = '/' + path;
   var m = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
@@ -161,13 +198,17 @@ async function getHDData(dateStr, place, gender, lat, lon) {
   var sep = path.indexOf('?') >= 0 ? '&' : '?';
   var url = c.url + path + sep + params.join('&');
 
-  var data = await requestJson(url, {
-    label: 'Human Design API',
-    retries: c.retries,
-    timeout_ms: c.timeoutMs,
-    retry_delay_ms: 2500,
-    fetch_options: { method: 'GET', headers: hdAuthHeaders() }
-  });
+  try {
+    var data = await requestJson(url, {
+      label: 'Human Design API',
+      retries: c.retries,
+      timeout_ms: c.timeoutMs,
+      retry_delay_ms: 2500,
+      fetch_options: { method: 'GET', headers: hdAuthHeaders() }
+    });
+  } catch (e) {
+    throw new Error(formatHdHttpError(e));
+  }
   if (typeof data === 'string') {
     try { data = JSON.parse(data); } catch (_) {}
   }
@@ -182,6 +223,7 @@ async function fetchHDWithRetry(dateStr, place, gender, lat, lon, onProgress) {
   warmUpHDApi();
   var raw = null;
   var attempt = 0;
+  var lastErr = null;
   while (!raw) {
     attempt++;
     try {
@@ -192,10 +234,25 @@ async function fetchHDWithRetry(dateStr, place, gender, lat, lon, onProgress) {
       }
       raw = await getHDData(dateStr, place, gender, lat, lon);
     } catch (e) {
-      if (attempt >= 8) throw e;
+      lastErr = e;
+      /* 401/403 : pas la peine de spammer 8 fois — auth cassée. */
+      var msg = String((e && e.message) || e || '');
+      if ((e && (e.status === 401 || e.status === 403)) || /auth refusée|HTTP 401|HTTP 403/i.test(msg)) {
+        throw e;
+      }
+      if (attempt >= 8) throw lastErr || e;
     }
   }
   return parseHD(raw);
 }
 
-module.exports = { parseHD, unwrapHDResponse, getHDData, fetchHDWithRetry, warmUpHDApi, cfg };
+module.exports = {
+  parseHD,
+  unwrapHDResponse,
+  getHDData,
+  fetchHDWithRetry,
+  warmUpHDApi,
+  cfg,
+  healthHint,
+  GENERATIONS_HD_TOKEN
+};

@@ -97,9 +97,22 @@
       "plan": "divin",
       "dailyUsed": 0,
       "monthlyUsed": 0,
-      "iaUsed": 1,
+      "iaUsed": 2,
       "usageMonth": "2026-09",
-      "usageYear": 2026
+      "usageYear": 2026,
+      "lastPaidPlan": "divin",
+      "iaMessages": [
+        {
+          "role": "me",
+          "text": "Test amour?",
+          "at": "2026-09-23T05:39:42.598Z"
+        },
+        {
+          "role": "bot",
+          "text": "Réponse démo — le vrai Claude arrivera ici. Pour « Test amour? » : regarde d’abord ton autorité intérieure aujourd’hui. Si la vague n’est pas claire, ce n’est pas encore un oui. (1 jeton de quota utilisé.)",
+          "at": "2026-09-23T05:39:42.598Z"
+        }
+      ]
     }
   },
   "lastWebhooks": [

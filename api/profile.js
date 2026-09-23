@@ -1,9 +1,15 @@
 /**
  * Profil natal (naissance) — stocké côté serveur par email.
  * Jamais de clé API ici : uniquement les champs client + helpers.
+ *
+ * Règle anti-prêt de compte :
+ * - 1re complétion du profil = gratuite (ne compte pas)
+ * - ensuite max MAX_PROFILE_EDITS modifications (corrections)
  */
 
 const GENDERS = ['femme', 'homme', 'autre'];
+/** Corrections après la 1re complétion (la création ne compte pas). */
+const MAX_PROFILE_EDITS = 3;
 
 function trim(s) {
   return String(s == null ? '' : s).trim();
@@ -23,6 +29,11 @@ function parseCoord(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+function editCountOf(c) {
+  const n = c && c.profileEditCount != null ? Number(c.profileEditCount) : 0;
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 function profileFields(c) {
   if (!c) {
     return {
@@ -34,7 +45,11 @@ function profileFields(c) {
       birthTimezone: '',
       gender: '',
       profileComplete: false,
+      profileEditCount: 0,
+      profileEditsRemaining: MAX_PROFILE_EDITS,
+      profileCanEdit: true,
       natalReady: false,
+      natalFileExists: false,
       natalStatus: 'none',
       natalGeneratedAt: null,
       natalPdfUrl: null,
@@ -53,6 +68,10 @@ function profileFields(c) {
   const birthTimezone = trim(c.birthTimezone);
   const gender = normalizeGender(c.gender);
   const complete = !!(birthDate && birthTime && birthPlace && gender && GENDERS.indexOf(gender) >= 0);
+  const edits = editCountOf(c);
+  const remaining = Math.max(0, MAX_PROFILE_EDITS - edits);
+  /* Première complétion toujours possible ; ensuite tant qu’il reste des corrections. */
+  const canEdit = !complete || remaining > 0;
   const ready = !!c.natalReady;
   let status = trim(c.natalStatus) || 'none';
   if (ready && status === 'none') status = 'ready';
@@ -66,7 +85,12 @@ function profileFields(c) {
     birthTimezone: birthTimezone,
     gender: gender,
     profileComplete: complete,
+    profileEditCount: edits,
+    profileEditsRemaining: remaining,
+    profileCanEdit: canEdit,
     natalReady: ready,
+    /* Remplacé dans publicContact par hasNatalFile() — défaut false ici. */
+    natalFileExists: false,
     natalStatus: status,
     natalGeneratedAt: c.natalGeneratedAt || null,
     natalPdfUrl: ready ? ('/natal-file?email=' + encodeURIComponent(c.email || '')) : null,
@@ -90,10 +114,25 @@ function toneLabel(gender) {
 
 /**
  * Valide et écrit les champs naissance sur le contact.
- * @returns {{ ok: boolean, error?: string }}
+ * 1re complétion gratuite ; ensuite max MAX_PROFILE_EDITS updates (serveur).
+ * @returns {{ ok: boolean, error?: string, code?: string, isEdit?: boolean }}
  */
 function saveProfile(c, body) {
   if (!c) return { ok: false, error: 'compte inconnu' };
+
+  const wasComplete = isComplete(c);
+  const edits = editCountOf(c);
+
+  if (wasComplete && edits >= MAX_PROFILE_EDITS) {
+    return {
+      ok: false,
+      code: 'PROFILE_EDIT_LIMIT',
+      error:
+        'Tu as utilisé tes 3 modifications de profil. Pour toute correction supplémentaire, contacte le support.',
+      isEdit: true
+    };
+  }
+
   const birthDate = trim(body && body.birthDate);
   let birthTime = trim(body && body.birthTime);
   const birthPlace = trim(body && body.birthPlace);
@@ -132,7 +171,14 @@ function saveProfile(c, body) {
   c.birthTimezone = birthTimezone;
   c.gender = gender;
   c.profileUpdatedAt = new Date().toISOString();
-  return { ok: true };
+
+  if (wasComplete) {
+    c.profileEditCount = edits + 1;
+  } else if (c.profileEditCount == null || !Number.isFinite(Number(c.profileEditCount))) {
+    c.profileEditCount = 0;
+  }
+
+  return { ok: true, isEdit: wasComplete };
 }
 
 /** Natal / jour / mois ont besoin du profil ; Ultime plus tard aussi. */
@@ -152,6 +198,7 @@ function requireForGenerate(c, kind) {
 
 module.exports = {
   GENDERS,
+  MAX_PROFILE_EDITS,
   normalizeGender,
   profileFields,
   isComplete,

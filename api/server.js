@@ -66,6 +66,7 @@ const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
 const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/natal-file'];
 const LAST_WEBHOOKS_MAX = 20;
+const IA_MESSAGES_MAX = 1000;
 
 function ensureParentDir(filePath) {
   try {
@@ -101,6 +102,17 @@ function warnProduction() {
   }
   console.log('Store     → ' + STORE + (storeWritable() ? ' (writable)' : ' (NON writable)'));
   console.log('Natal out → ' + natalGen.OUT_DIR);
+  try {
+    const hd = require('./natal/hd').healthHint();
+    console.log(
+      'HD auth   → style=' + hd.hdAuthStyle +
+      ' token=' + (hd.hasHdToken ? 'yes' : 'no') +
+      ' source=' + hd.hdTokenSource +
+      ' url=' + hd.hdApiUrl
+    );
+  } catch (e) {
+    console.warn('HD auth   → module natal/hd indisponible: ' + (e && e.message));
+  }
 }
 
 function readStore() {
@@ -158,6 +170,8 @@ function emptyContact(email) {
     email: email,
     prenom: '',
     nom: '',
+    passwordHash: null,
+    sessionToken: null,
     active: false,
     monthsPaid: 0,
     saleIds: [],
@@ -179,12 +193,41 @@ function emptyContact(email) {
     birthLon: null,
     birthTimezone: '',
     gender: '',
+    profileEditCount: 0,
     natalReady: false,
     natalStatus: 'none',
     natalPdfPath: null,
     natalTxtPath: null,
-    natalGeneratedAt: null
+    natalGeneratedAt: null,
+    iaMessages: []
   };
+}
+
+function normalizeIaMessages(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    const m = list[i];
+    if (!m || typeof m !== 'object') continue;
+    const role = m.role === 'me' || m.role === 'user' ? 'me' : (m.role === 'bot' || m.role === 'assistant' ? 'bot' : '');
+    const text = String(m.text || m.content || '').trim();
+    if (!role || !text) continue;
+    const entry = { role: role, text: text };
+    if (m.at) entry.at = String(m.at);
+    out.push(entry);
+  }
+  if (out.length > IA_MESSAGES_MAX) return out.slice(out.length - IA_MESSAGES_MAX);
+  return out;
+}
+
+function appendIaExchange(c, question, answer) {
+  if (!c) return [];
+  const msgs = normalizeIaMessages(c.iaMessages);
+  const at = new Date().toISOString();
+  msgs.push({ role: 'me', text: String(question || '').trim(), at: at });
+  msgs.push({ role: 'bot', text: String(answer || '').trim(), at: at });
+  c.iaMessages = msgs.length > IA_MESSAGES_MAX ? msgs.slice(msgs.length - IA_MESSAGES_MAX) : msgs;
+  return c.iaMessages;
 }
 
 function getContact(store, email) {
@@ -458,7 +501,19 @@ function extract(body) {
 }
 
 function publicContact(c) {
-  return plans.entitlements(c);
+  const out = plans.entitlements(c);
+  const fileOk = !!(c && natalGen.hasNatalFile(c));
+  out.natalFileExists = fileOk;
+  out.hasPassword = !!(c && c.passwordHash);
+  /* UI ne doit jamais afficher « Lire » si le HTML n’est pas sur le volume. */
+  if (out.natalReady && !fileOk) {
+    out.natalReady = false;
+    if (out.natalStatus === 'ready') out.natalStatus = 'none';
+    out.natalPdfUrl = null;
+  } else if (out.natalReady && fileOk) {
+    out.natalPdfUrl = '/natal-file?email=' + encodeURIComponent(c.email || '');
+  }
+  return out;
 }
 
 /** Si natalReady sans fichier sur disque → flags à zéro (évite « Lire » cassé). */
@@ -513,6 +568,50 @@ function safeEqual(a, b) {
   const bb = Buffer.from(String(b));
   if (ba.length !== bb.length) return false;
   return crypto.timingSafeEqual(ba, bb);
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  return salt + ':' + hash;
+}
+
+function verifyPassword(password, stored) {
+  if (!stored || typeof stored !== 'string' || stored.indexOf(':') < 0) return false;
+  const i = stored.indexOf(':');
+  const salt = stored.slice(0, i);
+  const hash = stored.slice(i + 1);
+  const test = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  if (hash.length !== test.length) return false;
+  return safeEqual(hash, test);
+}
+
+function newSessionToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+/** Session : Authorization Bearer, ?token= ou body.token + email. */
+function requireSession(req, url, body) {
+  const email = normEmail(
+    (body && body.email) ||
+    (url && url.searchParams && url.searchParams.get('email')) ||
+    ''
+  );
+  const token = (
+    bearerToken(req) ||
+    (url && url.searchParams && url.searchParams.get('token')) ||
+    (body && body.token) ||
+    ''
+  ).trim();
+  if (!email || !token) {
+    return { ok: false, code: 401, error: 'Connexion requise. Reconnecte-toi.' };
+  }
+  const store = readStore();
+  const c = store.contacts[email];
+  if (!c || !c.sessionToken || !safeEqual(String(c.sessionToken), String(token))) {
+    return { ok: false, code: 401, error: 'Session expirée. Reconnecte-toi.' };
+  }
+  return { ok: true, store: store, c: c, email: email, token: token };
 }
 
 function queryVal(query, key) {
@@ -669,6 +768,7 @@ async function handle(req, res) {
     }
 
     if (route === '/health' && req.method === 'GET') {
+      const hd = require('./natal/hd').healthHint();
       return send(res, 200, {
         ok: true,
         service: 'cercle-celeste',
@@ -679,34 +779,37 @@ async function handle(req, res) {
         webhookAuth: WEBHOOK_AUTH_VERSION,
         storePath: STORE,
         storeWritable: storeWritable(),
-        natalOutDir: natalGen.OUT_DIR
+        natalOutDir: natalGen.OUT_DIR,
+        natalBuild: 'hd-default-v3',
+        hasHdToken: hd.hasHdToken,
+        hdAuthStyle: hd.hdAuthStyle,
+        hdTokenSource: hd.hdTokenSource,
+        hdApiUrl: hd.hdApiUrl
       }, req);
     }
 
     if (route === '/access' && req.method === 'GET') {
-      const email = normEmail(url.searchParams.get('email'));
-      const store = readStore();
-      const c = email && store.contacts[email];
-      if (!c && DEV && email) {
-        const demo = emptyContact(email);
-        demo.prenom = url.searchParams.get('prenom') || 'Sophie';
-        demo.plan = plans.demoPlanFromEmail(email);
-        demo.active = true;
-        demo.monthsPaid = demo.plan === 'gratuit' ? 0 : 2;
-        refreshUltime(demo);
-        return send(res, 200, Object.assign({ demo: true }, publicContact(demo)));
-      }
-      if (c) ensureNatalFileOrReset(c, store);
-      return send(res, 200, publicContact(c));
+      const auth = requireSession(req, url, null);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const store = auth.store;
+      const c = auth.c;
+      ensureNatalFileOrReset(c, store);
+      return send(res, 200, publicContact(c), req);
     }
 
     if (route === '/login' && req.method === 'POST') {
       const body = (await readBody(req)).body;
       const email = normEmail(body.email);
+      const password = String(body.password || '');
       const prenom = String(body.prenom || '').trim();
-      if (!email) return send(res, 400, { error: 'email requis' });
+      if (!email) return send(res, 400, { error: 'Email requis.' }, req);
+      if (!password || password.length < 8) {
+        return send(res, 400, { error: 'Mot de passe : 8 caractères minimum.' }, req);
+      }
       const store = readStore();
       let c = store.contacts[email];
+      let passwordCreated = false;
+
       if (!c && DEV) {
         c = emptyContact(email);
         c.prenom = prenom || 'Sophie';
@@ -714,23 +817,52 @@ async function handle(req, res) {
         c.active = true;
         c.monthsPaid = c.plan === 'gratuit' ? 0 : (c.plan === 'divin' ? 1 : 2);
         refreshUltime(c);
+        c.passwordHash = hashPassword(password);
+        c.sessionToken = newSessionToken();
+        passwordCreated = true;
         store.contacts[email] = c;
         writeStore(store);
-        return send(res, 200, Object.assign({ demo: true }, publicContact(c)));
+        return send(res, 200, Object.assign({
+          demo: true,
+          passwordCreated: true,
+          token: c.sessionToken
+        }, publicContact(c)), req);
       }
+
       if (!c) {
         c = emptyContact(email);
         c.prenom = prenom;
         c.plan = 'gratuit';
         c.active = true;
         refreshUltime(c);
+        c.passwordHash = hashPassword(password);
+        c.sessionToken = newSessionToken();
+        passwordCreated = true;
         store.contacts[email] = c;
         writeStore(store);
-        return send(res, 200, Object.assign({ created: 'gratuit' }, publicContact(c)));
+        return send(res, 200, Object.assign({
+          created: 'gratuit',
+          passwordCreated: true,
+          token: c.sessionToken
+        }, publicContact(c)), req);
       }
-      if (prenom && !c.prenom) { c.prenom = prenom; writeStore(store); }
+
+      if (!c.passwordHash) {
+        /* Première connexion : l’email (souvent déjà créé par webhook) choisit son mot de passe. */
+        c.passwordHash = hashPassword(password);
+        passwordCreated = true;
+      } else if (!verifyPassword(password, c.passwordHash)) {
+        return send(res, 401, { error: 'Email ou mot de passe incorrect.' }, req);
+      }
+
+      if (prenom && !c.prenom) c.prenom = prenom;
+      c.sessionToken = newSessionToken();
       ensureNatalFileOrReset(c, store);
-      return send(res, 200, publicContact(c));
+      writeStore(store);
+      return send(res, 200, Object.assign({
+        passwordCreated: passwordCreated,
+        token: c.sessionToken
+      }, publicContact(c)), req);
     }
 
     if (route === '/admin' && req.method === 'GET') {
@@ -925,43 +1057,39 @@ async function handle(req, res) {
     }
 
     if (route === '/profile' && req.method === 'GET') {
-      const email = normEmail(url.searchParams.get('email'));
-      if (!email) return send(res, 400, { error: 'email requis' }, req);
-      const store = readStore();
-      const c = store.contacts[email];
-      if (!c) return send(res, 404, { error: 'compte inconnu', profileComplete: false }, req);
-      return send(res, 200, Object.assign({ ok: true }, publicContact(c)), req);
+      const auth = requireSession(req, url, null);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      return send(res, 200, Object.assign({ ok: true }, publicContact(auth.c)), req);
     }
 
     if (route === '/profile' && req.method === 'POST') {
       const body = (await readBody(req)).body;
-      const email = normEmail(body.email);
-      if (!email) return send(res, 400, { error: 'email requis' }, req);
-      const store = readStore();
-      let c = store.contacts[email];
-      if (!c) {
-        if (!DEV) return send(res, 404, { error: 'compte inconnu' }, req);
-        c = emptyContact(email);
-        c.prenom = String(body.prenom || '').trim() || 'Sophie';
-        c.plan = plans.demoPlanFromEmail(email);
-        c.active = true;
-        c.monthsPaid = c.plan === 'gratuit' ? 0 : (c.plan === 'divin' ? 1 : 2);
-        refreshUltime(c);
-        store.contacts[email] = c;
-      }
+      const auth = requireSession(req, url, body);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const store = auth.store;
+      const c = auth.c;
       const saved = profile.saveProfile(c, body);
-      if (!saved.ok) return send(res, 400, { error: saved.error, contact: publicContact(c) }, req);
+      if (!saved.ok) {
+        const code = saved.code === 'PROFILE_EDIT_LIMIT' ? 403 : 400;
+        return send(res, code, {
+          error: saved.error,
+          code: saved.code || null,
+          contact: publicContact(c)
+        }, req);
+      }
       writeStore(store);
-      logLine('PROFILE saved ' + email);
+      logLine(
+        'PROFILE saved ' + auth.email +
+        (saved.isEdit ? ' (edit #' + (c.profileEditCount || 0) + ')' : ' (first)')
+      );
       return send(res, 200, { ok: true, contact: publicContact(c) }, req);
     }
 
     if (route === '/natal-file' && req.method === 'GET') {
-      const email = normEmail(url.searchParams.get('email'));
-      if (!email) return send(res, 400, { error: 'email requis' }, req);
-      const store = readStore();
-      const c = store.contacts[email];
-      if (!c) return send(res, 404, { error: 'compte inconnu' }, req);
+      const auth = requireSession(req, url, null);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const store = auth.store;
+      const c = auth.c;
       const ent = plans.entitlements(c);
       if (!ent.canNatal && !c.natalReady) {
         return send(res, 403, { error: 'Manuscrit natal réservé au plan Céleste / Divin.' }, req);
@@ -989,16 +1117,17 @@ async function handle(req, res) {
 
     if (route === '/generate' && req.method === 'POST') {
       const body = (await readBody(req)).body;
-      const email = normEmail(body.email);
+      const auth = requireSession(req, url, body);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const email = auth.email;
       const kind = String(body.kind || '');
-      if (!email || ['natal', 'mois', 'jour', 'ultime'].indexOf(kind) < 0) {
-        return send(res, 400, { error: 'email et kind requis' });
+      if (['natal', 'mois', 'jour', 'ultime'].indexOf(kind) < 0) {
+        return send(res, 400, { error: 'kind requis' }, req);
       }
-      const store = readStore();
-      const c = store.contacts[email];
-      if (!c) return send(res, 404, { error: 'compte inconnu' });
+      const store = auth.store;
+      const c = auth.c;
       const check = plans.canGenerate(c, kind);
-      if (!check.ok) return send(res, 403, { error: check.error, contact: publicContact(c) });
+      if (!check.ok) return send(res, 403, { error: check.error, contact: publicContact(c) }, req);
 
       const needProf = profile.requireForGenerate(c, kind);
       if (!needProf.ok) {
@@ -1006,15 +1135,13 @@ async function handle(req, res) {
           error: needProf.error,
           needProfile: true,
           contact: publicContact(c)
-        });
+        }, req);
       }
 
-      /* Fichier perdu (redeploy) : ne pas bloquer sur « already » — autoriser une nouvelle génération. */
       if (kind === 'natal') {
         ensureNatalFileOrReset(c, store);
       }
 
-      /* Natal déjà prêt avec fichier : ne pas recompter / regénérer sauf regenerate=true */
       if (kind === 'natal' && c.natalReady && natalGen.hasNatalFile(c) && !body.regenerate) {
         return send(res, 200, {
           ok: true,
@@ -1022,11 +1149,10 @@ async function handle(req, res) {
           already: true,
           pdfUrl: '/natal-file?email=' + encodeURIComponent(email),
           contact: publicContact(c)
-        });
+        }, req);
       }
 
       if (kind === 'natal') {
-        /* Job async : la génération prend plusieurs minutes (Railway timeout HTTP). */
         if (c.natalStatus === 'generating' && natalGen.runningJobs[email]) {
           return send(res, 202, {
             ok: true,
@@ -1034,7 +1160,7 @@ async function handle(req, res) {
             status: 'generating',
             message: c.natalProgress || 'Génération en cours…',
             contact: publicContact(c)
-          });
+          }, req);
         }
         c.natalStatus = 'generating';
         c.natalReady = false;
@@ -1051,7 +1177,7 @@ async function handle(req, res) {
           return send(res, 500, {
             error: c.natalError,
             contact: publicContact(c)
-          });
+          }, req);
         }
         logLine('NATAL job started ' + email);
         return send(res, 202, {
@@ -1062,27 +1188,60 @@ async function handle(req, res) {
           message: c.natalProgress,
           pdfUrl: '/natal-file?email=' + encodeURIComponent(email),
           contact: publicContact(c)
-        });
+        }, req);
       }
 
       plans.consumeGenerate(c, kind);
       writeStore(store);
-      return send(res, 200, { ok: true, kind: kind, contact: publicContact(c) });
+      return send(res, 200, { ok: true, kind: kind, contact: publicContact(c) }, req);
+    }
+
+    if (route === '/ia' && req.method === 'GET') {
+      const auth = requireSession(req, url, null);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const c = auth.c;
+      const e = plans.entitlements(c);
+      if (!e.canIa) {
+        return send(res, 403, {
+          error: 'L’IA Céleste est réservée au plan Divin.',
+          messages: [],
+          contact: publicContact(c)
+        }, req);
+      }
+      c.iaMessages = normalizeIaMessages(c.iaMessages);
+      return send(res, 200, {
+        ok: true,
+        messages: c.iaMessages,
+        contact: publicContact(c)
+      }, req);
     }
 
     if (route === '/ia' && req.method === 'POST') {
       const body = (await readBody(req)).body;
-      const email = normEmail(body.email);
+      const auth = requireSession(req, url, body);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
       const question = String(body.question || '').trim();
-      if (!email || !question) return send(res, 400, { error: 'email et question requis' });
-      const store = readStore();
-      const c = store.contacts[email];
-      if (!c) return send(res, 404, { error: 'compte inconnu' });
+      if (!question) return send(res, 400, { error: 'question requise' }, req);
+      if (question.length > 2000) return send(res, 400, { error: 'Question trop longue.' }, req);
+      const store = auth.store;
+      const c = auth.c;
       const check = plans.consumeIa(c);
-      if (!check.ok) return send(res, 403, { error: check.error, contact: publicContact(c) });
+      if (!check.ok) {
+        return send(res, 403, {
+          error: check.error,
+          messages: normalizeIaMessages(c.iaMessages),
+          contact: publicContact(c)
+        }, req);
+      }
+      const answer = 'Réponse démo — le vrai Claude arrivera ici. Pour « ' + question.slice(0, 80) + ' » : regarde d’abord ton autorité intérieure aujourd’hui. Si la vague n’est pas claire, ce n’est pas encore un oui.';
+      const messages = appendIaExchange(c, question, answer);
       writeStore(store);
-      const answer = 'Réponse démo — le vrai Claude arrivera ici. Pour « ' + question.slice(0, 80) + ' » : regarde d’abord ton autorité intérieure aujourd’hui. Si la vague n’est pas claire, ce n’est pas encore un oui. (1 jeton de quota utilisé.)';
-      return send(res, 200, { ok: true, answer: answer, contact: publicContact(c) });
+      return send(res, 200, {
+        ok: true,
+        answer: answer,
+        messages: messages,
+        contact: publicContact(c)
+      }, req);
     }
 
     send(res, 404, { error: 'not found' }, req);

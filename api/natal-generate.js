@@ -34,8 +34,6 @@ function resolveOutDir() {
   return path.join(__dirname, 'generated');
 }
 
-var OUT_DIR = resolveOutDir();
-
 /** Jobs en cours (évite double génération pour le même email). */
 const runningJobs = Object.create(null);
 
@@ -43,8 +41,14 @@ function claudeKey() {
   return claudeNatal.claudeKey();
 }
 
+function outDir() {
+  return resolveOutDir();
+}
+
 function ensureOutDir() {
-  if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
+  var dir = outDir();
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
 }
 
 function safeEmailFile(email) {
@@ -53,10 +57,11 @@ function safeEmailFile(email) {
 
 function outPaths(email) {
   const base = 'natal-' + safeEmailFile(email);
+  const dir = outDir();
   return {
-    html: path.join(OUT_DIR, base + '.html'),
-    json: path.join(OUT_DIR, base + '.json'),
-    txt: path.join(OUT_DIR, base + '.txt')
+    html: path.join(dir, base + '.html'),
+    json: path.join(dir, base + '.json'),
+    txt: path.join(dir, base + '.txt')
   };
 }
 
@@ -89,7 +94,7 @@ function clearNatal(contact) {
       if (paths.indexOf(p) < 0) paths.push(p);
     });
     try {
-      var oldPdf = path.join(OUT_DIR, 'natal-' + safeEmailFile(contact.email) + '.pdf');
+      var oldPdf = path.join(outDir(), 'natal-' + safeEmailFile(contact.email) + '.pdf');
       if (paths.indexOf(oldPdf) < 0) paths.push(oldPdf);
     } catch (_) {}
   }
@@ -315,7 +320,7 @@ async function generateNatal(contact, opts) {
 
   /* Supprimer d’anciens stubs PDF 1 page s’ils existent */
   try {
-    var oldPdf = path.join(OUT_DIR, 'natal-' + safeEmailFile(email) + '.pdf');
+    var oldPdf = path.join(outDir(), 'natal-' + safeEmailFile(email) + '.pdf');
     if (fs.existsSync(oldPdf)) fs.unlinkSync(oldPdf);
   } catch (_) {}
 
@@ -499,7 +504,8 @@ function dryRunStructureCheck() {
     htmlBytes: Buffer.byteLength(html, 'utf8'),
     structure: sk,
     hasClaudeKey: !!claudeKey(),
-    hasHdToken: !!hdMod.cfg().token
+    hasHdToken: !!(hdMod.cfg().token && hdMod.cfg().authStyle !== 'none'),
+    hdTokenSource: hdMod.cfg().tokenSource
   };
 }
 
@@ -513,7 +519,7 @@ module.exports = {
   clearNatal,
   reconcileNatalReady,
   dryRunStructureCheck,
-  get OUT_DIR() { return OUT_DIR; },
+  get OUT_DIR() { return outDir(); },
   resolveOutDir,
   runningJobs
 };

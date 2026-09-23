@@ -469,7 +469,7 @@ function consumeGenerate(c, kind) {
 function consumeIa(c) {
   const e = entitlements(c);
   if (!e.canIa) return { ok: false, error: 'L’IA Céleste est réservée au plan Divin.' };
-  if (e.iaLeft <= 0) return { ok: false, error: 'Quota du mois atteint (500 questions). Il se réinitialise le 1er.' };
+  if (e.iaLeft <= 0) return { ok: false, error: 'Le ciel se repose pour ce mois. Reviens le 1er.' };
   c.iaUsed = (c.iaUsed || 0) + 1;
   return { ok: true };
 }
