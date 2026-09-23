@@ -17,12 +17,21 @@ function normalizeGender(g) {
   return '';
 }
 
+function parseCoord(v) {
+  if (v == null || v === '') return null;
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
 function profileFields(c) {
   if (!c) {
     return {
       birthDate: '',
       birthTime: '',
       birthPlace: '',
+      birthLat: null,
+      birthLon: null,
+      birthTimezone: '',
       gender: '',
       profileComplete: false,
       natalReady: false,
@@ -35,6 +44,9 @@ function profileFields(c) {
   let birthTime = trim(c.birthTime);
   if (/^\d{1,2}:\d{2}:\d{2}$/.test(birthTime)) birthTime = birthTime.slice(0, 5);
   const birthPlace = trim(c.birthPlace);
+  const birthLat = parseCoord(c.birthLat);
+  const birthLon = parseCoord(c.birthLon);
+  const birthTimezone = trim(c.birthTimezone);
   const gender = normalizeGender(c.gender);
   const complete = !!(birthDate && birthTime && birthPlace && gender && GENDERS.indexOf(gender) >= 0);
   const ready = !!c.natalReady;
@@ -45,6 +57,9 @@ function profileFields(c) {
     birthDate: birthDate,
     birthTime: birthTime,
     birthPlace: birthPlace,
+    birthLat: birthLat,
+    birthLon: birthLon,
+    birthTimezone: birthTimezone,
     gender: gender,
     profileComplete: complete,
     natalReady: ready,
@@ -96,9 +111,17 @@ function saveProfile(c, body) {
     return { ok: false, error: 'Genre requis (femme, homme ou autre)' };
   }
 
+  const birthLat = parseCoord(body && body.birthLat);
+  const birthLon = parseCoord(body && body.birthLon);
+  let birthTimezone = trim(body && body.birthTimezone);
+  if (birthTimezone.length > 80) birthTimezone = birthTimezone.slice(0, 80);
+
   c.birthDate = birthDate;
   c.birthTime = birthTime;
   c.birthPlace = birthPlace;
+  c.birthLat = birthLat;
+  c.birthLon = birthLon;
+  c.birthTimezone = birthTimezone;
   c.gender = gender;
   c.profileUpdatedAt = new Date().toISOString();
   return { ok: true };

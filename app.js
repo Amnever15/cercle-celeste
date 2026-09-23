@@ -45,6 +45,14 @@
     need: 6
   };
 
+  /* Sélection ville (Photon) — lat/lon/tz pour génération natal plus tard */
+  var _birthGeo = {
+    lat: null,
+    lon: null,
+    timezone: '',
+    label: ''
+  };
+
   var state = {
     screen: 'login',
     tab: 'natal',
@@ -349,47 +357,219 @@
     if (!birthTime) { alert('Ton heure de naissance ✦'); return; }
     if (!birthPlace) { alert('Ton lieu de naissance ✦'); return; }
     if (!gender) { alert('Choisis un genre (pour le ton d’écriture) ✦'); return; }
+
+    var lat = _birthGeo.lat;
+    var lon = _birthGeo.lon;
+    var timezone = _birthGeo.timezone || '';
+    /* Si le libellé a changé sans re-sélection, on ne garde pas d’anciennes coords. */
+    if (_birthGeo.label && birthPlace !== _birthGeo.label) {
+      lat = null;
+      lon = null;
+      timezone = '';
+    }
+
     var btn = document.getElementById('save-profile');
     if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
-    fetch(API + '/profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: email,
-        birthDate: birthDate,
-        birthTime: birthTime,
-        birthPlace: birthPlace,
-        gender: gender
-      })
-    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
-      .then(function (res) {
-        if (!res.ok) {
-          alert((res.data && res.data.error) || 'Impossible d’enregistrer le profil.');
+
+    function postProfile(geo) {
+      fetch(API + '/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email,
+          birthDate: birthDate,
+          birthTime: birthTime,
+          birthPlace: birthPlace,
+          birthLat: geo.lat,
+          birthLon: geo.lon,
+          birthTimezone: geo.timezone || '',
+          gender: gender
+        })
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+        .then(function (res) {
+          if (!res.ok) {
+            alert((res.data && res.data.error) || 'Impossible d’enregistrer le profil.');
+            if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer mon profil'; }
+            return;
+          }
+          if (res.data && res.data.contact) applyAccess(res.data.contact);
+          else {
+            state.user = Object.assign({}, state.user || {}, {
+              birthDate: birthDate,
+              birthTime: birthTime,
+              birthPlace: birthPlace,
+              birthLat: geo.lat,
+              birthLon: geo.lon,
+              birthTimezone: geo.timezone || '',
+              gender: gender
+            });
+            syncProfileFlag();
+            saveUser();
+          }
+          var pending = state.pendingAsk;
+          state.pendingAsk = null;
+          localStorage.setItem('cercle.installedHint', '1');
+          state.screen = 'app';
+          render();
+          if (pending) askManuscript(pending);
+        })
+        .catch(function () {
+          alert('Le serveur n’est pas joignable.');
           if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer mon profil'; }
-          return;
-        }
-        if (res.data && res.data.contact) applyAccess(res.data.contact);
-        else {
-          state.user = Object.assign({}, state.user || {}, {
-            birthDate: birthDate,
-            birthTime: birthTime,
-            birthPlace: birthPlace,
-            gender: gender
-          });
-          syncProfileFlag();
-          saveUser();
-        }
-        var pending = state.pendingAsk;
-        state.pendingAsk = null;
-        localStorage.setItem('cercle.installedHint', '1');
-        state.screen = 'app';
-        render();
-        if (pending) askManuscript(pending);
-      })
-      .catch(function () {
-        alert('Le serveur n’est pas joignable.');
-        if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer mon profil'; }
+        });
+    }
+
+    /* Si coords connues mais timezone manquant → TimeAPI (comme GENERATIONS) */
+    if (lat != null && lon != null && !timezone) {
+      fetch('https://timeapi.io/api/timezone/coordinate?latitude=' + lat + '&longitude=' + lon)
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          postProfile({ lat: lat, lon: lon, timezone: (d && d.timeZone) || '' });
+        })
+        .catch(function () {
+          postProfile({ lat: lat, lon: lon, timezone: '' });
+        });
+      return;
+    }
+    postProfile({ lat: lat, lon: lon, timezone: timezone });
+  }
+
+  /**
+   * Autocomplete ville — même source que GENERATIONS :
+   * Photon (OpenStreetMap) + TimeAPI pour le fuseau.
+   * APIs publiques, pas de clé à exposer.
+   */
+  function initBirthPlaceAutocomplete() {
+    var input = document.getElementById('birth-place');
+    var dropdown = document.getElementById('birth-place-dropdown');
+    if (!input || !dropdown) return;
+
+    var u = state.user || {};
+    if (u.birthLat != null && u.birthLon != null && u.birthPlace) {
+      _birthGeo.lat = typeof u.birthLat === 'number' ? u.birthLat : parseFloat(u.birthLat);
+      _birthGeo.lon = typeof u.birthLon === 'number' ? u.birthLon : parseFloat(u.birthLon);
+      _birthGeo.timezone = u.birthTimezone || '';
+      _birthGeo.label = u.birthPlace;
+      if (!Number.isFinite(_birthGeo.lat)) _birthGeo.lat = null;
+      if (!Number.isFinite(_birthGeo.lon)) _birthGeo.lon = null;
+    }
+
+    var debTimer = null;
+    var focusIdx = -1;
+    var items = [];
+
+    function openDrop() { dropdown.classList.add('open'); }
+    function closeDrop() { dropdown.classList.remove('open'); focusIdx = -1; }
+
+    function renderResults(results) {
+      dropdown.innerHTML = '';
+      focusIdx = -1;
+      items = results;
+      if (!results.length) {
+        dropdown.innerHTML = '<div class="autocomplete-empty">Aucun résultat</div>';
+        openDrop();
+        return;
+      }
+      results.forEach(function (r) {
+        var el = document.createElement('div');
+        el.className = 'autocomplete-item';
+        el.innerHTML =
+          '<span class="city-name">' + r.value + '</span>' +
+          '<span class="city-country">' + (r.country || '') + (r.region ? ' · ' + r.region : '') + '</span>';
+        el.addEventListener('mousedown', function (e) {
+          e.preventDefault();
+          selectItem(r);
+        });
+        dropdown.appendChild(el);
       });
+      openDrop();
+    }
+
+    function selectItem(r) {
+      _birthGeo.lat = r.lat;
+      _birthGeo.lon = r.lon;
+      _birthGeo.label = r.value;
+      _birthGeo.timezone = '';
+      input.value = r.value;
+      closeDrop();
+      fetch('https://timeapi.io/api/timezone/coordinate?latitude=' + r.lat + '&longitude=' + r.lon)
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (d) {
+          _birthGeo.timezone = (d && d.timeZone) || '';
+        })
+        .catch(function () { _birthGeo.timezone = ''; });
+    }
+
+    function highlightItem(idx) {
+      var els = dropdown.querySelectorAll('.autocomplete-item');
+      els.forEach(function (el, i) { el.classList.toggle('focused', i === idx); });
+    }
+
+    function search(query) {
+      dropdown.innerHTML = '<div class="autocomplete-loading">Recherche…</div>';
+      openDrop();
+      var url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(query) + '&limit=8&lang=fr';
+      fetch(url)
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+        .then(function (data) {
+          var results = (data.features || [])
+            .filter(function (f) {
+              var t = (f.properties.type || '').toLowerCase();
+              return ['city', 'town', 'village', 'hamlet', 'locality', 'borough', 'suburb', 'municipality', 'county', 'district'].indexOf(t) !== -1;
+            })
+            .map(function (f) {
+              var p = f.properties;
+              var coords = f.geometry.coordinates;
+              var label = p.name || p.city || '';
+              var parts = [label];
+              if (p.city && p.name !== p.city) parts.push(p.city);
+              if (p.state) parts.push(p.state);
+              if (p.country) parts.push(p.country);
+              return {
+                value: parts.filter(function (x, i, a) { return x && a.indexOf(x) === i; }).join(', '),
+                country: p.country || '',
+                region: p.state || '',
+                lat: coords[1],
+                lon: coords[0]
+              };
+            });
+          renderResults(results);
+        })
+        .catch(function () { closeDrop(); });
+    }
+
+    input.addEventListener('input', function () {
+      _birthGeo.lat = null;
+      _birthGeo.lon = null;
+      _birthGeo.timezone = '';
+      _birthGeo.label = '';
+      var q = input.value.trim();
+      clearTimeout(debTimer);
+      if (q.length < 2) { closeDrop(); return; }
+      debTimer = setTimeout(function () { search(q); }, 320);
+    });
+    input.addEventListener('keydown', function (e) {
+      var els = dropdown.querySelectorAll('.autocomplete-item');
+      if (!dropdown.classList.contains('open')) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        focusIdx = Math.min(focusIdx + 1, els.length - 1);
+        highlightItem(focusIdx);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        focusIdx = Math.max(focusIdx - 1, 0);
+        highlightItem(focusIdx);
+      } else if (e.key === 'Enter' && focusIdx >= 0) {
+        e.preventDefault();
+        if (items[focusIdx]) selectItem(items[focusIdx]);
+      } else if (e.key === 'Escape') {
+        closeDrop();
+      }
+    });
+    input.addEventListener('blur', function () { setTimeout(closeDrop, 200); });
+    input.addEventListener('focus', function () {
+      if (input.value.trim().length >= 2 && dropdown.children.length) openDrop();
+    });
   }
 
   function sendIa() {
@@ -492,8 +672,11 @@
           '<div class="field"><label class="label" for="birth-time">Heure de naissance</label>' +
           '<input class="input" id="birth-time" type="time" value="' + (u.birthTime || '') + '" required></div>' +
           '<div class="field"><label class="label" for="birth-place">Lieu de naissance</label>' +
-          '<input class="input" id="birth-place" type="text" placeholder="Paris, France" value="' + (u.birthPlace || '').replace(/"/g, '&quot;') + '" autocomplete="off"></div>' +
-          '<div class="field"><span class="label">Genre (ton d’écriture)</span>' +
+          '<div class="autocomplete-wrap">' +
+          '<input class="input" id="birth-place" type="text" placeholder="Tape une ville… (ex: Lyon)" value="' + (u.birthPlace || '').replace(/"/g, '&quot;') + '" autocomplete="off">' +
+          '<div class="autocomplete-dropdown" id="birth-place-dropdown"></div>' +
+          '</div></div>' +
+          '<div class="field"><span class="label">Genre</span>' +
           '<div class="gender-row">' + genderOpt('femme', 'Femme') + genderOpt('homme', 'Homme') + genderOpt('autre', 'Autre') + '</div></div>' +
           '<button class="btn" id="save-profile">Enregistrer mon profil</button>' +
           (canNatal() ? '' : '<button class="link" id="skip-onboarding">Plus tard</button>') +
@@ -848,6 +1031,7 @@
 
     var saveP = document.getElementById('save-profile');
     if (saveP) saveP.onclick = saveProfile;
+    initBirthPlaceAutocomplete();
     var skipOn = document.getElementById('skip-onboarding');
     if (skipOn) skipOn.onclick = function () {
       state.pendingAsk = null;
