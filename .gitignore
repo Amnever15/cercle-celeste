@@ -1,0 +1,8 @@
+# Secrets & local data — never commit
+api/.env
+.env
+**/.env
+api/store.json
+store.json
+*.pem
+*.key

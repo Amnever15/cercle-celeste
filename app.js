@@ -66,6 +66,7 @@
     account: false,
     iaBusy: false,
     iaLoaded: false,
+    iaContext: 'natal',
     iaMessages: [],
     pendingAsk: null,
     natalPreview: null,
@@ -294,21 +295,40 @@
     return arr;
   }
 
-  function iaStorageKey() {
+  function iaStorageKey(ctx) {
     var email = state.user && state.user.email;
-    return email ? (IA_LS_PREFIX + String(email).trim().toLowerCase()) : '';
+    if (!email) return '';
+    var c = normalizeIaCtx(ctx || state.iaContext);
+    return IA_LS_PREFIX + String(email).trim().toLowerCase() + '.' + c;
+  }
+  function normalizeIaCtx(ctx) {
+    var c = String(ctx || 'natal').toLowerCase();
+    if (c === 'mois' || c === 'jour' || c === 'natal') return c;
+    return 'natal';
+  }
+  function poeticNatalProgress(raw) {
+    var s = String(raw || '');
+    if (/r[eé]daction\s*ia|requ[eê]tes?\s*ia|claude|anthropic|openai|intelligence artificielle/i.test(s)) {
+      return 'Traduction du langage de l\'univers — assemblage des chapitres de ta vie…';
+    }
+    if (/human design/i.test(s)) return 'Lecture de ton code de vie…';
+    if (/timezone|coordonn/i.test(s)) return 'Ancrage dans le temps et l\'espace…';
+    if (/positions astrales|astro\b/i.test(s)) return 'Alignement des planètes…';
+    if (/mise en page|html/i.test(s)) return 'Assemblage et reliure du manuscrit…';
+    if (/synth[eè]se/i.test(s)) return 'Sceau final — le manuscrit prend sa forme…';
+    return s;
   }
 
-  function saveIaLocal() {
-    var key = iaStorageKey();
+  function saveIaLocal(ctx) {
+    var key = iaStorageKey(ctx);
     if (!key) return;
     try {
       localStorage.setItem(key, JSON.stringify(trimIaMessages(state.iaMessages)));
     } catch (e) {}
   }
 
-  function loadIaLocal() {
-    var key = iaStorageKey();
+  function loadIaLocal(ctx) {
+    var key = iaStorageKey(ctx);
     if (!key) return [];
     try {
       var raw = JSON.parse(localStorage.getItem(key) || '[]');
@@ -320,7 +340,7 @@
 
   function setIaMessages(list, persist) {
     state.iaMessages = trimIaMessages(list);
-    if (persist !== false) saveIaLocal();
+    if (persist !== false) saveIaLocal(state.iaContext);
   }
 
   function friendlyIaError(err, status) {
@@ -333,14 +353,16 @@
     return msg;
   }
 
-  function fetchIaHistory() {
+  function fetchIaHistory(ctx) {
+    ctx = normalizeIaCtx(ctx || state.iaContext);
+    state.iaContext = ctx;
     if (!state.user || !state.user.email || !canIa()) {
       state.iaLoaded = true;
       return Promise.resolve();
     }
-    var local = loadIaLocal();
-    if (local.length && !state.iaMessages.length) setIaMessages(local, false);
-    return fetch(API + '/ia?email=' + encodeURIComponent(state.user.email), {
+    var local = loadIaLocal(ctx);
+    if (local.length) setIaMessages(local, false);
+    return fetch(API + '/ia?email=' + encodeURIComponent(state.user.email) + '&context=' + encodeURIComponent(ctx), {
       headers: authHeaders(false)
     })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
@@ -360,10 +382,18 @@
       });
   }
 
-  function ensureIaHistory() {
-    if (state.iaLoaded || state.iaBusy) return;
-    fetchIaHistory().then(function () { render(); });
+  function ensureIaHistory(ctx) {
+    ctx = normalizeIaCtx(ctx || state.iaContext);
+    if (state.iaContext !== ctx) {
+      state.iaContext = ctx;
+      state.iaLoaded = false;
+      state.iaMessages = loadIaLocal(ctx);
+    }
+    if (state.iaLoaded && state.iaContext === ctx) return;
+    state.iaLoaded = false;
+    fetchIaHistory(ctx);
   }
+
   function dailyLeft() {
     if (!state.user) return null;
     if (isPausedPaid()) {
@@ -984,7 +1014,12 @@
     fetch(API + '/ia', {
       method: 'POST',
       headers: authHeaders(true),
-      body: JSON.stringify({ email: email, question: q, token: state.user && state.user.token })
+      body: JSON.stringify({
+        email: email,
+        question: q,
+        context: normalizeIaCtx(state.iaContext),
+        token: state.user && state.user.token
+      })
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
       .then(function (res) {
         if (res.status === 401) {
@@ -1150,8 +1185,7 @@
     var tabs = [
       ['natal', '✦', 'De ta vie'],
       ['mois', '☽', 'Du mois'],
-      ['jour', '☀', 'Du jour'],
-      ['ia', '✧', 'IA']
+      ['jour', '☀', 'Du jour']
     ];
     return '<nav class="nav">' + tabs.map(function (t) {
       return '<button data-tab="' + t[0] + '" class="' + (state.tab === t[0] ? 'active' : '') + '"><span class="ic">' + t[1] + '</span>' + t[2] + '</button>';
@@ -1189,13 +1223,32 @@
         '</div>';
     }
     if (u.natalStatus === 'generating' || state.busy === 'natal') {
-      var progRaw = u.natalProgress
+      var pct = u.natalProgressPct != null ? Math.max(0, Math.min(100, Number(u.natalProgressPct) || 0)) : 12;
+      var progRaw = poeticNatalProgress(u.natalProgress
         ? String(u.natalProgress)
-        : 'Cela peut prendre plusieurs minutes — ne ferme pas cette page. Les 28 pages s’ouvriront dès qu’elles seront prêtes.';
+        : 'Le ciel compose ton manuscrit — quelques minutes de silence.');
       var progSafe = progRaw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return '<div class="natal-wait" role="status" aria-live="polite">' +
-        '<p>Le Manuscrit Céleste de ta vie s’écrit en ce moment.</p>' +
-        '<p class="muted">' + progSafe + '</p>' +
+      return '<div class="natal-cosmos" role="status" aria-live="polite">' +
+        '<div class="natal-galaxy"></div>' +
+        '<div class="natal-stars" aria-hidden="true"></div>' +
+        '<div class="natal-book-stage">' +
+          '<div class="natal-book">' +
+            '<div class="book-spine"></div>' +
+            '<div class="book-cover book-left"></div>' +
+            '<div class="book-pages">' +
+              '<div class="book-page p1"></div>' +
+              '<div class="book-page p2"></div>' +
+              '<div class="book-page p3"></div>' +
+            '</div>' +
+            '<div class="book-cover book-right"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="natal-cosmos-copy">' +
+          '<p class="natal-cosmos-title">Le Manuscrit Céleste de ta vie s’écrit</p>' +
+          '<p class="natal-cosmos-step">' + progSafe + '</p>' +
+          '<div class="natal-cosmos-bar"><span style="width:' + pct + '%"></span></div>' +
+          '<p class="muted natal-cosmos-hint">Alignement des planètes · calculs du code de vie · assemblage du langage de l’univers. Ne ferme pas cette page.</p>' +
+        '</div>' +
         '</div>';
     }
     if (natalCanRead()) {
@@ -1253,12 +1306,21 @@
 
   function iaCard() {
     if (canIa()) {
-      return '<div class="card stack"><div class="label">Plan Divin</div><h2>IA Céleste</h2><p class="muted">Disponible</p><p>Ta compagne intime — amour, travail, timing… Ouvre l’onglet IA pour lui parler.</p><button class="btn ghost" type="button" data-tab="ia">Ouvrir le chat</button></div>';
+      return '<div class="card stack"><div class="label">Plan Divin</div><h2>IA Céleste</h2><p class="muted">Disponible</p><p>Elle t’accompagne sous chaque manuscrit, pendant que tu lis.</p></div>';
     }
-    return '<div class="card lock stack"><div class="label">Plan Divin · 137 €</div><h2>IA Céleste</h2><p class="muted">Incluse dans le Divin</p><p>Pendant que tu lis, elle t’écoute : aujourd’hui l’amour ? le travail ? le bon moment ? Une présence douce, réservée au Divin.</p><button class="btn ghost" type="button" data-plan-link="divin">Découvrir le Divin</button></div>';
+    return '<div class="card lock stack"><div class="label">Plan Divin · 137 €</div><h2>IA Céleste</h2><p class="muted">Incluse dans le Divin</p><p>Pendant que tu lis, elle t’écoute : aujourd’hui l’amour ? le travail ? le bon moment ?</p><button class="btn ghost" type="button" data-plan-link="divin">Découvrir le Divin</button></div>';
   }
 
-  function iaChatPanel() {
+  function readerIaPanel(ctx) {
+    ctx = normalizeIaCtx(ctx);
+    if (!canIa()) {
+      return '<div class="reader-ia lock stack">' +
+        '<div class="label">IA Céleste</div>' +
+        '<p>Pose tes questions sur ce manuscrit avec le plan Divin.</p>' +
+        '<button class="btn ghost" type="button" data-plan-link="divin">Passer Divin · 137 €</button>' +
+        '</div>';
+    }
+    ensureIaHistory(ctx);
     var left = iaLeft();
     var quotaLine = left != null
       ? ('<p class="muted ia-quota">' + left + ' question' + (left === 1 ? '' : 's') + ' ce mois</p>')
@@ -1266,35 +1328,18 @@
     var log = (state.iaMessages || []).map(function (m) {
       return '<div class="ia-bubble ' + (m.role === 'me' ? 'me' : 'bot') + '">' + escapeHtml(m.text) + '</div>';
     }).join('');
-    var empty = '<p class="muted ia-empty">Une question, une réponse douce. Ex. : aujourd’hui, l’amour ?</p>';
-    var disabled = state.iaBusy || left <= 0;
-    return '<div class="ia-chat stack">' +
+    var empty = '<p class="muted ia-empty">Une question sur ce que tu lis… Ex. : que me dit cette page sur l’amour ?</p>';
+    var disabled = state.iaBusy || (left != null && left <= 0);
+    return '<div class="reader-ia stack" data-ia-context="' + ctx + '">' +
+      '<div class="label">IA Céleste · ce manuscrit</div>' +
       quotaLine +
       '<div class="ia-log" id="ia-log">' + (log || empty) + '</div>' +
       '<div class="ia-compose">' +
         '<div class="field"><label class="label" for="ia-q">Ta question</label>' +
-        '<input class="input" id="ia-q" placeholder="Est-ce un bon jour pour l’amour ?" ' + (disabled ? 'disabled' : '') + ' autocomplete="off"></div>' +
+        '<input class="input" id="ia-q" placeholder="Que me révèle ce passage ?" ' + (disabled ? 'disabled' : '') + ' autocomplete="off"></div>' +
         '<button class="btn" id="send-ia"' + (disabled ? ' disabled' : '') + '>' +
-          (state.iaBusy ? 'Le ciel répond…' : (left <= 0 ? 'Quota atteint' : 'Envoyer')) +
+          (state.iaBusy ? 'Le ciel répond…' : (left != null && left <= 0 ? 'Quota atteint' : 'Envoyer')) +
         '</button>' +
-      '</div></div>';
-  }
-
-  function iaTab() {
-    if (canIa()) {
-      ensureIaHistory();
-      return '<div class="hero-month"><div class="label">Plan Divin</div>' +
-        '<div class="month">IA Céleste</div>' +
-        '<p class="lede">Amour, travail, timing… une présence douce.</p></div>' +
-        '<div class="stack"><div class="card ia-panel stack">' + iaChatPanel() + '</div></div>';
-    }
-    return '<div class="hero-month"><div class="label">Plan Divin · 137 €</div>' +
-      '<div class="month">IA Céleste</div>' +
-      '<p class="lede">Réservée au Divin.</p></div>' +
-      '<div class="stack"><div class="card lock stack">' +
-        '<p>Pendant que tu lis, elle t’écoute : aujourd’hui l’amour ? le travail ? le bon moment ? Une présence douce, jamais un nouveau livre.</p>' +
-        '<p class="muted">Passe Divin pour lui parler ici, avec tout ton historique conservé.</p>' +
-        '<button class="btn" type="button" data-plan-link="divin">Passer Divin · 137 €</button>' +
       '</div></div>';
   }
 
@@ -1466,9 +1511,8 @@
     }
     var body = '<p class="kicker">' + kicker + '</p><h2>' + titleHtml + '</h2>' +
       paras.map(function (p) { return '<p>' + p + '</p>'; }).join('') + extra;
-    var ia = canIa()
-      ? '<div class="ia-dock"><button class="btn ghost" type="button" id="goto-ia">Parler à l’IA Céleste</button></div>'
-      : '<div class="ia-dock"><p class="muted">L’IA Céleste t’accompagne ici, dans le plan Divin.</p></div>';
+    var iaCtx = (id === 'natal' || id === 'mois' || id === 'jour') ? id : null;
+    var ia = iaCtx ? readerIaPanel(iaCtx) : '';
     return '<div class="pdf-view"><header><button type="button" class="pdf-back" id="close-pdf">← Retour</button><span class="kicker">' + titlePlain + '</span></header>' +
       '<div class="pdf-body">' + body + ia + '</div></div>';
   }
@@ -1484,9 +1528,9 @@
       if (needsOnboarding()) {
         html = onboardingView();
       } else {
+        if (state.tab === 'ia') state.tab = 'natal';
         var tab = state.tab === 'mois' ? moisTab()
           : state.tab === 'jour' ? jourTab()
-          : state.tab === 'ia' ? iaTab()
           : natalTab();
         html = '<div class="screen">' + topbar() + freeQuotaBanner() + '<div class="scroll">' + tab + '</div>' + nav() + '</div>';
         if (state.account) html += accountSheet();
@@ -1584,9 +1628,10 @@
 
     document.querySelectorAll('[data-tab]').forEach(function (b) {
       b.onclick = function () {
-        state.tab = b.getAttribute('data-tab');
+        var next = b.getAttribute('data-tab');
+        if (next === 'ia') next = 'natal';
+        state.tab = next;
         state.pdf = null;
-        if (state.tab === 'ia' && canIa()) ensureIaHistory();
         render();
       };
     });
@@ -1599,18 +1644,15 @@
         if (id === 'ultime' && !canUltime()) return;
         if (id === 'natal' && !canNatal() && !bookReady('natal')) return;
         state.pdf = id;
+        if (id === 'natal' || id === 'mois' || id === 'jour') {
+          state.iaContext = id;
+          state.iaLoaded = false;
+        }
         render();
       };
     });
     var cp = document.getElementById('close-pdf');
     if (cp) cp.onclick = function () { state.pdf = null; render(); };
-    var gi = document.getElementById('goto-ia');
-    if (gi) gi.onclick = function () {
-      state.pdf = null;
-      state.tab = 'ia';
-      if (canIa()) ensureIaHistory();
-      render();
-    };
     var si = document.getElementById('send-ia');
     if (si) si.onclick = sendIa;
     var iq = document.getElementById('ia-q');
@@ -1688,6 +1730,6 @@
     render();
   });
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js?v=21').catch(function () {});
+    navigator.serviceWorker.register('/sw.js?v=35').catch(function () {});
   }
 })();

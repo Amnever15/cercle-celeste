@@ -235,14 +235,14 @@ async function generateNatal(contact, opts) {
   contact.natalStatus = 'generating';
   contact.natalReady = false;
   contact.natalError = null;
-  onProgress('Préparation du ciel de naissance…', 5);
+  onProgress('Ouverture du ciel de naissance…', 5);
 
   var lat = contact.birthLat;
   var lon = contact.birthLon;
   var timezone = contact.birthTimezone || '';
 
   if (!timezone || lat == null || lon == null) {
-    onProgress('Timezone & coordonnées…', 8);
+    onProgress('Ancrage dans le temps et l’espace…', 8);
     var tzRes = await astroMod.resolveTimezone(lat, lon, contact.birthPlace);
     timezone = (tzRes && tzRes.timezone) || timezone || 'Europe/Paris';
     if (tzRes && tzRes.lat != null) lat = tzRes.lat;
@@ -258,7 +258,7 @@ async function generateNatal(contact, opts) {
   hdMod.warmUpHDApi();
   astroMod.warmUpAstroApi();
 
-  onProgress('Calcul Human Design…', 15);
+  onProgress('Lecture de ton code de vie…', 15);
   var hd = await hdMod.fetchHDWithRetry(
     dateRaw,
     contact.birthPlace,
@@ -268,13 +268,13 @@ async function generateNatal(contact, opts) {
     function (m) { onProgress(m, 22); }
   );
 
-  onProgress('Positions astrales…', 32);
+  onProgress('Alignement des planètes…', 32);
   var astro = await astroMod.fetchAstroWithRetry(
     dateRaw, lat, lon, timezone, contact.birthPlace,
     function (m) { onProgress(m, 38); }
   );
 
-  onProgress('Rédaction du Manuscrit Céleste (plusieurs minutes)…', 45);
+  onProgress('Le langage de l’univers s’écrit dans ton manuscrit…', 45);
   var manuscrit = await claudeNatal.generateManuscrit(contact, hd, astro, onProgress);
 
   var sectionCount = (manuscrit.sections || []).length;
@@ -282,7 +282,7 @@ async function generateNatal(contact, opts) {
     throw new Error('Manuscrit incomplet (' + sectionCount + ' chapitres) — régénère.');
   }
 
-  onProgress('Mise en page HTML…', 92);
+  onProgress('Assemblage et reliure du manuscrit…', 92);
   var html = htmlDoc.buildNatalHtml(contact, manuscrit, hd, astro);
   var pagesEst = htmlDoc.estimatePages(manuscrit);
   var paths = outPaths(email);
@@ -336,7 +336,7 @@ async function generateNatal(contact, opts) {
   contact.natalProgress = null;
   contact.natalError = null;
 
-  onProgress('Prêt ✦', 100);
+  onProgress('Ton Manuscrit Céleste est prêt ✦', 100);
 
   return {
     ok: true,

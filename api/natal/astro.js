@@ -233,7 +233,7 @@ async function fetchAstroWithRetry(dateStr, lat, lon, timezone, cityName, onProg
   while (!astro) {
     attempt++;
     try {
-      if (onProgress) onProgress(attempt === 1 ? 'Positions astrales…' : 'Astro — tentative ' + attempt + '…');
+      if (onProgress) onProgress(attempt === 1 ? 'Alignement des planètes…' : 'Les planètes se recentrent…');
       if (attempt > 1) {
         warmUpAstroApi();
         await sleep(4000);

@@ -199,8 +199,27 @@ function emptyContact(email) {
     natalPdfPath: null,
     natalTxtPath: null,
     natalGeneratedAt: null,
-    iaMessages: []
+    iaMessages: [],
+    iaChats: { natal: [], mois: [], jour: [] }
   };
+}
+
+function ensureIaChats(c) {
+  if (!c.iaChats || typeof c.iaChats !== 'object') c.iaChats = { natal: [], mois: [], jour: [] };
+  ['natal', 'mois', 'jour'].forEach(function (k) {
+    if (!Array.isArray(c.iaChats[k])) c.iaChats[k] = [];
+  });
+  /* Migration ancienne liste unique → fil natal */
+  if (Array.isArray(c.iaMessages) && c.iaMessages.length && !c.iaChats.natal.length) {
+    c.iaChats.natal = normalizeIaMessages(c.iaMessages);
+  }
+  return c.iaChats;
+}
+
+function normalizeIaContext(ctx) {
+  var c = String(ctx || 'natal').toLowerCase().trim();
+  if (c === 'mois' || c === 'jour' || c === 'natal') return c;
+  return 'natal';
 }
 
 function normalizeIaMessages(list) {
@@ -220,14 +239,18 @@ function normalizeIaMessages(list) {
   return out;
 }
 
-function appendIaExchange(c, question, answer) {
+function appendIaExchange(c, question, answer, context) {
   if (!c) return [];
-  const msgs = normalizeIaMessages(c.iaMessages);
+  const ctx = normalizeIaContext(context);
+  const chats = ensureIaChats(c);
+  const msgs = normalizeIaMessages(chats[ctx]);
   const at = new Date().toISOString();
   msgs.push({ role: 'me', text: String(question || '').trim(), at: at });
   msgs.push({ role: 'bot', text: String(answer || '').trim(), at: at });
-  c.iaMessages = msgs.length > IA_MESSAGES_MAX ? msgs.slice(msgs.length - IA_MESSAGES_MAX) : msgs;
-  return c.iaMessages;
+  chats[ctx] = msgs.length > IA_MESSAGES_MAX ? msgs.slice(msgs.length - IA_MESSAGES_MAX) : msgs;
+  c.iaChats = chats;
+  if (ctx === 'natal') c.iaMessages = chats.natal;
+  return chats[ctx];
 }
 
 function getContact(store, email) {
@@ -960,7 +983,7 @@ async function handle(req, res) {
       c.natalStatus = 'generating';
       c.natalReady = false;
       c.natalError = null;
-      c.natalProgress = 'Le Manuscrit Céleste de ta vie s’écrit… Cela peut prendre plusieurs minutes.';
+      c.natalProgress = 'Le ciel compose ton Manuscrit Céleste… Quelques minutes de silence.';
       c.natalProgressPct = 2;
       writeStore(store);
       try {
@@ -1216,7 +1239,7 @@ async function handle(req, res) {
         c.natalStatus = 'generating';
         c.natalReady = false;
         c.natalError = null;
-        c.natalProgress = 'Le Manuscrit Céleste de ta vie s’écrit… Cela peut prendre plusieurs minutes.';
+        c.natalProgress = 'Le ciel compose ton Manuscrit Céleste… Quelques minutes de silence.';
         c.natalProgressPct = 2;
         writeStore(store);
         try {
@@ -1252,17 +1275,22 @@ async function handle(req, res) {
       if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
       const c = auth.c;
       const e = plans.entitlements(c);
+      const ctx = normalizeIaContext(url.searchParams.get('context'));
       if (!e.canIa) {
         return send(res, 403, {
           error: 'L’IA Céleste est réservée au plan Divin.',
+          context: ctx,
           messages: [],
           contact: publicContact(c)
         }, req);
       }
-      c.iaMessages = normalizeIaMessages(c.iaMessages);
+      const chats = ensureIaChats(c);
+      chats[ctx] = normalizeIaMessages(chats[ctx]);
+      writeStore(auth.store);
       return send(res, 200, {
         ok: true,
-        messages: c.iaMessages,
+        context: ctx,
+        messages: chats[ctx],
         contact: publicContact(c)
       }, req);
     }
@@ -1272,23 +1300,33 @@ async function handle(req, res) {
       const auth = requireSession(req, url, body);
       if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
       const question = String(body.question || '').trim();
+      const ctx = normalizeIaContext(body.context);
       if (!question) return send(res, 400, { error: 'question requise' }, req);
       if (question.length > 2000) return send(res, 400, { error: 'Question trop longue.' }, req);
       const store = auth.store;
       const c = auth.c;
       const check = plans.consumeIa(c);
       if (!check.ok) {
+        const chatsDenied = ensureIaChats(c);
         return send(res, 403, {
           error: check.error,
-          messages: normalizeIaMessages(c.iaMessages),
+          context: ctx,
+          messages: normalizeIaMessages(chatsDenied[ctx]),
           contact: publicContact(c)
         }, req);
       }
-      const answer = 'Réponse démo — le vrai Claude arrivera ici. Pour « ' + question.slice(0, 80) + ' » : regarde d’abord ton autorité intérieure aujourd’hui. Si la vague n’est pas claire, ce n’est pas encore un oui.';
-      const messages = appendIaExchange(c, question, answer);
+      let answer;
+      try {
+        const iaReply = require('./natal/ia-reply');
+        answer = await iaReply.answerFromManuscript(c, question, ctx);
+      } catch (e) {
+        answer = 'Le ciel se tait un instant. Repose ta question dans un moment — ton manuscrit garde déjà la réponse.';
+      }
+      const messages = appendIaExchange(c, question, answer, ctx);
       writeStore(store);
       return send(res, 200, {
         ok: true,
+        context: ctx,
         answer: answer,
         messages: messages,
         contact: publicContact(c)

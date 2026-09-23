@@ -227,7 +227,7 @@ async function fetchHDWithRetry(dateStr, place, gender, lat, lon, onProgress) {
   while (!raw) {
     attempt++;
     try {
-      if (onProgress) onProgress(attempt === 1 ? 'Calcul Human Design…' : 'Human Design — tentative ' + attempt + '…');
+      if (onProgress) onProgress(attempt === 1 ? 'Lecture de ton code de vie…' : 'Le code de vie se précise…');
       if (attempt > 1) {
         warmUpHDApi();
         await sleep(4000);

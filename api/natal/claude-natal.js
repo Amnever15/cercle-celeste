@@ -204,12 +204,12 @@ async function generateManuscrit(contact, hd, astro, onProgress) {
 
   var doneCount = 0;
   var totalParts = 8;
-  var labels = ['Intro', 'I-II', 'III-IV', 'V-VI-VII', 'VIII-IX', 'X-XI', 'Rituels', 'Synthèse'];
+  var labels = ['Prologue', 'Chapitres I–II', 'III–IV', 'V–VII', 'VIII–IX', 'X–XI', 'Rituels', 'Sceau final'];
   function onPartDone(idx) {
     doneCount++;
     if (onProgress) {
       onProgress(
-        'Rédaction IA : ' + doneCount + '/' + totalParts + ' (' + labels[idx] + ')',
+        'Traduction du langage de l’univers : ' + doneCount + '/' + totalParts + ' — ' + labels[idx],
         Math.min(90, 45 + Math.floor((doneCount / totalParts) * 40))
       );
     }
@@ -217,7 +217,7 @@ async function generateManuscrit(contact, hd, astro, onProgress) {
 
   var ch = (hd.channels || []).join(', ') || '—';
 
-  if (onProgress) onProgress('Lancement de 7 requêtes IA en parallèle…', 48);
+  if (onProgress) onProgress('Les sphères s’ouvrent — assemblage des chapitres de ta vie…', 48);
 
   var pA = api(ctx + `
 Génère uniquement :
@@ -378,7 +378,7 @@ Génère uniquement ces 2 sections :
   var acModeStr = (astro && astro.AstroCarto && astro.AstroCarto.quality && astro.AstroCarto.quality.mode) || 'lite';
   var rH = null;
   try {
-    if (onProgress) onProgress('Synthèse exécutive…', 88);
+    if (onProgress) onProgress('Sceau final — le manuscrit prend sa forme…', 88);
     rH = await api(ctx + `
 DONNÉES COMPLÉMENTAIRES POUR LA SYNTHÈSE :
 - Type HD : ${hd.type || '—'} | Stratégie : ${hd.strategy || '—'} | Autorité : ${hd.authority || '—'} | Profil : ${hd.profile || '—'} | Signature : ${hd.signature || '—'} | Non-Soi : ${hd.notSelf || '—'}
