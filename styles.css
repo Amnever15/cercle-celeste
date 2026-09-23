@@ -251,6 +251,7 @@ h1 span { color: var(--gold-light); }
 }
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: .55; cursor: wait; transform: none; }
+.input:disabled { opacity: .65; cursor: not-allowed; }
 .btn.ghost {
   background: transparent; color: var(--gold);
   border: 1px solid rgba(201,168,76,.4);
@@ -336,7 +337,7 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 }
 .nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   background: var(--nav-bg); border-top: 1px solid var(--stroke);
   padding: 6px 4px var(--safe-bot);
   backdrop-filter: blur(12px);
@@ -540,10 +541,31 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 .pdf-body p { line-height: 1.7; margin-bottom: 1rem; font-size: 1.12rem; }
 
 .ia-dock { margin-top: 16px; }
-.ia-log { display: flex; flex-direction: column; gap: 10px; max-height: 40vh; overflow: auto; }
-.ia-bubble { padding: .75rem .9rem; border: 1px solid var(--stroke); font-size: 1.02rem; line-height: 1.5; }
-.ia-bubble.me { border-color: rgba(201,168,76,.45); color: var(--gold-light); }
-.ia-bubble.bot { background: var(--ia-bot-bg); }
+.ia-panel { min-height: 52vh; }
+.ia-chat { gap: 12px; }
+.ia-quota { margin: 0; }
+.ia-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(52vh, 420px);
+  min-height: 180px;
+  overflow: auto;
+  padding: 4px 2px;
+  -webkit-overflow-scrolling: touch;
+}
+.ia-empty { margin: auto 0; text-align: center; padding: 1.5rem .5rem; }
+.ia-bubble {
+  padding: .75rem .9rem;
+  border: 1px solid var(--stroke);
+  font-size: 1.02rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ia-bubble.me { border-color: rgba(201,168,76,.45); color: var(--gold-light); align-self: flex-end; max-width: 92%; }
+.ia-bubble.bot { background: var(--ia-bot-bg); align-self: flex-start; max-width: 92%; }
+.ia-compose { display: flex; flex-direction: column; gap: 10px; }
 
 @media (min-width: 720px) {
   .screen { max-width: 480px; margin: 0 auto; border-left: 1px solid var(--screen-edge); border-right: 1px solid var(--screen-edge); }

@@ -54,6 +54,8 @@
   };
 
   var THEME_KEY = 'cercle.theme';
+  var IA_MAX = 1000;
+  var IA_LS_PREFIX = 'cercle.ia.';
 
   var state = {
     screen: 'login',
@@ -62,13 +64,14 @@
     deferredPrompt: null,
     pdf: null,
     account: false,
-    ia: false,
-    iaMessages: [],
     iaBusy: false,
+    iaLoaded: false,
+    iaMessages: [],
     pendingAsk: null,
     natalPreview: null,
     natalGenError: null,
-    theme: 'dark'
+    theme: 'dark',
+    editingBirth: false
   };
 
   function getStoredTheme() {
@@ -112,14 +115,42 @@
     state.theme = getStoredTheme();
     applyTheme(state.theme, false);
     try { state.user = JSON.parse(localStorage.getItem('cercle.user') || 'null'); } catch (e) { state.user = null; }
+    /* Ancienne session sans mot de passe / token → reconnexion obligatoire. */
+    if (state.user && (!state.user.email || !state.user.token)) {
+      state.user = null;
+      try { localStorage.removeItem('cercle.user'); } catch (e2) {}
+    }
     if (state.user) state.screen = localStorage.getItem('cercle.installedHint') ? 'app' : 'install';
   }
   function saveUser() {
     localStorage.setItem('cercle.user', JSON.stringify(state.user));
   }
+  function authHeaders(json) {
+    var h = {};
+    if (json !== false) h['Content-Type'] = 'application/json';
+    if (state.user && state.user.token) h.Authorization = 'Bearer ' + state.user.token;
+    return h;
+  }
+  function withAuthQuery(url) {
+    if (!state.user || !state.user.token) return url;
+    var sep = url.indexOf('?') >= 0 ? '&' : '?';
+    return url + sep + 'token=' + encodeURIComponent(state.user.token);
+  }
+  function forceReLogin(msg) {
+    state.user = null;
+    state.screen = 'login';
+    state.account = false;
+    state.pdf = null;
+    try { localStorage.removeItem('cercle.user'); } catch (e) {}
+    if (msg) alert(msg);
+    render();
+  }
   function applyAccess(d) {
     if (!d) return;
+    var prevToken = state.user && state.user.token;
     state.user = Object.assign({}, state.user || {}, d);
+    if (d.token) state.user.token = d.token;
+    else if (prevToken) state.user.token = prevToken;
     syncProfileFlag();
     saveUser();
   }
@@ -139,6 +170,13 @@
   function afterLogin() {
     /* Même si abo en pause : accès app (quotas Gratuit), pas d’écran bloquant. */
     syncProfileFlag();
+    state.iaLoaded = false;
+    if (canIa()) {
+      setIaMessages(loadIaLocal(), false);
+      fetchIaHistory();
+    } else {
+      state.iaMessages = [];
+    }
     if (needsOnboarding()) {
       state.screen = 'onboarding';
       return;
@@ -154,6 +192,21 @@
     syncProfileFlag();
     return !!state.user.profileComplete;
   }
+  /** Corrections restantes après la 1re complétion (côté serveur : max 3). */
+  function profileEditsRemaining() {
+    var u = state.user || {};
+    if (u.profileEditsRemaining != null && Number.isFinite(Number(u.profileEditsRemaining))) {
+      return Math.max(0, Math.floor(Number(u.profileEditsRemaining)));
+    }
+    var used = Number(u.profileEditCount);
+    if (!Number.isFinite(used) || used < 0) used = 0;
+    return Math.max(0, 3 - Math.floor(used));
+  }
+  function profileCanEdit() {
+    if (!profileComplete()) return true;
+    if (state.user && state.user.profileCanEdit === false) return false;
+    return profileEditsRemaining() > 0;
+  }
   function needsOnboarding() {
     /* Céleste/Divin actifs : profil avant l’app. Gratuit : plus tard (jour/mois/natal). */
     return !!(canNatal() && !profileComplete());
@@ -164,6 +217,7 @@
     state.busy = null;
     state.account = false;
     state.pdf = null;
+    state.editingBirth = !!profileComplete();
     state.screen = 'onboarding';
     render();
   }
@@ -222,6 +276,91 @@
   function iaLeft() {
     if (!state.user || isPausedPaid()) return 0;
     return state.user.iaLeft == null ? 0 : state.user.iaLeft;
+  }
+
+  function escapeHtml(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function trimIaMessages(list) {
+    var arr = Array.isArray(list) ? list.slice() : [];
+    if (arr.length > IA_MAX) arr = arr.slice(arr.length - IA_MAX);
+    return arr;
+  }
+
+  function iaStorageKey() {
+    var email = state.user && state.user.email;
+    return email ? (IA_LS_PREFIX + String(email).trim().toLowerCase()) : '';
+  }
+
+  function saveIaLocal() {
+    var key = iaStorageKey();
+    if (!key) return;
+    try {
+      localStorage.setItem(key, JSON.stringify(trimIaMessages(state.iaMessages)));
+    } catch (e) {}
+  }
+
+  function loadIaLocal() {
+    var key = iaStorageKey();
+    if (!key) return [];
+    try {
+      var raw = JSON.parse(localStorage.getItem(key) || '[]');
+      return trimIaMessages(Array.isArray(raw) ? raw : []);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function setIaMessages(list, persist) {
+    state.iaMessages = trimIaMessages(list);
+    if (persist !== false) saveIaLocal();
+  }
+
+  function friendlyIaError(err, status) {
+    var msg = String(err || '').trim();
+    if (!msg || /^server$/i.test(msg) || /\b50[0-9]\b/.test(msg) || /internal/i.test(msg)) {
+      return 'Le ciel ne répond pas pour le moment. Réessaie dans un instant.';
+    }
+    if (status === 403 && msg) return msg;
+    if (status === 404) return 'Compte introuvable. Reconnecte-toi.';
+    return msg;
+  }
+
+  function fetchIaHistory() {
+    if (!state.user || !state.user.email || !canIa()) {
+      state.iaLoaded = true;
+      return Promise.resolve();
+    }
+    var local = loadIaLocal();
+    if (local.length && !state.iaMessages.length) setIaMessages(local, false);
+    return fetch(API + '/ia?email=' + encodeURIComponent(state.user.email), {
+      headers: authHeaders(false)
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
+      .then(function (res) {
+        if (res.status === 401) { forceReLogin((res.data && res.data.error) || 'Session expirée.'); return; }
+        if (res.data && res.data.contact) applyAccess(res.data.contact);
+        if (res.ok && res.data && Array.isArray(res.data.messages)) {
+          setIaMessages(res.data.messages, true);
+        } else if (local.length) {
+          setIaMessages(local, false);
+        }
+        state.iaLoaded = true;
+      })
+      .catch(function () {
+        if (local.length) setIaMessages(local, false);
+        state.iaLoaded = true;
+      });
+  }
+
+  function ensureIaHistory() {
+    if (state.iaLoaded || state.iaBusy) return;
+    fetchIaHistory().then(function () { render(); });
   }
   function dailyLeft() {
     if (!state.user) return null;
@@ -365,7 +504,7 @@
       showBirthForm(kind);
       return;
     }
-    if (kind === 'natal' && state.user && state.user.natalReady) {
+    if (kind === 'natal' && natalCanRead()) {
       openNatalReader();
       return;
     }
@@ -381,10 +520,15 @@
     render();
     fetch(API + '/generate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email, kind: kind })
+      headers: authHeaders(true),
+      body: JSON.stringify({ email: email, kind: kind, token: state.user.token })
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
       .then(function (res) {
+        if (res.status === 401) {
+          state.busy = null;
+          forceReLogin((res.data && res.data.error) || 'Session expirée.');
+          return;
+        }
         if (res.data && res.data.contact) applyAccess(res.data.contact);
         if (!res.ok) {
           state.busy = null;
@@ -451,7 +595,7 @@
         .then(function (d) {
           if (d) applyAccess(d);
           var u = state.user || {};
-          if (u.natalReady) {
+          if (natalCanRead()) {
             state.busy = null;
             state.natalGenError = null;
             markBook('natal');
@@ -487,9 +631,16 @@
   }
 
   function natalPdfUrl() {
-    if (state.user && state.user.natalPdfUrl) return state.user.natalPdfUrl;
-    if (state.user && state.user.email) return '/natal-file?email=' + encodeURIComponent(state.user.email);
-    return '';
+    var base = '';
+    if (state.user && state.user.natalPdfUrl) base = state.user.natalPdfUrl;
+    else if (state.user && state.user.email) base = '/natal-file?email=' + encodeURIComponent(state.user.email);
+    return base ? withAuthQuery(base) : '';
+  }
+
+  /** « Lire les 28p » uniquement si le serveur confirme prêt + fichier sur volume. */
+  function natalCanRead() {
+    var u = state.user || {};
+    return !!(u.natalReady && u.natalFileExists);
   }
 
   function openNatalReader(url) {
@@ -502,6 +653,10 @@
   function saveProfile() {
     var email = state.user && state.user.email;
     if (!email) return;
+    if (profileComplete() && !profileCanEdit()) {
+      alert('Tu as utilisé tes 3 modifications de profil. Pour toute correction supplémentaire, contacte le support.');
+      return;
+    }
     var birthDate = (document.getElementById('birth-date') || {}).value || '';
     var birthTime = (document.getElementById('birth-time') || {}).value || '';
     /* Certains navigateurs envoient HH:MM:SS — on normalise en HH:MM. */
@@ -524,6 +679,8 @@
       timezone = '';
     }
 
+    var wasEdit = !!profileComplete();
+    var btnLabel = wasEdit ? 'Enregistrer les modifications' : 'Enregistrer mon profil';
     var btn = document.getElementById('save-profile');
     if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
 
@@ -544,8 +701,13 @@
       }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
         .then(function (res) {
           if (!res.ok) {
+            if (res.data && res.data.contact) applyAccess(res.data.contact);
             alert((res.data && res.data.error) || 'Impossible d’enregistrer le profil.');
-            if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer mon profil'; }
+            if (btn) {
+              btn.disabled = !profileCanEdit();
+              btn.textContent = btnLabel;
+            }
+            if (res.data && res.data.code === 'PROFILE_EDIT_LIMIT') render();
             return;
           }
           if (res.data && res.data.contact) applyAccess(res.data.contact);
@@ -564,14 +726,16 @@
           }
           var pending = state.pendingAsk;
           state.pendingAsk = null;
+          state.editingBirth = false;
           localStorage.setItem('cercle.installedHint', '1');
           state.screen = 'app';
+          if (wasEdit) state.account = true;
           render();
           if (pending) askManuscript(pending);
         })
         .catch(function () {
           alert('Le serveur n’est pas joignable.');
-          if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer mon profil'; }
+          if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
         });
     }
 
@@ -598,7 +762,7 @@
   function initBirthPlaceAutocomplete() {
     var input = document.getElementById('birth-place');
     var dropdown = document.getElementById('birth-place-dropdown');
-    if (!input || !dropdown) return;
+    if (!input || !dropdown || input.disabled) return;
 
     var u = state.user || {};
     if (u.birthLat != null && u.birthLon != null && u.birthPlace) {
@@ -733,24 +897,41 @@
     var q = input ? (input.value || '').trim() : '';
     if (!q) return;
     if (!canIa()) return;
-    if (iaLeft() <= 0) { alert('Tu as déjà posé tes 500 questions ce mois. Elles reviennent le 1er.'); return; }
+    if (state.iaBusy) return;
+    if (iaLeft() <= 0) {
+      alert('Le ciel se repose pour ce mois. Reviens le 1er.');
+      return;
+    }
     var email = state.user.email;
-    state.iaMessages.push({ role: 'me', text: q });
+    var draft = trimIaMessages(state.iaMessages.concat([{ role: 'me', text: q }]));
+    setIaMessages(draft, true);
     state.iaBusy = true;
+    if (input) input.value = '';
     render();
     fetch(API + '/ia', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email, question: q })
-    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
       .then(function (res) {
         if (res.data && res.data.contact) applyAccess(res.data.contact);
-        state.iaMessages.push({ role: 'bot', text: (res.data && (res.data.answer || res.data.error)) || 'Silence du ciel.' });
+        if (res.ok && res.data && Array.isArray(res.data.messages)) {
+          setIaMessages(res.data.messages, true);
+        } else {
+          var errText = friendlyIaError((res.data && res.data.error) || '', res.status);
+          var withBot = trimIaMessages(state.iaMessages.concat([{ role: 'bot', text: errText }]));
+          setIaMessages(withBot, true);
+        }
         state.iaBusy = false;
+        state.iaLoaded = true;
         render();
       })
       .catch(function () {
-        state.iaMessages.push({ role: 'bot', text: 'Le serveur ne répond pas.' });
+        var withBot = trimIaMessages(state.iaMessages.concat([{
+          role: 'bot',
+          text: 'Le ciel ne répond pas pour le moment. Réessaie dans un instant.'
+        }]));
+        setIaMessages(withBot, true);
         state.iaBusy = false;
         render();
       });
@@ -786,7 +967,7 @@
     return '<div class="screen">' +
       '<div class="scroll noshift stack" style="justify-content:center;max-width:420px;margin:0 auto;width:100%">' +
         '<div class="brand"><span class="star">✦</span><h1>Les Manuscrits<br><span>Célestes</span></h1>' +
-        '<p class="lede">Gratuit, Céleste (59 €) ou Divin (137 €).<br>L’IA Céleste t’accompagne dans le Divin — jusqu’à 500 questions / mois.</p></div>' +
+        '<p class="lede">Gratuit, Céleste (59 €) ou Divin (137 €).<br>L’IA Céleste t’accompagne dans le Divin.</p></div>' +
         '<div class="card stack">' +
           '<div class="field"><label class="label" for="prenom">Prénom</label>' +
           '<input class="input" id="prenom" placeholder="Sophie" autocomplete="given-name"></div>' +
@@ -814,28 +995,61 @@
   function onboardingView() {
     var u = state.user || {};
     var g = u.gender || '';
+    var editing = !!profileComplete();
+    var canEdit = profileCanEdit();
+    var remaining = profileEditsRemaining();
+    var readOnly = editing && !canEdit;
+    var ro = readOnly ? ' disabled' : '';
     function genderOpt(val, label) {
       return '<label class="gender-opt"><input type="radio" name="gender" value="' + val + '"' +
-        (g === val ? ' checked' : '') + '> ' + label + '</label>';
+        (g === val ? ' checked' : '') + (readOnly ? ' disabled' : '') + '> ' + label + '</label>';
     }
+    var lede;
+    if (!editing) {
+      lede = 'Enregistré sous ' + (u.email || 'ton email') + ' — pour le natal, le jour et le mois. Tu pourras corriger jusqu’à 3 fois en cas d’erreur.';
+    } else if (readOnly) {
+      lede = 'Tu as utilisé tes 3 modifications. Pour toute correction supplémentaire, contacte le support.';
+    } else {
+      lede = 'Corrige une erreur si besoin. Il te reste ' + remaining + ' modification' + (remaining > 1 ? 's' : '') + '.';
+    }
+    var natalNote = '';
+    if (editing && (u.natalReady || u.natalFileExists || u.natalStatus === 'ready')) {
+      natalNote = '<p class="muted">Ton manuscrit natal est déjà généré : changer ces infos ne le régénère pas automatiquement.</p>';
+    }
+    var remainingLine = editing
+      ? ('<p class="muted" id="profile-edits-left">' +
+        (readOnly
+          ? 'Plus aucune modification possible.'
+          : ('Il te reste ' + remaining + ' modification' + (remaining > 1 ? 's' : '') + '.')) +
+        '</p>')
+      : '';
+    var saveBtn = readOnly
+      ? '<button class="btn" id="save-profile" disabled>Plus de modifications possibles</button>'
+      : ('<button class="btn" id="save-profile">' +
+        (editing ? 'Enregistrer les modifications' : 'Enregistrer mon profil') + '</button>');
+    var backOrSkip = editing
+      ? '<button class="link" id="cancel-edit-profile">Retour</button>'
+      : (canNatal() ? '' : '<button class="link" id="skip-onboarding">Plus tard</button>');
     return '<div class="screen">' +
       '<div class="scroll noshift stack" style="justify-content:center;max-width:420px;margin:0 auto;width:100%">' +
         '<div class="brand"><span class="star">✦</span><h1>Ton ciel<br><span>de naissance</span></h1>' +
-        '<p class="lede">Une seule fois. Enregistré pour toujours sous ' + (u.email || 'ton email') + ' — pour le natal, le jour et le mois.</p></div>' +
+        '<p class="lede">' + lede + '</p></div>' +
         '<div class="card stack">' +
+          remainingLine +
+          natalNote +
           '<div class="field"><label class="label" for="birth-date">Date de naissance</label>' +
-          '<input class="input" id="birth-date" type="date" value="' + (u.birthDate || '') + '" required></div>' +
+          '<input class="input" id="birth-date" type="date" value="' + (u.birthDate || '') + '" required' + ro + '></div>' +
           '<div class="field"><label class="label" for="birth-time">Heure de naissance</label>' +
-          '<input class="input" id="birth-time" type="time" value="' + (u.birthTime || '') + '" required></div>' +
+          '<input class="input" id="birth-time" type="time" value="' + (u.birthTime || '') + '" required' + ro + '></div>' +
           '<div class="field"><label class="label" for="birth-place">Lieu de naissance</label>' +
           '<div class="autocomplete-wrap">' +
-          '<input class="input" id="birth-place" type="text" placeholder="Tape une ville… (ex: Lyon)" value="' + (u.birthPlace || '').replace(/"/g, '&quot;') + '" autocomplete="off">' +
+          '<input class="input" id="birth-place" type="text" placeholder="Tape une ville… (ex: Lyon)" value="' + (u.birthPlace || '').replace(/"/g, '&quot;') + '" autocomplete="off"' + ro + '>' +
           '<div class="autocomplete-dropdown" id="birth-place-dropdown"></div>' +
           '</div></div>' +
           '<div class="field"><span class="label">Genre</span>' +
           '<div class="gender-row">' + genderOpt('femme', 'Femme') + genderOpt('homme', 'Homme') + genderOpt('autre', 'Autre') + '</div></div>' +
-          '<button class="btn" id="save-profile">Enregistrer mon profil</button>' +
-          (canNatal() ? '' : '<button class="link" id="skip-onboarding">Plus tard</button>') +
+          saveBtn +
+          backOrSkip +
         '</div></div></div>';
   }
 
@@ -852,7 +1066,8 @@
     var tabs = [
       ['natal', '✦', 'De ta vie'],
       ['mois', '☽', 'Du mois'],
-      ['jour', '☀', 'Du jour']
+      ['jour', '☀', 'Du jour'],
+      ['ia', '✧', 'IA']
     ];
     return '<nav class="nav">' + tabs.map(function (t) {
       return '<button data-tab="' + t[0] + '" class="' + (state.tab === t[0] ? 'active' : '') + '"><span class="ic">' + t[1] + '</span>' + t[2] + '</button>';
@@ -883,7 +1098,7 @@
       var errSafe = String(errRaw).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       /* Message technique serveur → formulation douce pour le client */
       if (/HD_API_TOKEN|CLAUDE_KEY|ANTHROPIC|manquant/i.test(errRaw)) {
-        errSafe = 'La génération n’a pas pu aboutir pour le moment. Réessaie dans un instant — ton bouton « Demander les 28 pages » reste disponible.';
+        errSafe = 'La génération n’a pas pu aboutir pour le moment. Réessaie dans un instant — ton bouton « OBTENIR LE MANUSCRIT DE MA VIE » reste disponible.';
       }
       return '<div class="natal-wait natal-wait-error" role="alert">' +
         '<p>' + errSafe + '</p>' +
@@ -899,7 +1114,7 @@
         '<p class="muted">' + progSafe + '</p>' +
         '</div>';
     }
-    if (u.natalReady) {
+    if (natalCanRead()) {
       return '<p class="muted">Profil enregistré · ton manuscrit est prêt.</p>';
     }
     return '<p class="muted">Profil enregistré · en attente de ta demande.</p>';
@@ -911,12 +1126,13 @@
     var left = Math.max(0, ULTIME.need - months);
     var unlocked = canUltime();
     var readyProfile = profileComplete();
-    var natalAskLabel = (state.user && state.user.natalReady) ? 'Lire les 28 pages' : 'Demander les 28 pages';
+    var canRead = natalCanRead();
+    var natalCta = 'OBTENIR LE MANUSCRIT DE MA VIE';
     var natalCard = canNatal()
       ? '<div class="card stack"><div class="label">' + NATAL.kicker + '</div><h2>' + natalTitleHtml() + '</h2><p class="muted">' + NATAL.pages + ' pages · écrit une fois, à ta demande</p><p>' + NATAL.intro + '</p>' +
         natalStatusLine() +
-        (readyProfile ? askBtn('natal', natalAskLabel, 'Lire les 28 pages') : '') +
-        (state.user && state.user.natalReady && natalPdfUrl()
+        (readyProfile ? askBtn('natal', natalCta, natalCta) : '') +
+        (canRead && natalPdfUrl()
           ? '<a class="btn ghost" href="' + natalPdfUrl() + '" target="_blank" rel="noopener">Ouvrir / télécharger</a>'
           : '') +
         '</div>'
@@ -943,7 +1159,7 @@
         (kind === 'natal' ? 'Écriture en cours… quelques minutes' : 'Le ciel s’écrit…') +
         '</button>';
     }
-    if (kind === 'natal' && state.user && state.user.natalReady) {
+    if (kind === 'natal' && natalCanRead()) {
       return '<button class="btn" data-ask="natal">' + readLabel + '</button>';
     }
     if (bookReady(kind)) return '<button class="btn" data-pdf="' + kind + '">' + readLabel + '</button>';
@@ -952,9 +1168,49 @@
 
   function iaCard() {
     if (canIa()) {
-      return '<div class="card stack"><div class="label">Plan Divin</div><h2>IA Céleste</h2><p class="muted">' + iaLeft() + ' / ' + ((state.user && state.user.iaQuota) || 500) + ' questions ce mois</p><p>Ta compagne intime pendant la lecture — amour, travail, timing… Une réponse courte, jamais un nouveau livre.</p><button class="btn" id="open-ia">Poser une question</button></div>';
+      return '<div class="card stack"><div class="label">Plan Divin</div><h2>IA Céleste</h2><p class="muted">Disponible</p><p>Ta compagne intime — amour, travail, timing… Ouvre l’onglet IA pour lui parler.</p><button class="btn ghost" type="button" data-tab="ia">Ouvrir le chat</button></div>';
     }
-    return '<div class="card lock stack"><div class="label">Plan Divin · 137 €</div><h2>IA Céleste</h2><p class="muted">Jusqu’à 500 questions / mois</p><p>Pendant que tu lis, elle t’écoute : aujourd’hui l’amour ? le travail ? le bon moment ? Une présence douce, réservée au Divin.</p></div>';
+    return '<div class="card lock stack"><div class="label">Plan Divin · 137 €</div><h2>IA Céleste</h2><p class="muted">Incluse dans le Divin</p><p>Pendant que tu lis, elle t’écoute : aujourd’hui l’amour ? le travail ? le bon moment ? Une présence douce, réservée au Divin.</p><button class="btn ghost" type="button" data-plan-link="divin">Découvrir le Divin</button></div>';
+  }
+
+  function iaChatPanel() {
+    var left = iaLeft();
+    var quotaLine = left != null
+      ? ('<p class="muted ia-quota">' + left + ' question' + (left === 1 ? '' : 's') + ' ce mois</p>')
+      : '';
+    var log = (state.iaMessages || []).map(function (m) {
+      return '<div class="ia-bubble ' + (m.role === 'me' ? 'me' : 'bot') + '">' + escapeHtml(m.text) + '</div>';
+    }).join('');
+    var empty = '<p class="muted ia-empty">Une question, une réponse douce. Ex. : aujourd’hui, l’amour ?</p>';
+    var disabled = state.iaBusy || left <= 0;
+    return '<div class="ia-chat stack">' +
+      quotaLine +
+      '<div class="ia-log" id="ia-log">' + (log || empty) + '</div>' +
+      '<div class="ia-compose">' +
+        '<div class="field"><label class="label" for="ia-q">Ta question</label>' +
+        '<input class="input" id="ia-q" placeholder="Est-ce un bon jour pour l’amour ?" ' + (disabled ? 'disabled' : '') + ' autocomplete="off"></div>' +
+        '<button class="btn" id="send-ia"' + (disabled ? ' disabled' : '') + '>' +
+          (state.iaBusy ? 'Le ciel répond…' : (left <= 0 ? 'Quota atteint' : 'Envoyer')) +
+        '</button>' +
+      '</div></div>';
+  }
+
+  function iaTab() {
+    if (canIa()) {
+      ensureIaHistory();
+      return '<div class="hero-month"><div class="label">Plan Divin</div>' +
+        '<div class="month">IA Céleste</div>' +
+        '<p class="lede">Amour, travail, timing… une présence douce.</p></div>' +
+        '<div class="stack"><div class="card ia-panel stack">' + iaChatPanel() + '</div></div>';
+    }
+    return '<div class="hero-month"><div class="label">Plan Divin · 137 €</div>' +
+      '<div class="month">IA Céleste</div>' +
+      '<p class="lede">Réservée au Divin.</p></div>' +
+      '<div class="stack"><div class="card lock stack">' +
+        '<p>Pendant que tu lis, elle t’écoute : aujourd’hui l’amour ? le travail ? le bon moment ? Une présence douce, jamais un nouveau livre.</p>' +
+        '<p class="muted">Passe Divin pour lui parler ici, avec tout ton historique conservé.</p>' +
+        '<button class="btn" type="button" data-plan-link="divin">Passer Divin · 137 €</button>' +
+      '</div></div>';
   }
 
   function moisTab() {
@@ -1017,7 +1273,7 @@
 
     var iaLine;
     if (canIa()) {
-      iaLine = iaLeft() + ' / ' + (u.iaQuota || 500) + ' questions ce mois';
+      iaLine = 'Disponible';
     } else if (isPausedPaid()) {
       iaLine = 'En pause — se rouvre avec le Divin';
     } else {
@@ -1033,13 +1289,26 @@
       birthTimeDisp = tm ? (tm[1].padStart(2, '0') + ' h ' + tm[2]) : String(u.birthTime).trim();
     }
     var birthDateLine = (u.birthDate || '') + (birthTimeDisp ? ' · ' + birthTimeDisp : '');
-    var profileBlock = profileComplete()
-      ? ('<div class="acct-block"><div class="label">Ciel de naissance</div>' +
+    var genderDisp = u.gender === 'femme' ? 'Femme' : u.gender === 'homme' ? 'Homme' : u.gender === 'autre' ? 'Autre' : '';
+    var remaining = profileEditsRemaining();
+    var canEdit = profileCanEdit();
+    var profileBlock;
+    if (profileComplete()) {
+      profileBlock = '<div class="acct-block"><div class="label">Ciel de naissance</div>' +
         '<p class="acct-value">' + birthDateLine + '</p>' +
-        '<p class="muted">' + (u.birthPlace || '') + (u.natalReady ? ' · manuscrit prêt' : '') + '</p></div>')
-      : ('<div class="acct-block"><div class="label">Ciel de naissance</div>' +
+        '<p class="muted">' + (u.birthPlace || '') +
+        (genderDisp ? ' · ' + genderDisp : '') +
+        (natalCanRead() ? ' · manuscrit prêt' : '') + '</p>' +
+        (canEdit
+          ? '<p class="muted">Il te reste ' + remaining + ' modification' + (remaining > 1 ? 's' : '') + '.</p>'
+          : '<p class="muted">Tu as utilisé tes 3 modifications. Pour toute correction, contacte le support.</p>') +
+        '<button class="btn ghost" type="button" id="edit-profile">' +
+        (canEdit ? 'Modifier' : 'Consulter') + '</button></div>';
+    } else {
+      profileBlock = '<div class="acct-block"><div class="label">Ciel de naissance</div>' +
         '<p class="muted">Pas encore renseigné.</p>' +
-        '<button class="btn ghost" type="button" id="edit-profile">Renseigner mon ciel de naissance</button></div>');
+        '<button class="btn ghost" type="button" id="edit-profile">Renseigner mon ciel de naissance</button></div>';
+    }
 
     return '<div class="sheet" id="account-sheet"><div class="panel account-panel stack">' +
       '<h3>Ton compte</h3>' +
@@ -1112,24 +1381,10 @@
     var body = '<p class="kicker">' + kicker + '</p><h2>' + titleHtml + '</h2>' +
       paras.map(function (p) { return '<p>' + p + '</p>'; }).join('') + extra;
     var ia = canIa()
-      ? '<div class="ia-dock"><button class="btn ghost" id="open-ia">Question à l’IA Céleste · ' + iaLeft() + ' restantes</button></div>'
-      : '<div class="ia-dock"><p class="muted">L’IA Céleste t’accompagne ici, dans le plan Divin (jusqu’à 500 questions / mois).</p></div>';
+      ? '<div class="ia-dock"><button class="btn ghost" type="button" id="goto-ia">Parler à l’IA Céleste</button></div>'
+      : '<div class="ia-dock"><p class="muted">L’IA Céleste t’accompagne ici, dans le plan Divin.</p></div>';
     return '<div class="pdf-view"><header><button type="button" class="pdf-back" id="close-pdf">← Retour</button><span class="kicker">' + titlePlain + '</span></header>' +
       '<div class="pdf-body">' + body + ia + '</div></div>';
-  }
-
-  function iaSheet() {
-    var log = (state.iaMessages || []).map(function (m) {
-      return '<div class="ia-bubble ' + m.role + '">' + m.text + '</div>';
-    }).join('');
-    return '<div class="sheet" id="ia-sheet"><div class="panel stack">' +
-      '<h3>IA Céleste</h3>' +
-      '<p class="lede">' + iaLeft() + ' / ' + ((state.user && state.user.iaQuota) || 500) + ' questions ce mois · amour, travail, timing…</p>' +
-      '<div class="ia-log">' + (log || '<p class="muted">Une question, une réponse douce. Ex. : aujourd’hui, l’amour ?</p>') + '</div>' +
-      '<div class="field"><label class="label" for="ia-q">Ta question</label>' +
-      '<input class="input" id="ia-q" placeholder="Est-ce un bon jour pour l’amour ?" ' + (state.iaBusy || iaLeft() <= 0 ? 'disabled' : '') + '></div>' +
-      '<button class="btn" id="send-ia"' + (state.iaBusy || iaLeft() <= 0 ? ' disabled' : '') + '>' + (state.iaBusy ? 'Le ciel répond…' : 'Envoyer') + '</button>' +
-      '<button class="btn ghost" id="close-ia">Fermer</button></div></div>';
   }
 
   function render() {
@@ -1143,15 +1398,19 @@
       if (needsOnboarding()) {
         html = onboardingView();
       } else {
-        var tab = state.tab === 'mois' ? moisTab() : state.tab === 'jour' ? jourTab() : natalTab();
+        var tab = state.tab === 'mois' ? moisTab()
+          : state.tab === 'jour' ? jourTab()
+          : state.tab === 'ia' ? iaTab()
+          : natalTab();
         html = '<div class="screen">' + topbar() + freeQuotaBanner() + '<div class="scroll">' + tab + '</div>' + nav() + '</div>';
         if (state.account) html += accountSheet();
         if (state.pdf) html += pdfView(state.pdf);
-        if (state.ia) html += iaSheet();
       }
     }
     root.innerHTML = html;
     bind();
+    var logEl = document.getElementById('ia-log');
+    if (logEl) logEl.scrollTop = logEl.scrollHeight;
   }
 
   function bind() {
@@ -1219,17 +1478,30 @@
     };
 
     var saveP = document.getElementById('save-profile');
-    if (saveP) saveP.onclick = saveProfile;
-    initBirthPlaceAutocomplete();
+    if (saveP && !saveP.disabled) saveP.onclick = saveProfile;
+    if (profileCanEdit()) initBirthPlaceAutocomplete();
     var skipOn = document.getElementById('skip-onboarding');
     if (skipOn) skipOn.onclick = function () {
       state.pendingAsk = null;
       goAppOrInstall();
       render();
     };
+    var cancelEdit = document.getElementById('cancel-edit-profile');
+    if (cancelEdit) cancelEdit.onclick = function () {
+      state.pendingAsk = null;
+      state.editingBirth = false;
+      state.screen = 'app';
+      state.account = true;
+      render();
+    };
 
     document.querySelectorAll('[data-tab]').forEach(function (b) {
-      b.onclick = function () { state.tab = b.getAttribute('data-tab'); state.pdf = null; render(); };
+      b.onclick = function () {
+        state.tab = b.getAttribute('data-tab');
+        state.pdf = null;
+        if (state.tab === 'ia' && canIa()) ensureIaHistory();
+        render();
+      };
     });
     document.querySelectorAll('[data-ask]').forEach(function (b) {
       b.onclick = function () { askManuscript(b.getAttribute('data-ask')); };
@@ -1245,10 +1517,13 @@
     });
     var cp = document.getElementById('close-pdf');
     if (cp) cp.onclick = function () { state.pdf = null; render(); };
-    var oi = document.getElementById('open-ia');
-    if (oi) oi.onclick = function () { state.ia = true; render(); };
-    var ci = document.getElementById('close-ia');
-    if (ci) ci.onclick = function () { state.ia = false; render(); };
+    var gi = document.getElementById('goto-ia');
+    if (gi) gi.onclick = function () {
+      state.pdf = null;
+      state.tab = 'ia';
+      if (canIa()) ensureIaHistory();
+      render();
+    };
     var si = document.getElementById('send-ia');
     if (si) si.onclick = sendIa;
     var iq = document.getElementById('ia-q');
@@ -1288,7 +1563,8 @@
     if (lo) lo.onclick = function () {
       localStorage.removeItem('cercle.user');
       state.user = null; state.screen = 'login'; state.account = false; state.tab = 'natal';
-      state.ia = false; state.iaMessages = []; state.pdf = null; state.pendingAsk = null; state.natalPreview = null;
+      state.iaBusy = false; state.iaLoaded = false; state.iaMessages = [];
+      state.pdf = null; state.pendingAsk = null; state.natalPreview = null;
       render();
     };
   }
@@ -1325,6 +1601,6 @@
     render();
   });
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js?v=17').catch(function () {});
+    navigator.serviceWorker.register('/sw.js?v=19').catch(function () {});
   }
 })();
