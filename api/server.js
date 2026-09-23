@@ -10,6 +10,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const plans = require('./plans');
+const profile = require('./profile');
+const natalGen = require('./natal-generate');
 
 const ROOT = __dirname;
 const STORE = path.join(ROOT, 'store.json');
@@ -40,7 +42,7 @@ loadEnv();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/systeme-webhook', '/webhook-debug', '/generate', '/ia'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/natal-file'];
 const LAST_WEBHOOKS_MAX = 20;
 
 function isWeakSecret(s) {
@@ -122,7 +124,16 @@ function emptyContact(email) {
     monthlyUsed: 0,
     iaUsed: 0,
     usageMonth: '',
-    usageYear: 0
+    usageYear: 0,
+    birthDate: '',
+    birthTime: '',
+    birthPlace: '',
+    gender: '',
+    natalReady: false,
+    natalStatus: 'none',
+    natalPdfPath: null,
+    natalTxtPath: null,
+    natalGeneratedAt: null
   };
 }
 
@@ -606,6 +617,7 @@ async function handle(req, res) {
         ultimeMonths: ULTIME_MONTHS,
         dev: DEV,
         hasSecret: !!(SECRET && !isWeakSecret(SECRET)),
+        hasClaudeKey: !!natalGen.claudeKey(),
         webhookAuth: WEBHOOK_AUTH_VERSION
       }, req);
     }
@@ -794,6 +806,64 @@ async function handle(req, res) {
       return send(res, 200, { ok: true, action: action, tags: info.tags, contact: publicContact(c) }, req);
     }
 
+    if (route === '/profile' && req.method === 'GET') {
+      const email = normEmail(url.searchParams.get('email'));
+      if (!email) return send(res, 400, { error: 'email requis' }, req);
+      const store = readStore();
+      const c = store.contacts[email];
+      if (!c) return send(res, 404, { error: 'compte inconnu', profileComplete: false }, req);
+      return send(res, 200, Object.assign({ ok: true }, publicContact(c)), req);
+    }
+
+    if (route === '/profile' && req.method === 'POST') {
+      const body = (await readBody(req)).body;
+      const email = normEmail(body.email);
+      if (!email) return send(res, 400, { error: 'email requis' }, req);
+      const store = readStore();
+      let c = store.contacts[email];
+      if (!c) {
+        if (!DEV) return send(res, 404, { error: 'compte inconnu' }, req);
+        c = emptyContact(email);
+        c.prenom = String(body.prenom || '').trim() || 'Sophie';
+        c.plan = plans.demoPlanFromEmail(email);
+        c.active = true;
+        c.monthsPaid = c.plan === 'gratuit' ? 0 : (c.plan === 'divin' ? 1 : 2);
+        refreshUltime(c);
+        store.contacts[email] = c;
+      }
+      const saved = profile.saveProfile(c, body);
+      if (!saved.ok) return send(res, 400, { error: saved.error, contact: publicContact(c) }, req);
+      writeStore(store);
+      logLine('PROFILE saved ' + email);
+      return send(res, 200, { ok: true, contact: publicContact(c) }, req);
+    }
+
+    if (route === '/natal-file' && req.method === 'GET') {
+      const email = normEmail(url.searchParams.get('email'));
+      if (!email) return send(res, 400, { error: 'email requis' }, req);
+      const store = readStore();
+      const c = store.contacts[email];
+      if (!c) return send(res, 404, { error: 'compte inconnu' }, req);
+      const ent = plans.entitlements(c);
+      if (!ent.canNatal && !c.natalReady) {
+        return send(res, 403, { error: 'Manuscrit natal réservé au plan Céleste / Divin.' }, req);
+      }
+      const file = natalGen.resolveNatalFile(c, url.searchParams.get('format'));
+      if (!file) return send(res, 404, { error: 'aucun fichier natal' }, req);
+      try {
+        const buf = fs.readFileSync(file.path);
+        const name = path.basename(file.path);
+        res.writeHead(200, Object.assign({
+          'Content-Type': file.type,
+          'Content-Length': buf.length,
+          'Content-Disposition': 'inline; filename="' + name + '"'
+        }, corsHeaders(req)));
+        return res.end(buf);
+      } catch (e) {
+        return send(res, 500, { error: 'lecture fichier' }, req);
+      }
+    }
+
     if (route === '/generate' && req.method === 'POST') {
       const body = (await readBody(req)).body;
       const email = normEmail(body.email);
@@ -806,6 +876,55 @@ async function handle(req, res) {
       if (!c) return send(res, 404, { error: 'compte inconnu' });
       const check = plans.canGenerate(c, kind);
       if (!check.ok) return send(res, 403, { error: check.error, contact: publicContact(c) });
+
+      const needProf = profile.requireForGenerate(c, kind);
+      if (!needProf.ok) {
+        return send(res, 403, {
+          error: needProf.error,
+          needProfile: true,
+          contact: publicContact(c)
+        });
+      }
+
+      /* Natal déjà prêt : ne pas recompter / regénérer sauf regenerate=true */
+      if (kind === 'natal' && c.natalReady && !body.regenerate) {
+        return send(res, 200, {
+          ok: true,
+          kind: kind,
+          already: true,
+          pdfUrl: '/natal-file?email=' + encodeURIComponent(email),
+          contact: publicContact(c)
+        });
+      }
+
+      if (kind === 'natal') {
+        c.natalStatus = 'generating';
+        writeStore(store);
+        let gen;
+        try {
+          gen = await natalGen.generateNatal(c);
+        } catch (err) {
+          c.natalStatus = 'error';
+          writeStore(store);
+          logLine('NATAL generate error ' + email + ' ' + (err && err.message || err));
+          return send(res, 500, {
+            error: 'Génération natal impossible pour le moment.',
+            contact: publicContact(c)
+          });
+        }
+        plans.consumeGenerate(c, kind);
+        writeStore(store);
+        logLine('NATAL generated ' + email + ' source=' + (gen && gen.source));
+        return send(res, 200, {
+          ok: true,
+          kind: kind,
+          source: gen.source,
+          claudeOk: !!gen.claudeOk,
+          pdfUrl: '/natal-file?email=' + encodeURIComponent(email),
+          contact: publicContact(c)
+        });
+      }
+
       plans.consumeGenerate(c, kind);
       writeStore(store);
       return send(res, 200, { ok: true, kind: kind, contact: publicContact(c) });
