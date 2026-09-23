@@ -44,6 +44,7 @@ function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
   var coverGold = opts.coverGold != null ? opts.coverGold : 'Céleste';
   var coverFor = opts.coverFor || null;
   var footerLabel = opts.footerLabel || 'Ton Manuscrit Céleste';
+  var documentTitle = opts.documentTitle || 'Manuscrit Céleste';
   var skipAffirmations = !!opts.skipAffirmations;
   var skipRituelsBlock = !!opts.skipRituelsBlock;
   var skipSynthese = !!opts.skipSynthese;
@@ -211,7 +212,7 @@ function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Manuscrit Céleste — ${prenom}</title>
+<title>${esc(documentTitle)} — ${prenom}</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Cinzel:wght@400;600&family=Inter:wght@300;400&display=swap" rel="stylesheet">
 <style>
 :root, html[data-theme="dark"] {

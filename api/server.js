@@ -14,6 +14,7 @@ const profile = require('./profile');
 const natalGen = require('./natal-generate');
 const periodGen = require('./period-generate');
 const coupleGen = require('./couple-generate');
+const ultimeGen = require('./ultime-generate');
 const chartCache = require('./natal/chart-cache');
 const downloadBundle = require('./download-bundle');
 
@@ -35,6 +36,13 @@ periodGen.injectStoreHooks({
 });
 
 coupleGen.injectStoreHooks({
+  readStore: function () { return readStore(); },
+  writeStore: function (data) { writeStore(data); },
+  consume: function (c, kind) { plans.consumeGenerate(c, kind); },
+  log: function (msg) { logLine(msg); }
+});
+
+ultimeGen.injectStoreHooks({
   readStore: function () { return readStore(); },
   writeStore: function (data) { writeStore(data); },
   consume: function (c, kind) { plans.consumeGenerate(c, kind); },
@@ -82,7 +90,7 @@ const LOG = resolveLogPath();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file', '/download-all'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file', '/ultime-file', '/download-all'];
 const LAST_WEBHOOKS_MAX = 20;
 const IA_MESSAGES_MAX = 1000;
 
@@ -218,6 +226,12 @@ function emptyContact(email) {
     natalPdfPath: null,
     natalTxtPath: null,
     natalGeneratedAt: null,
+    ultimeReady: false,
+    ultimeStatus: 'none',
+    ultimeHtmlPath: null,
+    ultimePdfPath: null,
+    ultimeTxtPath: null,
+    ultimeGeneratedAt: null,
     iaMessages: [],
     iaChats: { natal: [], mois: [], jour: [], couple: [] },
     chartHd: null,
@@ -279,7 +293,7 @@ function ensureIaChats(c) {
 
 function normalizeIaContext(ctx) {
   var c = String(ctx || 'natal').toLowerCase().trim();
-  if (c === 'mois' || c === 'jour' || c === 'natal' || c === 'couple') return c;
+  if (c === 'mois' || c === 'jour' || c === 'natal' || c === 'couple' || c === 'ultime') return c;
   return 'natal';
 }
 
@@ -634,6 +648,17 @@ function publicContact(c) {
   out.coupleKey = (c && c.coupleKey) || null;
   out.couplePdfUrl = out.coupleReady ? ('/couple-file?email=' + encodeURIComponent(c.email || '')) : null;
   out.hasPartnerChartCache = !!(c && chartCache.hasValidPartnerCache(c));
+
+  ultimeGen.reconcileUltimeReady(c);
+  const ultimeOk = !!(c && ultimeGen.hasUltimeFile(c));
+  out.ultimeFileExists = ultimeOk;
+  out.ultimeReady = !!(c && c.ultimeReady && ultimeOk);
+  out.ultimeStatus = (c && c.ultimeStatus) || 'none';
+  out.ultimeProgress = (c && c.ultimeProgress) || null;
+  out.ultimeProgressPct = (c && c.ultimeProgressPct != null) ? c.ultimeProgressPct : null;
+  out.ultimeError = (c && c.ultimeError) || null;
+  out.ultimePdfUrl = out.ultimeReady ? ('/ultime-file?email=' + encodeURIComponent(c.email || '')) : null;
+  out.ultimePagesEst = (c && c.ultimePagesEst) || null;
   return out;
 }
 
@@ -1377,6 +1402,33 @@ async function handle(req, res) {
       }
     }
 
+    if (route === '/ultime-file' && req.method === 'GET') {
+      const auth = requireSession(req, url, null);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const c = auth.c;
+      const ent = plans.entitlements(c);
+      if (!ent.canUltime && !c.ultimeReady) {
+        return send(res, 403, { error: 'Manuscrit Ultime réservé au Divin, ou après 6 mois Céleste.' }, req);
+      }
+      const file = ultimeGen.resolveUltimeFile(c, url.searchParams.get('format'));
+      if (!file) {
+        if (ultimeGen.reconcileUltimeReady(c)) writeStore(auth.store);
+        return send(res, 404, { error: 'aucun fichier ultime' }, req);
+      }
+      try {
+        const buf = fs.readFileSync(file.path);
+        const name = path.basename(file.path);
+        res.writeHead(200, Object.assign({
+          'Content-Type': file.type,
+          'Content-Length': buf.length,
+          'Content-Disposition': 'inline; filename="' + name + '"'
+        }, corsHeaders(req)));
+        return res.end(buf);
+      } catch (e) {
+        return send(res, 500, { error: 'lecture fichier' }, req);
+      }
+    }
+
     if (route === '/download-all' && req.method === 'GET') {
       const auth = requireSession(req, url, null);
       if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
@@ -1659,9 +1711,56 @@ async function handle(req, res) {
         }, req);
       }
 
-      plans.consumeGenerate(c, kind);
-      writeStore(store);
-      return send(res, 200, { ok: true, kind: kind, contact: publicContact(c) }, req);
+      if (kind === 'ultime') {
+        ultimeGen.reconcileUltimeReady(c);
+        if (c.ultimeReady && ultimeGen.hasUltimeFile(c) && !body.regenerate) {
+          return send(res, 200, {
+            ok: true,
+            kind: 'ultime',
+            already: true,
+            pdfUrl: '/ultime-file?email=' + encodeURIComponent(email),
+            contact: publicContact(c)
+          }, req);
+        }
+        if (c.ultimeStatus === 'generating' && ultimeGen.runningJobs[email]) {
+          return send(res, 202, {
+            ok: true,
+            kind: 'ultime',
+            status: 'generating',
+            message: c.ultimeProgress || 'Génération en cours…',
+            contact: publicContact(c)
+          }, req);
+        }
+        c.ultimeStatus = 'generating';
+        c.ultimeReady = false;
+        c.ultimeError = null;
+        c.ultimeProgress = 'Le ciel compose ton Manuscrit Ultime… Plusieurs minutes de silence.';
+        c.ultimeProgressPct = 2;
+        writeStore(store);
+        try {
+          ultimeGen.startUltimeJob(email);
+        } catch (err) {
+          c.ultimeStatus = 'error';
+          c.ultimeError = (err && err.message) || 'Démarrage impossible';
+          writeStore(store);
+          return send(res, 500, {
+            error: c.ultimeError,
+            contact: publicContact(c)
+          }, req);
+        }
+        logLine('ULTIME job started ' + email);
+        return send(res, 202, {
+          ok: true,
+          kind: 'ultime',
+          status: 'generating',
+          async: true,
+          message: c.ultimeProgress,
+          pdfUrl: '/ultime-file?email=' + encodeURIComponent(email),
+          contact: publicContact(c)
+        }, req);
+      }
+
+      return send(res, 400, { error: 'kind non géré', contact: publicContact(c) }, req);
     }
 
     if (route === '/ia' && req.method === 'GET') {

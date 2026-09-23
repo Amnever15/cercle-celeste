@@ -86,6 +86,8 @@
     pendingAsk: null,
     natalPreview: null,
     natalGenError: null,
+    ultimePreview: null,
+    ultimeGenError: null,
     periodPreview: null,
     periodPreviewKind: null,
     periodGenError: null,
@@ -276,6 +278,7 @@
     syncProfileFlag();
     /* Ne pas garder un « Relire » local si le serveur n’a pas le fichier. */
     if (!natalCanRead()) clearNatalLocalBook();
+    if (!ultimeCanRead()) clearUltimeLocalBook();
     if (!periodCanRead('mois')) clearPeriodLocalBook('mois');
     if (!periodCanRead('jour')) clearPeriodLocalBook('jour');
     if (!coupleCanRead()) clearCoupleLocalBook();
@@ -457,7 +460,7 @@
   }
   function normalizeIaCtx(ctx) {
     var c = String(ctx || 'natal').toLowerCase();
-    if (c === 'mois' || c === 'jour' || c === 'natal' || c === 'couple') return c;
+    if (c === 'mois' || c === 'jour' || c === 'natal' || c === 'couple' || c === 'ultime') return c;
     return 'natal';
   }
   function poeticNatalProgress(raw) {
@@ -508,19 +511,87 @@
     if (pct < 4) pct = 8;
     var progRaw = poeticNatalProgress(opts.progress || m.fallback);
     var progSafe = escapeHtml(progRaw);
+    var uid = 'nr' + String(kind || 'x') + String(Date.now() % 1e9);
+    var gLine = uid + 'Line';
+    var gRing = uid + 'Ring';
+    var gSoft = uid + 'Soft';
     return '<div class="natal-cosmos" role="status" aria-live="polite">' +
-      '<div class="natal-galaxy"></div>' +
-      '<div class="natal-stars" aria-hidden="true"></div>' +
-      '<div class="natal-book-stage">' +
-        '<div class="natal-book">' +
-          '<div class="book-spine"></div>' +
-          '<div class="book-cover book-left"></div>' +
-          '<div class="book-pages">' +
-            '<div class="book-page p1"></div>' +
-            '<div class="book-page p2"></div>' +
-            '<div class="book-page p3"></div>' +
+      '<div class="natal-cosmos-sky" aria-hidden="true">' +
+        '<div class="natal-nebula natal-nebula-a"></div>' +
+        '<div class="natal-nebula natal-nebula-b"></div>' +
+        '<div class="natal-nebula natal-nebula-c"></div>' +
+        '<div class="natal-stars natal-stars-far"></div>' +
+        '<div class="natal-stars natal-stars-mid"></div>' +
+        '<div class="natal-stars natal-stars-near"></div>' +
+        '<div class="natal-dust"></div>' +
+      '</div>' +
+      '<div class="natal-sacred" aria-hidden="true">' +
+        '<div class="natal-sacred-spin">' +
+          '<div class="natal-sacred-vibrance">' +
+            '<svg class="natal-rosace" xmlns="http://www.w3.org/2000/svg" viewBox="-68 -58 136 116" focusable="false">' +
+              '<defs>' +
+                '<linearGradient id="' + gLine + '" x1="0%" y1="0%" x2="100%" y2="100%">' +
+                  '<stop offset="0%" stop-color="rgba(255,252,245,.75)"/>' +
+                  '<stop offset="35%" stop-color="rgba(240,208,138,.85)"/>' +
+                  '<stop offset="65%" stop-color="rgba(200,180,255,.75)"/>' +
+                  '<stop offset="100%" stop-color="rgba(255,252,245,.7)"/>' +
+                '</linearGradient>' +
+                '<linearGradient id="' + gRing + '" x1="0%" y1="50%" x2="100%" y2="50%">' +
+                  '<stop offset="0%" stop-color="rgba(201,168,76,.2)"/>' +
+                  '<stop offset="50%" stop-color="rgba(232,201,106,.4)"/>' +
+                  '<stop offset="100%" stop-color="rgba(201,168,76,.2)"/>' +
+                '</linearGradient>' +
+                '<filter id="' + gSoft + '" x="-40%" y="-40%" width="180%" height="180%">' +
+                  '<feGaussianBlur in="SourceGraphic" stdDeviation="0.52" result="b"/>' +
+                  '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>' +
+                '</filter>' +
+              '</defs>' +
+              '<g fill="none" stroke-linecap="round" stroke-linejoin="round" filter="url(#' + gSoft + ')">' +
+                '<circle cx="0" cy="0" r="58" stroke="url(#' + gRing + ')" stroke-width="0.32" opacity=".5"/>' +
+                '<circle cx="0" cy="0" r="52" stroke="rgba(255,252,245,.12)" stroke-width="0.2" stroke-dasharray="1.4 3.5" opacity=".55"/>' +
+                '<g stroke="rgba(255,255,255,.18)" stroke-width="0.16" opacity=".45">' +
+                  '<line x1="0" y1="0" x2="52" y2="0"/><line x1="0" y1="0" x2="26" y2="45.03"/>' +
+                  '<line x1="0" y1="0" x2="-26" y2="45.03"/><line x1="0" y1="0" x2="-52" y2="0"/>' +
+                  '<line x1="0" y1="0" x2="-26" y2="-45.03"/><line x1="0" y1="0" x2="26" y2="-45.03"/>' +
+                '</g>' +
+                '<g stroke="rgba(230,220,255,.26)" stroke-width="0.42">' +
+                  '<circle cx="0" cy="0" r="50"/>' +
+                  '<path stroke="rgba(255,248,230,.22)" stroke-width="0.38" d="M0,-48 L41.6,-24 L41.6,24 L0,48 L-41.6,24 L-41.6,-24Z"/>' +
+                  '<path stroke="rgba(255,255,255,.3)" stroke-width="0.36" d="M14,0 L44,0 M7,12.12 L22,38.1 M-7,12.12 L-22,38.1 M-14,0 L-44,0 M-7,-12.12 L-22,-38.1 M7,-12.12 L22,-38.1"/>' +
+                '</g>' +
+                '<g stroke="url(#' + gLine + ')" stroke-width="0.4" opacity=".95">' +
+                  '<circle cx="0" cy="0" r="19"/><circle cx="19" cy="0" r="19"/>' +
+                  '<circle cx="9.5" cy="16.45" r="19"/><circle cx="-9.5" cy="16.45" r="19"/>' +
+                  '<circle cx="-19" cy="0" r="19"/><circle cx="-9.5" cy="-16.45" r="19"/>' +
+                  '<circle cx="9.5" cy="-16.45" r="19"/>' +
+                '</g>' +
+                '<g stroke="url(#' + gLine + ')" stroke-width="0.3" opacity=".68">' +
+                  '<circle cx="28.5" cy="16.45" r="11"/><circle cx="0" cy="32.9" r="11"/>' +
+                  '<circle cx="-28.5" cy="16.45" r="11"/><circle cx="-28.5" cy="-16.45" r="11"/>' +
+                  '<circle cx="0" cy="-32.9" r="11"/><circle cx="28.5" cy="-16.45" r="11"/>' +
+                '</g>' +
+              '</g>' +
+            '</svg>' +
           '</div>' +
-          '<div class="book-cover book-right"></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="natal-book-stage" aria-hidden="true">' +
+        '<div class="natal-book-aura"></div>' +
+        '<div class="natal-book-pivot">' +
+          '<div class="natal-book">' +
+            '<div class="nb-cover nb-back"></div>' +
+            '<div class="nb-pages">' +
+              '<span class="nb-page p1"></span>' +
+              '<span class="nb-page p2"></span>' +
+              '<span class="nb-page p3"></span>' +
+              '<span class="nb-page p4"></span>' +
+            '</div>' +
+            '<div class="nb-cover nb-front">' +
+              '<span class="nb-emblem"></span>' +
+              '<span class="nb-title-line"></span>' +
+            '</div>' +
+            '<div class="nb-spine"></div>' +
+          '</div>' +
         '</div>' +
       '</div>' +
       '<div class="natal-cosmos-copy">' +
@@ -539,6 +610,7 @@
     if (kind === 'mois') return u.moisStatus === 'generating';
     if (kind === 'jour') return u.jourStatus === 'generating';
     if (kind === 'couple') return u.coupleStatus === 'generating';
+    if (kind === 'ultime') return u.ultimeStatus === 'generating';
     return false;
   }
 
@@ -576,18 +648,131 @@
     return msg;
   }
 
+  var _iaUtterance = null;
+  var _iaSpeakingBtn = null;
+
+  function iaSpeakSupported() {
+    return typeof window !== 'undefined' &&
+      !!window.speechSynthesis &&
+      typeof SpeechSynthesisUtterance !== 'undefined';
+  }
+
+  /** Texte parlé : retire le markdown léger éventuel. */
+  function stripIaSpeakText(text) {
+    return String(text || '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/_([^_]+)_/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/#{1,6}\s+/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  function stopIaSpeak() {
+    if (iaSpeakSupported()) {
+      try { window.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+    }
+    _iaUtterance = null;
+    if (_iaSpeakingBtn) {
+      _iaSpeakingBtn.classList.remove('is-speaking');
+      _iaSpeakingBtn.setAttribute('aria-pressed', 'false');
+      var label = _iaSpeakingBtn.querySelector('.ia-speak-label');
+      if (label) label.textContent = 'Écouter';
+      _iaSpeakingBtn = null;
+    }
+  }
+
+  function speakIaText(text, btn) {
+    if (!iaSpeakSupported()) return;
+    if (btn && btn === _iaSpeakingBtn) {
+      stopIaSpeak();
+      return;
+    }
+    stopIaSpeak();
+    var plain = stripIaSpeakText(text);
+    if (!plain) return;
+    var u = new SpeechSynthesisUtterance(plain);
+    u.lang = 'fr-FR';
+    u.rate = 1;
+    _iaUtterance = u;
+    _iaSpeakingBtn = btn || null;
+    if (btn) {
+      btn.classList.add('is-speaking');
+      btn.setAttribute('aria-pressed', 'true');
+      var label = btn.querySelector('.ia-speak-label');
+      if (label) label.textContent = 'Arrêter';
+    }
+    u.onend = function () {
+      if (_iaUtterance === u) stopIaSpeak();
+    };
+    u.onerror = function () {
+      if (_iaUtterance === u) stopIaSpeak();
+    };
+    try {
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      stopIaSpeak();
+    }
+  }
+
+  function bindIaSpeakButtons(root) {
+    root = root || document;
+    var buttons = root.querySelectorAll('[data-ia-speak]');
+    if (!buttons.length) return;
+    if (!iaSpeakSupported()) {
+      for (var i = 0; i < buttons.length; i++) buttons[i].hidden = true;
+      return;
+    }
+    for (var j = 0; j < buttons.length; j++) {
+      (function (btn) {
+        if (btn._iaSpeakBound) return;
+        btn._iaSpeakBound = true;
+        btn.onclick = function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var bubble = btn.closest ? btn.closest('.ia-bubble') : null;
+          var body = bubble && (bubble.querySelector('.ia-bubble-body') || bubble.querySelector('.ia-bubble-text'));
+          var text = body ? body.textContent : '';
+          speakIaText(text, btn);
+        };
+      })(buttons[j]);
+    }
+  }
+
   function iaBubbleHtml(m) {
-    return '<div class="ia-bubble ' + (m.role === 'me' ? 'me' : 'bot') + '">' + escapeHtml(m.text) + '</div>';
+    var text = escapeHtml(m.text);
+    if (m.role === 'me') {
+      return '<div class="ia-bubble me ia-bubble-me">' +
+        '<div class="ia-bubble-head"><span class="ia-bubble-name">Toi</span></div>' +
+        '<div class="ia-bubble-body">' + text + '</div></div>';
+    }
+    return '<div class="ia-bubble bot ia-bubble-bot">' +
+      '<div class="ia-bubble-head">' +
+        '<img class="ia-bubble-avatar" src="/assets/ia-celeste.png" alt="" width="40" height="40" loading="lazy">' +
+        '<span class="ia-bubble-name">Céleste répond</span>' +
+      '</div>' +
+      '<div class="ia-bubble-body">' + text + '</div>' +
+      '<button type="button" class="ia-speak" data-ia-speak aria-label="Écouter ce message" aria-pressed="false">' +
+        '<svg class="ia-speak-ic" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">' +
+          '<path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>' +
+        '</svg>' +
+        '<span class="ia-speak-label">Écouter</span>' +
+      '</button></div>';
   }
 
   /** Met à jour le chat IA sans re-render de toute la page (conserve le scroll lecteur). */
   function refreshIaChatDom() {
     var logEl = document.getElementById('ia-log');
     if (!logEl) return false;
+    stopIaSpeak();
     var msgs = state.iaMessages || [];
     var empty = '<p class="muted ia-empty">Une question sur ce que tu lis… Ex. : que me dit cette page sur l’amour ?</p>';
     logEl.innerHTML = msgs.length ? msgs.map(iaBubbleHtml).join('') : empty;
     logEl.scrollTop = logEl.scrollHeight;
+    bindIaSpeakButtons(logEl);
     var left = iaLeft();
     var disabled = state.iaBusy || left <= 0;
     var sendBtn = document.getElementById('send-ia');
@@ -1076,6 +1261,8 @@
     if (kind === 'jour') return periodCanRead('jour');
     if (kind === 'mois') return periodCanRead('mois');
     if (kind === 'couple') return coupleCanRead();
+    if (kind === 'natal') return natalCanRead();
+    if (kind === 'ultime') return ultimeCanRead();
     var b = loadBooks();
     return !!b[kind];
   }
@@ -1350,12 +1537,12 @@
   }
   function askManuscript(kind) {
     if (kind === 'natal' && !canNatal()) return;
-    if (kind === 'ultime' && !canUltime()) return;
+    if (kind === 'ultime' && !canUltime() && !ultimeCanRead()) return;
     if (kind === 'couple' && !canCouple() && !coupleCanRead()) return;
     if (kind === 'couple' && coupleLeft() === 0 && !coupleCanRead()) return;
     if (kind === 'jour' && dailyLeft() === 0 && !periodCanRead('jour')) return;
     if (kind === 'mois' && monthlyLeft() === 0 && !periodCanRead('mois')) return;
-    if ((kind === 'natal' || kind === 'jour' || kind === 'mois' || kind === 'couple') && !profileComplete()) {
+    if ((kind === 'natal' || kind === 'jour' || kind === 'mois' || kind === 'couple' || kind === 'ultime') && !profileComplete()) {
       showBirthForm(kind);
       return;
     }
@@ -1370,6 +1557,10 @@
       openNatalReader();
       return;
     }
+    if (kind === 'ultime' && ultimeCanRead()) {
+      openUltimeReader();
+      return;
+    }
     if ((kind === 'mois' || kind === 'jour') && periodCanRead(kind)) {
       openPeriodReader(kind);
       return;
@@ -1381,6 +1572,7 @@
     var email = state.user && state.user.email;
     if (!email) return;
     if (kind === 'natal') state.natalGenError = null;
+    if (kind === 'ultime') state.ultimeGenError = null;
     if (kind === 'mois' || kind === 'jour') state.periodGenError = null;
     if (kind === 'couple') state.coupleGenError = null;
     state.busy = kind;
@@ -1415,6 +1607,11 @@
             render();
             return;
           }
+          if (kind === 'ultime') {
+            state.ultimeGenError = (res.data && res.data.error) || 'Impossible d’écrire le Manuscrit Ultime pour le moment.';
+            render();
+            return;
+          }
           if (kind === 'mois' || kind === 'jour') {
             state.periodGenError = (res.data && res.data.error) || 'Impossible d’écrire ce manuscrit.';
             render();
@@ -1440,6 +1637,21 @@
             openNatalReader();
           } else {
             state.natalGenError = 'Le manuscrit n’est pas encore prêt. Réessaie — la génération peut prendre plusieurs minutes.';
+            render();
+          }
+          return;
+        }
+        if (kind === 'ultime') {
+          if (res.data && (res.data.status === 'generating' || res.status === 202)) {
+            pollUltimeUntilReady();
+            return;
+          }
+          state.busy = null;
+          state.ultimeGenError = null;
+          if (ultimeCanRead()) {
+            openUltimeReader();
+          } else {
+            state.ultimeGenError = 'Le Manuscrit Ultime n’est pas encore prêt. Réessaie — la génération peut prendre plusieurs minutes.';
             render();
           }
           return;
@@ -1474,18 +1686,18 @@
           }
           return;
         }
+        state.busy = null;
         render();
-        setTimeout(function () {
-          markBook(kind);
-          state.busy = null;
-          state.pdf = kind;
-          render();
-        }, 900);
       })
       .catch(function () {
         state.busy = null;
         if (kind === 'natal') {
           state.natalGenError = 'Le serveur d’accès n’est pas joignable. Réessaie dans un moment.';
+          render();
+          return;
+        }
+        if (kind === 'ultime') {
+          state.ultimeGenError = 'Le serveur d’accès n’est pas joignable. Réessaie dans un moment.';
           render();
           return;
         }
@@ -1699,6 +1911,140 @@
         state.natalGenError = 'Le fichier du manuscrit est introuvable. Relance « OBTENIR LE MANUSCRIT DE MA VIE » (plusieurs minutes).';
         render();
       });
+  }
+
+  function ultimePdfUrl() {
+    var base = '';
+    if (state.user && state.user.ultimePdfUrl) base = state.user.ultimePdfUrl;
+    else if (state.user && state.user.email) base = '/ultime-file?email=' + encodeURIComponent(state.user.email);
+    return base ? withAuthQuery(base) : '';
+  }
+
+  function ultimeCanRead() {
+    var u = state.user || {};
+    return !!(u.ultimeReady && u.ultimeFileExists);
+  }
+
+  function clearUltimeLocalBook() {
+    try {
+      var b = loadBooks();
+      if (b.ultime) {
+        delete b.ultime;
+        saveBooks(b);
+      }
+    } catch (e) {}
+  }
+
+  function openUltimeReader(url) {
+    if (!ultimeCanRead()) {
+      clearUltimeLocalBook();
+      state.pdf = null;
+      state.ultimeGenError = 'Ton Manuscrit Ultime n’est pas encore disponible. Appuie sur « Demander l’Ultime ».';
+      render();
+      return;
+    }
+    var u = withAuthQuery(url || ultimePdfUrl());
+    if (!u) {
+      state.ultimeGenError = 'Lien manuscrit Ultime manquant. Reconnecte-toi puis réessaie.';
+      render();
+      return;
+    }
+    fetch(u, { headers: authHeaders(false) })
+      .then(function (r) {
+        if (r.ok) {
+          var ct = (r.headers.get('content-type') || '').toLowerCase();
+          if (ct.indexOf('json') >= 0) {
+            return r.json().then(function (j) {
+              throw new Error((j && j.error) || 'aucun fichier ultime');
+            });
+          }
+          state.ultimePreview = u;
+          state.pdf = 'ultime';
+          state.iaContext = 'ultime';
+          state.iaLoaded = false;
+          state.ultimeGenError = null;
+          render();
+          return null;
+        }
+        return r.json().then(function (j) {
+          throw new Error((j && j.error) || ('HTTP ' + r.status));
+        }).catch(function (e) {
+          if (e && e.message && e.message.indexOf('HTTP') < 0 && e.message !== 'aucun fichier ultime') throw e;
+          throw new Error((e && e.message) || 'aucun fichier ultime');
+        });
+      })
+      .catch(function () {
+        clearUltimeLocalBook();
+        if (state.user) {
+          state.user.ultimeReady = false;
+          state.user.ultimeFileExists = false;
+          state.user.ultimeStatus = 'none';
+          state.user.ultimePdfUrl = null;
+          saveUser();
+        }
+        state.pdf = null;
+        state.ultimeGenError = 'Le fichier de l’Ultime est introuvable. Relance « Demander l’Ultime ».';
+        render();
+      });
+  }
+
+  function pollUltimeUntilReady() {
+    state.busy = 'ultime';
+    render();
+    var email = state.user && state.user.email;
+    if (!email) {
+      state.busy = null;
+      render();
+      return;
+    }
+    var tries = 0;
+    var maxTries = 150; /* Ultime : plus long que le natal */
+    function tick() {
+      tries++;
+      fetch(API + '/access?email=' + encodeURIComponent(email), {
+        headers: authHeaders(false)
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
+        .then(function (res) {
+          if (res.status === 401) {
+            state.busy = null;
+            forceReLogin((res.data && res.data.error) || 'Session expirée.');
+            return;
+          }
+          if (res.data) applyAccess(res.data);
+          var u = state.user || {};
+          if (ultimeCanRead()) {
+            state.busy = null;
+            state.ultimeGenError = null;
+            openUltimeReader();
+            return;
+          }
+          if (u.ultimeStatus === 'error') {
+            state.busy = null;
+            state.ultimeGenError = u.ultimeError || 'La génération de l’Ultime n’a pas pu aboutir. Réessaie.';
+            render();
+            return;
+          }
+          if (tries >= maxTries) {
+            state.busy = null;
+            state.ultimeGenError = 'L’Ultime prend plus longtemps que prévu. Reviens dans quelques minutes — il s’ouvrira dès qu’il est prêt.';
+            render();
+            return;
+          }
+          render();
+          setTimeout(tick, 5000);
+        })
+        .catch(function () {
+          if (tries >= maxTries) {
+            state.busy = null;
+            state.ultimeGenError = 'Connexion interrompue pendant la génération de l’Ultime. Réessaie.';
+            render();
+            return;
+          }
+          setTimeout(tick, 5000);
+        });
+    }
+    setTimeout(tick, 4000);
   }
 
   function saveProfile() {
@@ -2303,23 +2649,54 @@
     return '<p class="muted">Profil enregistré · en attente de ta demande.</p>';
   }
 
+  function ultimeStatusLine() {
+    var u = state.user || {};
+    if (!profileComplete()) {
+      return '<p class="muted">Renseigne ton ciel de naissance pour que l’Ultime puisse s’écrire.</p>' +
+        '<button class="btn" type="button" id="edit-profile-natal">Renseigner mon ciel de naissance</button>';
+    }
+    if (state.ultimeGenError || u.ultimeStatus === 'error') {
+      var errRaw = state.ultimeGenError || u.ultimeError || 'La génération de l’Ultime n’a pas pu aboutir. Réessaie.';
+      var errSafe = String(errRaw).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      if (/HD_API_TOKEN|CLAUDE_KEY|ANTHROPIC|manquant/i.test(errRaw)) {
+        errSafe = 'La génération n’a pas pu aboutir pour le moment. Réessaie — ton bouton « Demander l’Ultime » reste disponible.';
+      }
+      return '<div class="natal-wait natal-wait-error" role="alert"><p>' + errSafe + '</p></div>';
+    }
+    if (u.ultimeStatus === 'generating' || state.busy === 'ultime') {
+      return manuscriptWaitHtml('ultime', {
+        pct: u.ultimeProgressPct,
+        progress: u.ultimeProgress
+      });
+    }
+    if (ultimeCanRead()) {
+      return '<p class="muted">Ton Manuscrit Ultime est prêt.</p>';
+    }
+    return '<p class="muted">Débloqué · en attente de ta demande.</p>';
+  }
+
   function natalTab() {
     var prenom = (state.user && state.user.prenom) || 'toi';
     var months = monthsPaid();
     var left = Math.max(0, ULTIME.need - months);
     var unlocked = canUltime();
     var readyProfile = profileComplete();
-    var canRead = natalCanRead();
-    var natalCta = 'OBTENIR LE MANUSCRIT DE MA VIE';
+    var natalAsk = 'OBTENIR LE MANUSCRIT DE MA VIE';
+    var natalRead = 'VOIR LE MANUSCRIT CÉLESTE DE MA VIE';
     var natalCard = canNatal()
       ? '<div class="card stack"><div class="label">' + NATAL.kicker + '</div><h2>' + natalTitleHtml() + '</h2><p>' + NATAL.intro + '</p>' +
         natalStatusLine() +
-        (readyProfile ? askBtn('natal', natalCta, natalCta) : '') +
+        (readyProfile ? askBtn('natal', natalAsk, natalRead) : '') +
         '</div>'
       : '<div class="card lock stack"><div class="label">Plan Céleste</div><h2>' + natalTitleHtml() + '</h2><p class="muted">28 pages · 59 € / mois</p><p>' + (isPausedPaid() ? 'Abonnement en pause : le natal se rouvre dès que tu reprends.' : 'Ton manuscrit de vie s’ouvre avec l’abonnement Céleste.') + '</p></div>';
+    var ultimeAsk = 'Demander l’Ultime';
+    var ultimeRead = 'VOIR LE MANUSCRIT ULTIME';
     var ultime;
     if (unlocked) {
-      ultime = '<div class="card stack"><div class="label">Débloqué</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + ULTIME.pages + ' pages</p><p>' + (plan() === 'divin' ? 'Inclus tout de suite dans le Divin.' : 'Six mois payés, même avec des pauses.') + ' Écrit une seule fois, à ta demande.</p>' + askBtn('ultime', 'Demander l’Ultime', 'Relire l’Ultime') + '</div>';
+      ultime = '<div class="card stack"><div class="label">Débloqué</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + ULTIME.pages + ' pages</p><p>' + (plan() === 'divin' ? 'Inclus tout de suite dans le Divin.' : 'Six mois payés, même avec des pauses.') + ' Écrit une seule fois, à ta demande.</p>' +
+        ultimeStatusLine() +
+        (readyProfile ? askBtn('ultime', ultimeAsk, ultimeRead) : '') +
+        '</div>';
     } else if (plan() === 'gratuit' && months === 0) {
       ultime = '<div class="card lock stack"><div class="label">Céleste ou Divin</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">140 pages</p><p>Après 6 mois Céleste, ou immédiatement en Divin.</p></div>';
     } else if (ultimeOn() && isPausedPaid()) {
@@ -2338,12 +2715,18 @@
   function askBtn(kind, askLabel, readLabel) {
     /* Pendant la génération : l’animation livre 3D suffit (pas de bouton grisé). */
     if (isKindGenerating(kind)) return '';
-    /* Natal : jamais data-pdf / cache local books — uniquement fichier confirmé serveur. */
+    /* Natal / Ultime : jamais data-pdf / cache local books — uniquement fichier confirmé serveur. */
     if (kind === 'natal') {
       if (natalCanRead()) {
         return '<button class="btn" data-ask="natal">' + readLabel + '</button>';
       }
       return '<button class="btn" data-ask="natal">' + askLabel + '</button>';
+    }
+    if (kind === 'ultime') {
+      if (ultimeCanRead()) {
+        return '<button class="btn" data-ask="ultime">' + readLabel + '</button>';
+      }
+      return '<button class="btn" data-ask="ultime">' + askLabel + '</button>';
     }
     if (kind === 'mois' || kind === 'jour') {
       if (periodCanRead(kind)) {
@@ -2357,23 +2740,38 @@
       }
       return '<button class="btn" data-ask="couple">' + askLabel + '</button>';
     }
-    if (bookReady(kind)) return '<button class="btn" data-pdf="' + kind + '">' + readLabel + '</button>';
     return '<button class="btn" data-ask="' + kind + '">' + askLabel + '</button>';
+  }
+
+  function iaPortraitHtml(sizeClass) {
+    return '<div class="ia-portrait' + (sizeClass ? ' ' + sizeClass : '') + '" aria-hidden="true">' +
+      '<img src="/assets/ia-celeste.png" alt="" width="160" height="160" loading="lazy">' +
+      '</div>';
   }
 
   function iaCard() {
     if (canIa()) {
-      return '<div class="card stack"><div class="label">Plan Divin</div><h2>IA Céleste</h2><p class="muted">Disponible</p><p>Elle t’accompagne sous chaque manuscrit, pendant que tu lis.</p></div>';
+      return '<div class="card stack ia-card">' +
+        iaPortraitHtml() +
+        '<div class="label">Plan Divin</div><h2>IA Céleste</h2><p class="muted">Disponible</p>' +
+        '<p>Elle t’accompagne sous chaque manuscrit, pendant que tu lis — une présence chaleureuse pour éclairer ce que tu ressens.</p></div>';
     }
-    return '<div class="card lock stack"><div class="label">Plan Divin · 137 €</div><h2>IA Céleste</h2><p class="muted">Incluse dans le Divin</p><p>Pendant que tu lis, elle t’écoute : aujourd’hui l’amour ? le travail ? le bon moment ?</p><button class="btn ghost" type="button" data-plan-link="divin">Découvrir le Divin</button></div>';
+    return '<div class="card lock stack ia-card">' +
+      iaPortraitHtml() +
+      '<div class="label">Plan Divin · 137 €</div><h2>IA Céleste</h2><p class="muted">Incluse dans le Divin</p>' +
+      '<p>Pendant que tu lis, elle t’écoute : aujourd’hui l’amour ? le travail ? le bon moment ?</p>' +
+      '<button class="btn ghost" type="button" data-plan-link="divin">Découvrir le Divin</button></div>';
   }
 
   function readerIaPanel(ctx) {
     ctx = normalizeIaCtx(ctx);
     if (!canIa()) {
       return '<div class="reader-ia lock stack">' +
-        '<div class="label">IA Céleste</div>' +
-        '<p>Pose tes questions sur ce manuscrit avec le plan Divin.</p>' +
+        '<div class="reader-ia-head">' +
+          iaPortraitHtml('ia-portrait--sm') +
+          '<div><div class="label">IA Céleste</div>' +
+          '<p>Pose tes questions sur ce manuscrit avec le plan Divin.</p></div>' +
+        '</div>' +
         '<button class="btn ghost" type="button" data-plan-link="divin">Passer Divin · 137 €</button>' +
         '</div>';
     }
@@ -2383,7 +2781,11 @@
     var empty = '<p class="muted ia-empty">Une question sur ce que tu lis… Ex. : que me dit cette page sur l’amour ?</p>';
     var disabled = state.iaBusy || left <= 0;
     return '<div class="reader-ia stack" data-ia-context="' + ctx + '">' +
-      '<div class="label">IA Céleste · ce manuscrit</div>' +
+      '<div class="reader-ia-head">' +
+        iaPortraitHtml('ia-portrait--sm') +
+        '<div><div class="label">IA Céleste · ce manuscrit</div>' +
+        '<p class="muted ia-guide-line">Elle est là pour t’éclairer, sans juger.</p></div>' +
+      '</div>' +
       '<div class="ia-log" id="ia-log">' + (log || empty) + '</div>' +
       '<div class="ia-compose">' +
         '<div class="field"><label class="label" for="ia-q">Ta question</label>' +
@@ -2692,6 +3094,7 @@
     var titlePlain = natalTitlePlain();
     var kicker = NATAL.kicker;
     var paras = NATAL.body;
+    var extra = '';
     if (id === 'mois') {
       titleHtml = moisTitleHtml();
       titlePlain = moisTitlePlain();
@@ -2711,10 +3114,21 @@
     if (id === 'ultime') {
       titleHtml = ultimeTitleHtml();
       titlePlain = ultimeTitlePlain();
-      kicker = 'Édition extra-longue';
-      paras = ['Tes 140 pages s’ouvriront ici, une fois les 6 mois d’abonnement atteints.'];
+      kicker = 'Édition Ultime';
+      paras = [
+        plan() === 'divin'
+          ? 'Voici ton Manuscrit Céleste Ultime, inclus dans le Divin. Lecture dans l’app tant que ton abonnement est actif.'
+          : 'Voici ton Manuscrit Céleste Ultime, débloqué après 6 mois payés. Lecture dans l’app tant que ton abonnement est actif.'
+      ];
+      var uUrl = withThemeQuery(
+        (typeof state.ultimePreview === 'string' && state.ultimePreview) ? state.ultimePreview : ultimePdfUrl()
+      );
+      if (uUrl && ultimeCanRead()) {
+        extra = manuscriptFrameHtml(uUrl, 'Manuscrit Ultime');
+      } else {
+        extra = '<p class="muted">Manuscrit Ultime indisponible. Reviens à l’accueil et appuie sur « Demander l’Ultime ».</p>';
+      }
     }
-    var extra = '';
     if (id === 'natal') {
       var url = withThemeQuery(
         (typeof state.natalPreview === 'string' && state.natalPreview) ? state.natalPreview : natalPdfUrl()
@@ -2763,7 +3177,7 @@
     }
     var body = '<p class="kicker">' + kicker + '</p><h2>' + titleHtml + '</h2>' +
       paras.map(function (p) { return '<p>' + p + '</p>'; }).join('') + extra;
-    var iaCtx = (id === 'natal' || id === 'mois' || id === 'jour' || id === 'couple') ? id : null;
+    var iaCtx = (id === 'natal' || id === 'mois' || id === 'jour' || id === 'couple' || id === 'ultime') ? id : null;
     var ia = iaCtx ? readerIaPanel(iaCtx) : '';
     return '<div class="pdf-view"><header>' +
       '<button type="button" class="pdf-back" id="close-pdf">← Retour</button>' +
@@ -2902,16 +3316,24 @@
     document.querySelectorAll('[data-pdf]').forEach(function (b) {
       b.onclick = function () {
         var id = b.getAttribute('data-pdf');
-        if (id === 'ultime' && !canUltime()) return;
+        if (id === 'ultime' && !canUltime() && !ultimeCanRead()) return;
         if (id === 'natal' && !canNatal() && !bookReady('natal')) return;
-        state.pdf = id;
-        if (id === 'natal' || id === 'mois' || id === 'jour' || id === 'couple') {
-          state.iaContext = id;
-          state.iaLoaded = false;
-        }
         if (id === 'couple') {
           openCoupleReader();
           return;
+        }
+        if (id === 'ultime') {
+          openUltimeReader();
+          return;
+        }
+        if (id === 'natal') {
+          openNatalReader();
+          return;
+        }
+        state.pdf = id;
+        if (id === 'mois' || id === 'jour') {
+          state.iaContext = id;
+          state.iaLoaded = false;
         }
         render();
       };
@@ -2961,6 +3383,7 @@
     initPartnerPlaceAutocomplete();
     var cp = document.getElementById('close-pdf');
     if (cp) cp.onclick = function () {
+      stopIaSpeak();
       clearPdfFullscreen();
       state.pdf = null;
       hideMsSelBar();
@@ -2968,6 +3391,7 @@
     };
     bindPdfFullscreen();
     bindManuscriptSelection();
+    bindIaSpeakButtons(document.getElementById('ia-log') || document);
     var si = document.getElementById('send-ia');
     if (si) si.onclick = function () { sendIa(); };
     var iq = document.getElementById('ia-q');
@@ -3050,13 +3474,14 @@
     });
     var lo = document.getElementById('logout');
     if (lo) lo.onclick = function () {
+      stopIaSpeak();
       localStorage.removeItem('cercle.user');
       state.user = null; state.screen = 'login'; state.account = false; state.tab = 'natal';
       state.iaBusy = false; state.iaLoaded = false; state.iaMessages = [];
       state.pdf = null; state.pendingAsk = null; state.natalPreview = null;
       state.periodPreview = null; state.periodPreviewKind = null;
       state.couplePreview = null; state.coupleGenError = null; state.editingPartner = false;
-      state.natalGenError = null; state.periodGenError = null;
+      state.natalGenError = null; state.ultimeGenError = null; state.periodGenError = null;
       state.couplePreview = null; state.coupleGenError = null; state.editingPartner = false;
       render();
     };

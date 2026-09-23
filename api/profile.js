@@ -342,9 +342,9 @@ function savePartnerProfile(c, body) {
   return { ok: true, isEdit: wasComplete };
 }
 
-/** Natal / jour / mois / couple ont besoin du profil ; Ultime plus tard aussi. */
+/** Natal / jour / mois / couple / ultime ont besoin du profil. */
 function kindsNeedingProfile() {
-  return ['natal', 'jour', 'mois', 'couple'];
+  return ['natal', 'jour', 'mois', 'couple', 'ultime'];
 }
 
 function requireForGenerate(c, kind) {

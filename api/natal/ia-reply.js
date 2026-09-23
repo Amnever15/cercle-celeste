@@ -5,6 +5,7 @@
 const natalGen = require('../natal-generate');
 const periodGen = require('../period-generate');
 const coupleGen = require('../couple-generate');
+const ultimeGen = require('../ultime-generate');
 const chartCache = require('./chart-cache');
 const htmlDoc = require('./html-doc');
 const { requestJson } = require('./http');
@@ -104,6 +105,15 @@ function loadManuscriptContext(contact, context) {
       (couple
         ? 'Manuscrit de couple :\n' + couple
         : 'Manuscrit de couple : pas encore généré pour ce mois.')
+    ).trim();
+  }
+  if (context === 'ultime') {
+    var ultime = ultimeGen.loadUltimePlain(contact, 14000);
+    return (
+      (hints ? hints + '\n\n' : '') +
+      (ultime
+        ? 'Manuscrit Ultime :\n' + ultime
+        : 'Manuscrit Ultime : pas encore généré.')
     ).trim();
   }
   return loadNatalPlain(contact, 14000);
