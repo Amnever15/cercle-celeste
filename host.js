@@ -47,6 +47,7 @@ function logBootLayout() {
   console.log('api/plans.js  : ' + (existsFile(path.join(apiDir, 'plans.js')) ? 'OK' : 'MANQUANT'));
   console.log('api/profile.js: ' + (existsFile(path.join(apiDir, 'profile.js')) ? 'OK' : 'MANQUANT'));
   console.log('api/natal-generate.js : ' + (existsFile(path.join(apiDir, 'natal-generate.js')) ? 'OK' : 'MANQUANT'));
+  console.log('api/natal/ : ' + (existsFile(path.join(apiDir, 'natal', 'claude-natal.js')) ? 'OK' : 'MANQUANT'));
 }
 
 function printMissingApi() {
@@ -61,6 +62,7 @@ function printMissingApi() {
   console.error('  api/plans.js');
   console.error('  api/profile.js');
   console.error('  api/natal-generate.js');
+  console.error('  api/natal/ (http.js, hd.js, astro.js, claude-natal.js, html-doc.js, json-fix.js)');
   console.error('');
   console.error('Sur ton PC, ouvre ce dossier puis envoie CES fichiers');
   console.error('dans un dossier api/ du dépôt GitHub :');
@@ -68,7 +70,9 @@ function printMissingApi() {
   console.error('  C:\\Users\\s-386\\Desktop\\CURSOR\\MANUSCRIT\\APP\\api\\plans.js');
   console.error('  C:\\Users\\s-386\\Desktop\\CURSOR\\MANUSCRIT\\APP\\api\\profile.js');
   console.error('  C:\\Users\\s-386\\Desktop\\CURSOR\\MANUSCRIT\\APP\\api\\natal-generate.js');
+  console.error('  C:\\Users\\s-386\\Desktop\\CURSOR\\MANUSCRIT\\APP\\api\\natal\\');
   console.error('');
+  console.error('Variables Railway : CLAUDE_KEY, HD_API_TOKEN');
   console.error('Ne pas envoyer : .env, store.json, webhook.log, api/generated/');
   console.error('════════════════════════════════════════════════════════');
 }

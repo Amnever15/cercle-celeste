@@ -21,7 +21,7 @@
 
   var MONTHLY = {
     pages: '8–12 pages',
-    intro: 'Disponible tout le mois — écrit seulement quand tu le demandes. Sans ton clic, il n’existe pas.',
+    intro: 'Disponible tout le mois. Ton Manuscrit Céleste relatif au mois en cours. Comment tes étoiles parlent ce mois',
     body: [
       'Ce mois-ci, le ciel te demande de ne plus avancer dans le brouillard : attends le signal, puis réponds avec tout ton être.',
       'Saturne touche ta Maison X : ta vocation veut un cadre, pas une fuite en avant. Un seul engagement public suffit.',
@@ -32,7 +32,7 @@
 
   var TODAY = {
     pages: '2–4 pages',
-    intro: 'Un texte court et personnel, écrit pour toi aujourd’hui — seulement si tu le demandes. Pas d’envoi automatique le matin pour tout le monde.',
+    intro: 'Ton Manuscrit Céleste relatif à cette journée en cours. Comment tes étoiles parlent AUJOURD\'HUI',
     body: [
       'Aujourd’hui, n’ouvre qu’une porte. Une conversation, un message, un pas visible — pas dix.',
       'Ton autorité émotionnelle te dit d’attendre la vague : si c’est agité à 10 h, ce n’est pas encore un oui.',
@@ -64,7 +64,8 @@
     iaMessages: [],
     iaBusy: false,
     pendingAsk: null,
-    natalPreview: null
+    natalPreview: null,
+    natalGenError: null
   };
 
   function load() {
@@ -198,6 +199,48 @@
     if (state.user.monthlyLeft == null) return null;
     return state.user.monthlyLeft;
   }
+  /** Quotas Gratuit (plan gratuit ou abo en pause → droits Gratuit). Natal exclus. */
+  function hasFreeQuotas() {
+    if (!state.user) return false;
+    if (isPausedPaid()) return true;
+    if (plan() === 'gratuit') return true;
+    return state.user.dailyLimit != null || state.user.monthlyLimitYear != null;
+  }
+  function freeDailyLimit() {
+    if (!state.user) return 5;
+    return state.user.dailyLimit != null ? state.user.dailyLimit : 5;
+  }
+  function freeMonthlyLimit() {
+    if (!state.user) return 1;
+    return state.user.monthlyLimitYear != null ? state.user.monthlyLimitYear : 1;
+  }
+  function freeDailyRemaining() {
+    var left = dailyLeft();
+    if (left != null) return left;
+    return Math.max(0, freeDailyLimit() - ((state.user && state.user.dailyUsed) || 0));
+  }
+  function freeMonthlyRemaining() {
+    var left = monthlyLeft();
+    if (left != null) return left;
+    return Math.max(0, freeMonthlyLimit() - ((state.user && state.user.monthlyUsed) || 0));
+  }
+  function manusWord(n) {
+    return n === 1 ? 'manuscrit' : 'manuscrits';
+  }
+  function freeQuotaBanner() {
+    if (!hasFreeQuotas()) return '';
+    var dLim = freeDailyLimit();
+    var mLim = freeMonthlyLimit();
+    var dLeft = freeDailyRemaining();
+    var mLeft = freeMonthlyRemaining();
+    var full = dLeft >= dLim && mLeft >= mLim;
+    var text = full
+      ? 'Accès gratuit : ' + mLim + ' ' + manusWord(mLim) + ' du mois + ' + dLim + ' ' + manusWord(dLim) + ' du jour offerts.'
+      : 'Il te reste ' + mLeft + ' ' + manusWord(mLeft) + ' du mois et ' + dLeft + ' ' + manusWord(dLeft) + ' du jour.';
+    return '<div class="free-quota-banner" role="status">' +
+      '<span class="free-quota-star" aria-hidden="true">✦</span>' +
+      '<p>' + text + '</p></div>';
+  }
 
   var FR_DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
   var FR_MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
@@ -291,13 +334,14 @@
     }
     var email = state.user && state.user.email;
     if (!email) return;
+    if (kind === 'natal') state.natalGenError = null;
     state.busy = kind;
     render();
     fetch(API + '/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email, kind: kind })
-    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
       .then(function (res) {
         if (res.data && res.data.contact) applyAccess(res.data.contact);
         if (!res.ok) {
@@ -306,16 +350,28 @@
             showBirthForm(kind);
             return;
           }
+          if (kind === 'natal') {
+            state.natalGenError = (res.data && res.data.error) || 'Impossible d’écrire ton manuscrit pour le moment.';
+            render();
+            return;
+          }
           alert((res.data && res.data.error) || 'Impossible d’écrire ce manuscrit.');
           render();
           return;
         }
         if (kind === 'natal') {
+          /* 202 async job OU déjà prêt */
+          if (res.data && (res.data.status === 'generating' || res.status === 202)) {
+            pollNatalUntilReady();
+            return;
+          }
           state.busy = null;
+          state.natalGenError = null;
           markBook(kind);
           openNatalReader(res.data && res.data.pdfUrl);
           return;
         }
+        render();
         setTimeout(function () {
           markBook(kind);
           state.busy = null;
@@ -325,9 +381,67 @@
       })
       .catch(function () {
         state.busy = null;
+        if (kind === 'natal') {
+          state.natalGenError = 'Le serveur d’accès n’est pas joignable. Réessaie dans un moment.';
+          render();
+          return;
+        }
         alert('Le serveur d’accès n’est pas joignable.');
         render();
       });
+  }
+
+  function pollNatalUntilReady() {
+    state.busy = 'natal';
+    render();
+    var email = state.user && state.user.email;
+    if (!email) {
+      state.busy = null;
+      render();
+      return;
+    }
+    var tries = 0;
+    var maxTries = 120; /* ~10 min à 5 s */
+    function tick() {
+      tries++;
+      fetch(API + '/access?email=' + encodeURIComponent(email))
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d) applyAccess(d);
+          var u = state.user || {};
+          if (u.natalReady) {
+            state.busy = null;
+            state.natalGenError = null;
+            markBook('natal');
+            openNatalReader(u.natalPdfUrl || natalPdfUrl());
+            return;
+          }
+          if (u.natalStatus === 'error') {
+            state.busy = null;
+            state.natalGenError = u.natalError || 'La génération n’a pas pu aboutir. Réessaie dans un moment.';
+            render();
+            return;
+          }
+          if (tries >= maxTries) {
+            state.busy = null;
+            state.natalGenError = 'La génération prend plus longtemps que prévu. Reviens dans quelques minutes — ton manuscrit s’ouvrira dès qu’il est prêt.';
+            render();
+            return;
+          }
+          render();
+          setTimeout(tick, 5000);
+        })
+        .catch(function () {
+          if (tries >= maxTries) {
+            state.busy = null;
+            state.natalGenError = 'Connexion interrompue pendant la génération. Réessaie.';
+            render();
+            return;
+          }
+          setTimeout(tick, 5000);
+        });
+    }
+    setTimeout(tick, 4000);
   }
 
   function natalPdfUrl() {
@@ -706,7 +820,7 @@
     return '<div class="card pause-banner stack">' +
       '<div class="label">Abonnement en pause</div>' +
       '<h2>Espace en pause</h2>' +
-      '<p>Ton abo ' + ((u.planLabel) || '') + ' est en pause. Tu gardes l’accès Gratuit : 5 manuscrits du jour par mois, et 1 manuscrit du mois par an. Natal, Ultime et IA Céleste se rouvrent dès que tu reprends.</p>' +
+      '<p>Ton abo ' + ((u.planLabel) || '') + ' est en pause. Tu gardes l’accès Gratuit : 1 manuscrit du mois + 5 manuscrits du jour. Natal, Ultime et IA Céleste se rouvrent dès que tu reprends.</p>' +
       '<p class="muted">Mois Ultime conservés : ' + monthsPaid() + ' / 6.</p>' +
       '<button class="btn" type="button" data-plan-link="manage">Reprendre mon abonnement</button>' +
       '<button class="btn ghost" type="button" id="retry-access">J’ai repris, actualiser</button>' +
@@ -719,8 +833,20 @@
       return '<p class="muted">Renseigne ton ciel de naissance pour que ton manuscrit puisse s’écrire.</p>' +
         '<button class="btn" type="button" id="edit-profile-natal">Renseigner mon ciel de naissance</button>';
     }
+    if (state.natalGenError || u.natalStatus === 'error') {
+      return '<div class="natal-wait natal-wait-error" role="alert">' +
+        '<p>' + (state.natalGenError || 'La génération n’a pas pu aboutir. Réessaie dans un moment.') + '</p>' +
+        '</div>';
+    }
     if (u.natalStatus === 'generating' || state.busy === 'natal') {
-      return '<p class="muted">Le ciel s’écrit… ton manuscrit arrive.</p>';
+      var progRaw = u.natalProgress
+        ? String(u.natalProgress)
+        : 'Cela peut prendre plusieurs minutes — ne ferme pas cette page. Les 28 pages s’ouvriront dès qu’elles seront prêtes.';
+      var progSafe = progRaw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return '<div class="natal-wait" role="status" aria-live="polite">' +
+        '<p>Le Manuscrit Céleste de ta vie s’écrit en ce moment.</p>' +
+        '<p class="muted">' + progSafe + '</p>' +
+        '</div>';
     }
     if (u.natalReady) {
       return '<p class="muted">Profil enregistré · ton manuscrit est prêt.</p>';
@@ -740,7 +866,7 @@
         natalStatusLine() +
         (readyProfile ? askBtn('natal', natalAskLabel, 'Lire les 28 pages') : '') +
         (state.user && state.user.natalReady && natalPdfUrl()
-          ? '<a class="btn ghost" href="' + natalPdfUrl() + '" target="_blank" rel="noopener">Télécharger le PDF</a>'
+          ? '<a class="btn ghost" href="' + natalPdfUrl() + '" target="_blank" rel="noopener">Ouvrir / télécharger</a>'
           : '') +
         '</div>'
       : '<div class="card lock stack"><div class="label">Plan Céleste</div><h2>' + natalTitleHtml() + '</h2><p class="muted">28 pages · 59 € / mois</p><p>' + (isPausedPaid() ? 'Abonnement en pause : le natal se rouvre dès que tu reprends.' : 'Ton manuscrit de vie s’ouvre avec l’abonnement Céleste.') + '</p></div>';
@@ -761,7 +887,11 @@
   }
 
   function askBtn(kind, askLabel, readLabel) {
-    if (state.busy === kind) return '<button class="btn" disabled>Le ciel s’écrit…</button>';
+    if (state.busy === kind) {
+      return '<button class="btn" disabled>' +
+        (kind === 'natal' ? 'Écriture en cours… quelques minutes' : 'Le ciel s’écrit…') +
+        '</button>';
+    }
     if (kind === 'natal' && state.user && state.user.natalReady) {
       return '<button class="btn" data-ask="natal">' + readLabel + '</button>';
     }
@@ -785,7 +915,6 @@
       '<div class="month">' + title + '</div><p class="lede">' + monthLabel() + '</p></div>' +
       '<div class="stack"><div class="card stack"><div class="label">Ce mois</div>' +
       '<h2>' + title + '</h2><p class="muted">' + MONTHLY.pages + (left != null ? ' · ' + (ready ? 1 : left) + ' / 1 cette année (Gratuit)' : '') + '</p><p>' + MONTHLY.intro + '</p>' +
-      '<p class="muted">' + (ready ? 'Déjà écrit. Relire ne relance pas l’écriture.' : (blocked ? 'Ton manuscrit mensuel de l’année est déjà utilisé.' : 'Un clic = un manuscrit. Sans clic, rien ne s’écrit.')) + '</p>' +
       (blocked ? '' : askBtn('mois', 'Demander le manuscrit du mois', 'Relire le manuscrit du mois')) + '</div>' + iaCard() + '</div>';
   }
 
@@ -798,8 +927,7 @@
       '<div class="month">' + title + '</div><p class="lede">' + todayLabel() + '</p></div>' +
       '<div class="stack"><div class="card stack"><div class="label">Aujourd’hui</div>' +
       '<h2>' + title + '</h2><p class="muted">' + TODAY.pages + (left != null ? ' · ' + (state.user.dailyUsed || 0) + ' / 5 ce mois (Gratuit)' : '') + '</p><p>' + TODAY.intro + '</p>' +
-      '<p class="muted">' + (ready ? 'Écrit pour aujourd’hui. Relire est libre.' : (blocked ? 'Tes 5 manuscrits du jour de ce mois sont utilisés.' : 'Les jours sans demande restent silencieux.')) + '</p>' +
-      (blocked ? '' : askBtn('jour', 'Demander le manuscrit du jour', 'Relire le manuscrit du jour')) + '</div>' + iaCard() + '</div>';
+      (blocked ? '' : askBtn('jour', 'OBTENIR LE MANUSCRIT DU JOUR', 'Relire le manuscrit du jour')) + '</div>' + iaCard() + '</div>';
   }
 
   function accountSheet() {
@@ -848,9 +976,15 @@
     var showUltime = (p === 'celeste' || p === 'divin' || monthsPaid() > 0);
     var ultimeLine = monthsPaid() + ' / 6 mois payés' + (isPausedPaid() ? ' (conservés)' : '');
 
+    var birthTimeDisp = '';
+    if (u.birthTime) {
+      var tm = String(u.birthTime).trim().match(/^(\d{1,2}):(\d{2})/);
+      birthTimeDisp = tm ? (tm[1].padStart(2, '0') + ' h ' + tm[2]) : String(u.birthTime).trim();
+    }
+    var birthDateLine = (u.birthDate || '') + (birthTimeDisp ? ' · ' + birthTimeDisp : '');
     var profileBlock = profileComplete()
       ? ('<div class="acct-block"><div class="label">Ciel de naissance</div>' +
-        '<p class="acct-value">' + (u.birthDate || '') + '</p>' +
+        '<p class="acct-value">' + birthDateLine + '</p>' +
         '<p class="muted">' + (u.birthPlace || '') + (u.natalReady ? ' · manuscrit prêt' : '') + '</p></div>')
       : ('<div class="acct-block"><div class="label">Ciel de naissance</div>' +
         '<p class="muted">Pas encore renseigné.</p>' +
@@ -877,7 +1011,7 @@
       profileBlock +
       '<div class="acct-block">' +
         '<div class="label">Gérer mon abonnement</div>' +
-        '<p class="muted acct-hint">Pour monter de plan, choisis l’offre supérieure et finalise le paiement sur la page sécurisée. Pour descendre, arrête d’abord ton abonnement actuel, puis souscris à l’autre — ainsi tu n’es prélevé qu’une seule fois.</p>' +
+        '<p class="muted acct-hint">Pour changer de plan, arrête d’abord ton abonnement actuel, puis souscris à nouveau à celui de ton choix.</p>' +
         '<div class="stack">' + actions + '</div>' +
       '</div>' +
       '<button class="btn ghost" id="close-account">Fermer</button>' +
@@ -913,11 +1047,10 @@
       var url = natalPdfUrl();
       paras = [
         'Voici l’ouverture de ton manuscrit. Les 28 pages complètes s’écrivent à partir de ton ciel de naissance.',
-        'Ton profil est enregistré pour toujours. Tu peux rouvrir ou télécharger le PDF ci-dessous.'
+        'Ton profil est enregistré pour toujours. Tu peux relire ton manuscrit ici, dans l’application.'
       ];
       if (url) {
-        extra = '<p><a class="btn" href="' + url + '" target="_blank" rel="noopener">Ouvrir / télécharger le PDF</a></p>' +
-          '<iframe class="natal-frame" title="Manuscrit natal" src="' + url + '"></iframe>';
+        extra = '<iframe class="natal-frame" title="Manuscrit natal" src="' + url + '"></iframe>';
       }
     }
     var body = '<p class="kicker">' + kicker + '</p><h2>' + titleHtml + '</h2>' +
@@ -955,7 +1088,7 @@
         html = onboardingView();
       } else {
         var tab = state.tab === 'mois' ? moisTab() : state.tab === 'jour' ? jourTab() : natalTab();
-        html = '<div class="screen">' + topbar() + '<div class="scroll">' + tab + '</div>' + nav() + '</div>';
+        html = '<div class="screen">' + topbar() + freeQuotaBanner() + '<div class="scroll">' + tab + '</div>' + nav() + '</div>';
         if (state.account) html += accountSheet();
         if (state.pdf) html += pdfView(state.pdf);
         if (state.ia) html += iaSheet();
@@ -1129,6 +1262,6 @@
     render();
   });
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js?v=13').catch(function () {});
+    navigator.serviceWorker.register('/sw.js?v=16').catch(function () {});
   }
 })();

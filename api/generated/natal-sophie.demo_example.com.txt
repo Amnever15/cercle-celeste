@@ -1,0 +1,20 @@
+=== Manuscrit Céleste — ouverture (phase 1) ===
+Prénom : Sophie
+Email : sophie.demo@example.com
+Naissance : 1990-05-12 14:30 — Lyon, France
+Genre : femme
+Source : stub:no-key
+Généré : 2026-09-23T03:22:25.943Z
+==============================================
+
+Manuscrit Céleste — ouverture (phase 1)
+
+Sophie,
+
+Tu es née le 1990-05-12 à 14:30, à Lyon, France.
+
+Ce texte est une première pierre posée côté serveur : le ciel de ta naissance est enregistré. Les 28 pages complètes (Human Design, thème astral, maisons, aspects, rituels) seront portées depuis le moteur manuscrit-celeste-generation — sans jamais exposer la clé Claude sur ton téléphone.
+
+Pour l’instant, ton profil est sauvegardé pour toujours sous cet email. Quand tu redemanderas le natal, jour ou mois, ces données seront réutilisées.
+
+(Placeholder local : CLAUDE_KEY absente ou appel Claude indisponible.)

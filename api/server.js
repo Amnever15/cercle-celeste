@@ -16,6 +16,13 @@ const natalGen = require('./natal-generate');
 const ROOT = __dirname;
 const ULTIME_MONTHS = plans.ULTIME_MONTHS;
 
+natalGen.injectStoreHooks({
+  readStore: function () { return readStore(); },
+  writeStore: function (data) { writeStore(data); },
+  consumeNatal: function (c) { plans.consumeGenerate(c, 'natal'); },
+  log: function (msg) { logLine(msg); }
+});
+
 function hosted() {
   return !!(
     process.env.RAILWAY_ENVIRONMENT ||
@@ -972,28 +979,40 @@ async function handle(req, res) {
       }
 
       if (kind === 'natal') {
-        c.natalStatus = 'generating';
-        writeStore(store);
-        let gen;
-        try {
-          gen = await natalGen.generateNatal(c);
-        } catch (err) {
-          c.natalStatus = 'error';
-          writeStore(store);
-          logLine('NATAL generate error ' + email + ' ' + (err && err.message || err));
-          return send(res, 500, {
-            error: 'Génération natal impossible pour le moment.',
+        /* Job async : la génération prend plusieurs minutes (Railway timeout HTTP). */
+        if (c.natalStatus === 'generating' && natalGen.runningJobs[email]) {
+          return send(res, 202, {
+            ok: true,
+            kind: kind,
+            status: 'generating',
+            message: c.natalProgress || 'Génération en cours…',
             contact: publicContact(c)
           });
         }
-        plans.consumeGenerate(c, kind);
+        c.natalStatus = 'generating';
+        c.natalReady = false;
+        c.natalError = null;
+        c.natalProgress = 'Le Manuscrit Céleste de ta vie s’écrit… Cela peut prendre plusieurs minutes.';
+        c.natalProgressPct = 2;
         writeStore(store);
-        logLine('NATAL generated ' + email + ' source=' + (gen && gen.source));
-        return send(res, 200, {
+        try {
+          natalGen.startNatalJob(email);
+        } catch (err) {
+          c.natalStatus = 'error';
+          c.natalError = (err && err.message) || 'Démarrage impossible';
+          writeStore(store);
+          return send(res, 500, {
+            error: c.natalError,
+            contact: publicContact(c)
+          });
+        }
+        logLine('NATAL job started ' + email);
+        return send(res, 202, {
           ok: true,
           kind: kind,
-          source: gen.source,
-          claudeOk: !!gen.claudeOk,
+          status: 'generating',
+          async: true,
+          message: c.natalProgress,
           pdfUrl: '/natal-file?email=' + encodeURIComponent(email),
           contact: publicContact(c)
         });

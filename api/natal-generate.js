@@ -1,20 +1,29 @@
 /**
- * Génération natal — phase 1 (stub serveur).
+ * Génération natal complète (28 pages) — port serveur de
+ * GENERATIONS/manuscrit-celeste-generation.html
  *
- * Le vrai Manuscrit Céleste 28 pages vit dans
- * GENERATIONS/manuscrit-celeste-generation.html (~280 Ko, canvas + jsPDF + HD + astro).
- * Port complet = chantier dédié. Ici : appel Claude côté serveur uniquement
- * (CLAUDE_KEY jamais exposée au client) + fichier texte/PDF minimal sauvegardé.
+ * - HD API + Astro API + Claude (8 parties) côté serveur uniquement
+ * - Document HTML multi-sections servi via /natal-file
+ * - Job asynchrone (Railway ne coupe pas la requête HTTP longue)
+ *
+ * ENV requis : CLAUDE_KEY (ou ANTHROPIC_API_KEY), HD_API_TOKEN
+ * Optionnel : CLAUDE_MODEL, HD_API_URL, ASTRO_API_URL, …
  */
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
 const profile = require('./profile');
+const hdMod = require('./natal/hd');
+const astroMod = require('./natal/astro');
+const claudeNatal = require('./natal/claude-natal');
+const htmlDoc = require('./natal/html-doc');
 
 const OUT_DIR = path.join(__dirname, 'generated');
 
+/** Jobs en cours (évite double génération pour le même email). */
+const runningJobs = Object.create(null);
+
 function claudeKey() {
-  return String(process.env.CLAUDE_KEY || process.env.ANTHROPIC_API_KEY || '').trim();
+  return claudeNatal.claudeKey();
 }
 
 function ensureOutDir() {
@@ -28,227 +37,292 @@ function safeEmailFile(email) {
 function outPaths(email) {
   const base = 'natal-' + safeEmailFile(email);
   return {
-    txt: path.join(OUT_DIR, base + '.txt'),
-    pdf: path.join(OUT_DIR, base + '.pdf')
+    html: path.join(OUT_DIR, base + '.html'),
+    json: path.join(OUT_DIR, base + '.json'),
+    txt: path.join(OUT_DIR, base + '.txt')
   };
 }
 
-function httpPostJson(hostname, urlPath, headers, bodyObj) {
-  const body = JSON.stringify(bodyObj);
-  return new Promise(function (resolve, reject) {
-    const req = https.request({
-      hostname: hostname,
-      path: urlPath,
-      method: 'POST',
-      headers: Object.assign({
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body)
-      }, headers)
-    }, function (res) {
-      const chunks = [];
-      res.on('data', function (c) { chunks.push(c); });
-      res.on('end', function () {
-        const raw = Buffer.concat(chunks).toString('utf8');
-        let json = null;
-        try { json = JSON.parse(raw); } catch (e) { json = null; }
-        resolve({ status: res.statusCode || 0, raw: raw, json: json });
-      });
-    });
-    req.on('error', reject);
-    req.setTimeout(90000, function () {
-      req.destroy(new Error('timeout Claude'));
-    });
-    req.write(body);
-    req.end();
-  });
+function loadStoreMutators() {
+  /* Lazy require pour éviter cycle : server expose helpers via inject. */
+  return _storeHooks;
 }
 
-async function callClaudeOpening(contact) {
-  const key = claudeKey();
-  if (!key) return { ok: false, reason: 'no-key', text: '' };
+var _storeHooks = {
+  readStore: null,
+  writeStore: null,
+  getContact: null,
+  consumeNatal: null,
+  log: function () {}
+};
 
-  const prenom = contact.prenom || 'toi';
-  const tone = profile.toneLabel(contact.gender);
-  const prompt =
-    'Tu es l’auteur du Manuscrit Céleste. Rédige une OUVERTURE (phase 1 stub, pas les 28 pages) ' +
-    'pour ' + prenom + '.\n' +
-    'Naissance : ' + contact.birthDate + ' à ' + contact.birthTime + ' — ' + contact.birthPlace + '.\n' +
-    'Genre / accords : ' + tone + '.\n' +
-    'Contraintes : français, tutoiement, 5 à 8 paragraphes poétiques et concrets, ' +
-    'évoque le lieu et la date, annonce que le livre natal complet (28 pages) suivra. ' +
-    'Pas de markdown, pas de titre technique, texte seul.';
+function injectStoreHooks(hooks) {
+  _storeHooks = Object.assign(_storeHooks, hooks || {});
+}
 
+function setProgress(email, message, pct) {
+  const hooks = loadStoreMutators();
+  if (!hooks.readStore || !hooks.writeStore) return;
   try {
-    const res = await httpPostJson('api.anthropic.com', '/v1/messages', {
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01'
-    }, {
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1800,
-      messages: [{ role: 'user', content: prompt }]
-    });
-
-    if (res.status < 200 || res.status >= 300) {
-      return {
-        ok: false,
-        reason: 'claude-http-' + res.status,
-        text: '',
-        detail: (res.json && res.json.error && res.json.error.message) || res.raw.slice(0, 200)
-      };
-    }
-    const blocks = (res.json && res.json.content) || [];
-    let text = '';
-    for (var i = 0; i < blocks.length; i++) {
-      if (blocks[i] && blocks[i].type === 'text' && blocks[i].text) text += blocks[i].text;
-    }
-    text = String(text || '').trim();
-    if (!text) return { ok: false, reason: 'empty', text: '' };
-    return { ok: true, reason: 'claude', text: text };
+    const store = hooks.readStore();
+    const key = String(email || '').toLowerCase().trim();
+    const c = store.contacts[key];
+    if (!c) return;
+    c.natalStatus = 'generating';
+    c.natalProgress = String(message || '').slice(0, 200);
+    if (pct != null) c.natalProgressPct = pct;
+    c.natalError = null;
+    hooks.writeStore(store);
   } catch (e) {
-    return { ok: false, reason: 'network', text: '', detail: String(e && e.message || e) };
+    hooks.log('natal progress write failed: ' + (e && e.message));
   }
 }
 
-function localPlaceholder(contact) {
-  const prenom = contact.prenom || 'toi';
-  const g = profile.normalizeGender(contact.gender);
-  const nee = g === 'femme' ? 'née' : (g === 'homme' ? 'né' : 'venu(e) au monde');
-  return [
-    'Manuscrit Céleste — ouverture (phase 1)',
-    '',
-    prenom + ',',
-    '',
-    'Tu es ' + nee + ' le ' + contact.birthDate + ' à ' + contact.birthTime + ', à ' + contact.birthPlace + '.',
-    '',
-    'Ce texte est une première pierre posée côté serveur : le ciel de ta naissance est enregistré. ' +
-    'Les 28 pages complètes (Human Design, thème astral, maisons, aspects, rituels) seront portées depuis ' +
-    'le moteur manuscrit-celeste-generation — sans jamais exposer la clé Claude sur ton téléphone.',
-    '',
-    'Pour l’instant, ton profil est sauvegardé pour toujours sous cet email. ' +
-    'Quand tu redemanderas le natal, jour ou mois, ces données seront réutilisées.',
-    '',
-    '(Placeholder local : CLAUDE_KEY absente ou appel Claude indisponible.)'
-  ].join('\n');
+function markError(email, errMsg) {
+  const hooks = loadStoreMutators();
+  if (!hooks.readStore || !hooks.writeStore) return;
+  try {
+    const store = hooks.readStore();
+    const key = String(email || '').toLowerCase().trim();
+    const c = store.contacts[key];
+    if (!c) return;
+    c.natalStatus = 'error';
+    c.natalReady = false;
+    c.natalError = String(errMsg || 'Génération impossible').slice(0, 400);
+    c.natalProgress = null;
+    hooks.writeStore(store);
+  } catch (e) {
+    hooks.log('natal error write failed: ' + (e && e.message));
+  }
 }
 
-/** Minimal PDF 1 page (Helvetica) — ASCII only for content stream safety. */
-function buildMinimalPdf(title, bodyText) {
-  function pdfEscape(s) {
-    return String(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+function markReady(email, paths, meta, snapshot) {
+  const hooks = loadStoreMutators();
+  if (!hooks.readStore || !hooks.writeStore) return null;
+  const store = hooks.readStore();
+  const key = String(email || '').toLowerCase().trim();
+  const c = store.contacts[key];
+  if (!c) return null;
+  c.natalHtmlPath = paths.html;
+  c.natalJsonPath = paths.json;
+  c.natalTxtPath = paths.txt;
+  c.natalPdfPath = paths.html; /* compat ancien champ : ouvre le HTML */
+  c.natalReady = true;
+  c.natalStatus = 'ready';
+  c.natalGeneratedAt = new Date().toISOString();
+  c.natalSource = (meta && meta.source) || 'claude-full';
+  c.natalPagesEst = (meta && meta.pagesEst) || null;
+  c.natalProgress = null;
+  c.natalProgressPct = 100;
+  c.natalError = null;
+  if (snapshot) {
+    if (snapshot.birthTimezone) c.birthTimezone = snapshot.birthTimezone;
+    if (snapshot.birthLat != null) c.birthLat = snapshot.birthLat;
+    if (snapshot.birthLon != null) c.birthLon = snapshot.birthLon;
   }
-  const lines = String(bodyText || '')
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map(function (l) {
-      return l.replace(/[^\x20-\x7E]/g, function (ch) {
-        /* Keep French accents as '?' in this minimal PDF; full UTF-8 PDF = later port. */
-        if (/[àâä]/.test(ch)) return 'a';
-        if (/[éèêë]/.test(ch)) return 'e';
-        if (/[îï]/.test(ch)) return 'i';
-        if (/[ôö]/.test(ch)) return 'o';
-        if (/[ùûü]/.test(ch)) return 'u';
-        if (ch === 'ç') return 'c';
-        if (ch === 'œ') return 'oe';
-        if (ch === 'Æ' || ch === 'æ') return 'ae';
-        if (ch === '—') return '-';
-        if (ch === '’' || ch === '‘') return "'";
-        if (ch === '«' || ch === '»') return '"';
-        return '?';
-      });
-    });
-
-  const contentLines = ['BT', '/F1 11 Tf', '50 760 Td', '14 TL'];
-  contentLines.push('(' + pdfEscape(String(title || 'Manuscrit Celeste').slice(0, 80)) + ') Tj');
-  contentLines.push('T*');
-  contentLines.push('T*');
-  var max = Math.min(lines.length, 48);
-  for (var i = 0; i < max; i++) {
-    var line = lines[i].slice(0, 90);
-    contentLines.push('(' + pdfEscape(line || ' ') + ') Tj');
-    contentLines.push('T*');
-  }
-  contentLines.push('ET');
-  const stream = contentLines.join('\n');
-
-  const objs = [];
-  objs.push('1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n');
-  objs.push('2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n');
-  objs.push(
-    '3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ' +
-    '/Contents 4 0 R /Resources<< /Font<< /F1 5 0 R >> >> >>endobj\n'
-  );
-  objs.push('4 0 obj<< /Length ' + Buffer.byteLength(stream) + ' >>stream\n' + stream + '\nendstream\nendobj\n');
-  objs.push('5 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n');
-
-  let pdf = '%PDF-1.4\n';
-  const offsets = [0];
-  for (var o = 0; o < objs.length; o++) {
-    offsets.push(Buffer.byteLength(pdf));
-    pdf += objs[o];
-  }
-  const xref = Buffer.byteLength(pdf);
-  pdf += 'xref\n0 ' + (objs.length + 1) + '\n';
-  pdf += '0000000000 65535 f \n';
-  for (var x = 1; x < offsets.length; x++) {
-    pdf += String(offsets[x]).padStart(10, '0') + ' 00000 n \n';
-  }
-  pdf += 'trailer<< /Size ' + (objs.length + 1) + ' /Root 1 0 R >>\n';
-  pdf += 'startxref\n' + xref + '\n%%EOF\n';
-  return Buffer.from(pdf, 'utf8');
+  if (hooks.consumeNatal) hooks.consumeNatal(c);
+  hooks.writeStore(store);
+  return c;
 }
 
 /**
- * Génère (ou régénère) le natal stub pour un contact.
- * Met à jour natalReady / natalPdfPath / natalGeneratedAt / natalStatus.
+ * Pipeline complet (peut durer plusieurs minutes).
  */
-async function generateNatal(contact) {
+async function generateNatal(contact, opts) {
+  opts = opts || {};
   ensureOutDir();
-  const paths = outPaths(contact.email);
+  if (!contact || !contact.email) throw new Error('contact email requis');
+  if (!profile.isComplete(contact)) {
+    throw new Error('Profil de naissance incomplet');
+  }
+  if (!claudeKey()) {
+    throw new Error('CLAUDE_KEY / ANTHROPIC_API_KEY manquant côté serveur');
+  }
+
+  const email = contact.email;
+  const onProgress = function (msg, pct) {
+    setProgress(email, msg, pct);
+    if (opts.onProgress) opts.onProgress(msg, pct);
+  };
+
   contact.natalStatus = 'generating';
   contact.natalReady = false;
+  contact.natalError = null;
+  onProgress('Préparation du ciel de naissance…', 5);
 
-  const claude = await callClaudeOpening(contact);
-  const text = claude.ok ? claude.text : localPlaceholder(contact);
-  const source = claude.ok ? 'claude' : ('stub:' + (claude.reason || 'local'));
+  var lat = contact.birthLat;
+  var lon = contact.birthLon;
+  var timezone = contact.birthTimezone || '';
 
-  const header =
-    '=== Manuscrit Céleste — ouverture (phase 1) ===\n' +
-    'Prénom : ' + (contact.prenom || '') + '\n' +
-    'Email : ' + (contact.email || '') + '\n' +
-    'Naissance : ' + contact.birthDate + ' ' + contact.birthTime + ' — ' + contact.birthPlace + '\n' +
-    'Genre : ' + contact.gender + '\n' +
-    'Source : ' + source + '\n' +
-    'Généré : ' + new Date().toISOString() + '\n' +
-    '==============================================\n\n';
+  if (!timezone || lat == null || lon == null) {
+    onProgress('Timezone & coordonnées…', 8);
+    var tzRes = await astroMod.resolveTimezone(lat, lon, contact.birthPlace);
+    timezone = (tzRes && tzRes.timezone) || timezone || 'Europe/Paris';
+    if (tzRes && tzRes.lat != null) lat = tzRes.lat;
+    if (tzRes && tzRes.lon != null) lon = tzRes.lon;
+  }
+  if (!timezone) timezone = 'Europe/Paris';
+  contact.birthTimezone = timezone;
+  if (lat != null) contact.birthLat = lat;
+  if (lon != null) contact.birthLon = lon;
 
-  const full = header + text + '\n';
-  fs.writeFileSync(paths.txt, full, 'utf8');
-  fs.writeFileSync(paths.pdf, buildMinimalPdf('Manuscrit Celeste — ' + (contact.prenom || ''), text));
+  var dateRaw = String(contact.birthDate || '').trim() + ' ' + String(contact.birthTime || '12:00').trim();
 
-  contact.natalPdfPath = paths.pdf;
+  hdMod.warmUpHDApi();
+  astroMod.warmUpAstroApi();
+
+  onProgress('Calcul Human Design…', 15);
+  var hd = await hdMod.fetchHDWithRetry(
+    dateRaw,
+    contact.birthPlace,
+    contact.gender,
+    lat,
+    lon,
+    function (m) { onProgress(m, 22); }
+  );
+
+  onProgress('Positions astrales…', 32);
+  var astro = await astroMod.fetchAstroWithRetry(
+    dateRaw, lat, lon, timezone, contact.birthPlace,
+    function (m) { onProgress(m, 38); }
+  );
+
+  onProgress('Rédaction du Manuscrit Céleste (plusieurs minutes)…', 45);
+  var manuscrit = await claudeNatal.generateManuscrit(contact, hd, astro, onProgress);
+
+  var sectionCount = (manuscrit.sections || []).length;
+  if (sectionCount < 8) {
+    throw new Error('Manuscrit incomplet (' + sectionCount + ' chapitres) — régénère.');
+  }
+
+  onProgress('Mise en page HTML…', 92);
+  var html = htmlDoc.buildNatalHtml(contact, manuscrit, hd, astro);
+  var pagesEst = htmlDoc.estimatePages(manuscrit);
+  var paths = outPaths(email);
+
+  var txtParts = [
+    'Manuscrit Céleste — ' + (contact.prenom || ''),
+    contact.birthDate + ' ' + contact.birthTime + ' — ' + contact.birthPlace,
+    'Pages estimées : ~' + pagesEst,
+    '',
+    manuscrit.intro || '',
+    ''
+  ];
+  (manuscrit.sections || []).forEach(function (s) {
+    txtParts.push('--- ' + (s.numero || '') + '. ' + (s.titre || '') + ' ---');
+    txtParts.push(s.contenu || '');
+    txtParts.push('');
+  });
+  if (manuscrit.conclusion) {
+    txtParts.push('--- Message ---');
+    txtParts.push(manuscrit.conclusion);
+  }
+
+  fs.writeFileSync(paths.html, html, 'utf8');
+  fs.writeFileSync(paths.json, JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    pagesEst: pagesEst,
+    hd: hd,
+    astro: {
+      Sun: astro.Sun, Moon: astro.Moon, Ascendant: astro.Ascendant, MC: astro.MC,
+      AspectsClés: astro.AspectsClés, Elements: astro.Elements, PhaseLunaire: astro.PhaseLunaire
+    },
+    manuscrit: manuscrit
+  }, null, 2), 'utf8');
+  fs.writeFileSync(paths.txt, txtParts.join('\n'), 'utf8');
+
+  /* Supprimer d’anciens stubs PDF 1 page s’ils existent */
+  try {
+    var oldPdf = path.join(OUT_DIR, 'natal-' + safeEmailFile(email) + '.pdf');
+    if (fs.existsSync(oldPdf)) fs.unlinkSync(oldPdf);
+  } catch (_) {}
+
+  contact.natalHtmlPath = paths.html;
+  contact.natalJsonPath = paths.json;
   contact.natalTxtPath = paths.txt;
+  contact.natalPdfPath = paths.html;
   contact.natalReady = true;
   contact.natalStatus = 'ready';
   contact.natalGeneratedAt = new Date().toISOString();
-  contact.natalSource = source;
+  contact.natalSource = 'claude-full';
+  contact.natalPagesEst = pagesEst;
+  contact.natalProgress = null;
+  contact.natalError = null;
+
+  onProgress('Prêt ✦', 100);
 
   return {
     ok: true,
-    source: source,
-    pdfPath: paths.pdf,
+    source: 'claude-full',
+    htmlPath: paths.html,
     txtPath: paths.txt,
-    claudeOk: !!claude.ok,
-    claudeReason: claude.reason || null,
-    detail: claude.detail || null
+    jsonPath: paths.json,
+    pagesEst: pagesEst,
+    sections: sectionCount,
+    claudeOk: true
   };
+}
+
+/**
+ * Démarre un job en arrière-plan (réponse HTTP immédiate).
+ * @returns {{ started: boolean, alreadyRunning?: boolean }}
+ */
+function startNatalJob(email) {
+  const key = String(email || '').toLowerCase().trim();
+  if (!key) return { started: false };
+  if (runningJobs[key]) return { started: false, alreadyRunning: true };
+
+  const hooks = loadStoreMutators();
+  if (!hooks.readStore || !hooks.writeStore) {
+    throw new Error('natal-generate : injectStoreHooks requis avant startNatalJob');
+  }
+
+  runningJobs[key] = true;
+  setProgress(key, 'Le Manuscrit Céleste de ta vie s’écrit… plusieurs minutes.', 3);
+
+  setImmediate(function () {
+    (async function () {
+      try {
+        const store = hooks.readStore();
+        const c = store.contacts[key];
+        if (!c) throw new Error('compte inconnu');
+        const gen = await generateNatal(c, {});
+        markReady(key, {
+          html: c.natalHtmlPath,
+          json: c.natalJsonPath,
+          txt: c.natalTxtPath
+        }, { source: gen.source, pagesEst: gen.pagesEst }, {
+          birthTimezone: c.birthTimezone,
+          birthLat: c.birthLat,
+          birthLon: c.birthLon
+        });
+        hooks.log('NATAL ready ' + key + ' pages~' + gen.pagesEst + ' sections=' + gen.sections);
+      } catch (err) {
+        const msg = (err && err.message) || String(err);
+        markError(key, msg);
+        hooks.log('NATAL error ' + key + ' ' + msg);
+      } finally {
+        delete runningJobs[key];
+      }
+    })();
+  });
+
+  return { started: true };
 }
 
 function resolveNatalFile(contact, prefer) {
   if (!contact) return null;
+  if (prefer === 'json' && contact.natalJsonPath && fs.existsSync(contact.natalJsonPath)) {
+    return { path: contact.natalJsonPath, type: 'application/json; charset=utf-8' };
+  }
   if (prefer === 'txt' && contact.natalTxtPath && fs.existsSync(contact.natalTxtPath)) {
     return { path: contact.natalTxtPath, type: 'text/plain; charset=utf-8' };
   }
-  if (contact.natalPdfPath && fs.existsSync(contact.natalPdfPath)) {
+  var htmlPath = contact.natalHtmlPath || contact.natalPdfPath;
+  if (htmlPath && fs.existsSync(htmlPath) && /\.html?$/i.test(htmlPath)) {
+    return { path: htmlPath, type: 'text/html; charset=utf-8' };
+  }
+  if (contact.natalPdfPath && fs.existsSync(contact.natalPdfPath) && /\.pdf$/i.test(contact.natalPdfPath)) {
     return { path: contact.natalPdfPath, type: 'application/pdf' };
   }
   if (contact.natalTxtPath && fs.existsSync(contact.natalTxtPath)) {
@@ -257,9 +331,87 @@ function resolveNatalFile(contact, prefer) {
   return null;
 }
 
+function dryRunStructureCheck() {
+  var sk = claudeNatal.expectedStructureSkeleton();
+  var fakeContact = {
+    prenom: 'Test',
+    birthDate: '1990-05-12',
+    birthTime: '14:30',
+    birthPlace: 'Lyon, France',
+    gender: 'femme'
+  };
+  var fakeHd = {
+    type: 'Generator', profile: '3/5', authority: 'Sacrale', strategy: 'Répondre',
+    definition: 'Simple', cross: 'Croix de test', signature: 'Satisfaction',
+    notSelf: 'Frustration', channels: ['34-20'], gates: ['34', '20']
+  };
+  var fakeAstro = {
+    Sun: 'Taureau 21°', Moon: 'Cancer 10°', Ascendant: 'Vierge 5°', MC: 'Gémeaux',
+    Mercury: 'Taureau', Venus: 'Gémeaux', Mars: 'Lion', Jupiter: 'Cancer',
+    Saturn: 'Capricorne', Uranus: 'Capricorne', Neptune: 'Capricorne', Pluto: 'Scorpion',
+    NorthNode: 'Aquarius', Chiron: 'Cancer', Lilith: 'Scorpion',
+    AspectsClés: 'Sun conjunction Venus', Elements: 'Feu 20%, Terre 40%, Air 20%, Eau 20%',
+    PhaseLunaire: 'First Quarter',
+    AstroCarto: { highlights: 'Sun MC @ 4°E', quality: { mode: 'lite' } }
+  };
+  var fakeMs = {
+    placements_confirmes: {
+      soleil: fakeAstro.Sun, lune: fakeAstro.Moon, ascendant: fakeAstro.Ascendant, mc: fakeAstro.MC
+    },
+    intro: 'Intro de test.\n\nDeuxième paragraphe.',
+    sections: sk.sections.map(function (n) {
+      return {
+        numero: n,
+        titre: 'Chapitre ' + n,
+        sous_titre: 'Sous-titre',
+        contenu: Array(40).fill('Paragraphe de démonstration pour le chapitre ' + n + '.').join(' '),
+        insight: 'Insight ' + n
+      };
+    }),
+    affirmations: Array(10).fill('Je suis alignée.'),
+    rituels: [
+      { nom: 'Rituel 1', timing: 'Matin', description: 'Description longue du rituel un. '.repeat(20) },
+      { nom: 'Rituel 2', timing: 'Soir', description: 'Description longue du rituel deux. '.repeat(20) },
+      { nom: 'Rituel 3', timing: 'Lune', description: 'Description longue du rituel trois. '.repeat(20) }
+    ],
+    conclusion: 'Conclusion longue de test. '.repeat(40),
+    synthese: {
+      essence: 'Test, tu es une présence terrestre et lucide.',
+      forces: ['Force 1', 'Force 2', 'Force 3'],
+      chemin_croissance: 'Grandir en douceur.',
+      direction_geo: 'Vers l’Est.',
+      strategie_hd: 'Attendre le oui sacral.',
+      fenetre_puissance: 'Printemps.',
+      mantra: 'Je choisis mon rythme.'
+    }
+  };
+  var html = htmlDoc.buildNatalHtml(fakeContact, fakeMs, fakeHd, fakeAstro);
+  var pages = htmlDoc.estimatePages(fakeMs);
+  var ok =
+    html.indexOf('Manuscrit Céleste') >= 0 &&
+    html.indexOf('Chapitre I') >= 0 &&
+    html.indexOf('Chapitre XI') >= 0 &&
+    html.indexOf('Synthèse exécutive') >= 0 &&
+    html.indexOf('Manuscrit Celeste Test') < 0 &&
+    pages >= 10;
+  return {
+    ok: ok,
+    pagesEst: pages,
+    sections: fakeMs.sections.length,
+    htmlBytes: Buffer.byteLength(html, 'utf8'),
+    structure: sk,
+    hasClaudeKey: !!claudeKey(),
+    hasHdToken: !!hdMod.cfg().token
+  };
+}
+
 module.exports = {
   claudeKey,
   generateNatal,
+  startNatalJob,
+  injectStoreHooks,
   resolveNatalFile,
-  OUT_DIR
+  dryRunStructureCheck,
+  OUT_DIR,
+  runningJobs
 };

@@ -37,7 +37,11 @@ function profileFields(c) {
       natalReady: false,
       natalStatus: 'none',
       natalGeneratedAt: null,
-      natalPdfUrl: null
+      natalPdfUrl: null,
+      natalProgress: null,
+      natalProgressPct: null,
+      natalError: null,
+      natalPagesEst: null
     };
   }
   const birthDate = trim(c.birthDate);
@@ -65,7 +69,11 @@ function profileFields(c) {
     natalReady: ready,
     natalStatus: status,
     natalGeneratedAt: c.natalGeneratedAt || null,
-    natalPdfUrl: ready ? ('/natal-file?email=' + encodeURIComponent(c.email || '')) : null
+    natalPdfUrl: ready ? ('/natal-file?email=' + encodeURIComponent(c.email || '')) : null,
+    natalProgress: c.natalProgress || null,
+    natalProgressPct: c.natalProgressPct != null ? c.natalProgressPct : null,
+    natalError: c.natalError || null,
+    natalPagesEst: c.natalPagesEst || null
   };
 }
 

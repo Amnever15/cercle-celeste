@@ -219,6 +219,29 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   background: linear-gradient(160deg, rgba(45,24,112,.55), rgba(12,6,32,.7));
 }
 .pause-banner h2 { font-size: 1.15rem; }
+.natal-wait {
+  margin-top: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(201, 168, 76, .28);
+  background: linear-gradient(135deg, rgba(45, 24, 112, .4), rgba(12, 6, 32, .5));
+}
+.natal-wait > p:first-child {
+  margin: 0;
+  color: var(--gold-light);
+  font-style: italic;
+  line-height: 1.5;
+}
+.natal-wait > p.muted {
+  margin: 8px 0 0;
+}
+.natal-wait-error {
+  border-color: rgba(200, 120, 120, .35);
+  background: linear-gradient(135deg, rgba(80, 24, 40, .35), rgba(12, 6, 32, .5));
+}
+.natal-wait-error > p:first-child {
+  color: var(--cream);
+}
 .nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
   display: grid; grid-template-columns: repeat(3, 1fr);
@@ -240,6 +263,36 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   display: flex; justify-content: space-between; align-items: center;
   padding: calc(10px + var(--safe-top)) 20px 8px;
   position: relative; z-index: 1;
+}
+.free-quota-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 20px 4px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(201, 168, 76, .22);
+  background: linear-gradient(135deg, rgba(45, 24, 112, .35), rgba(12, 6, 32, .45));
+  backdrop-filter: blur(8px);
+}
+.free-quota-banner .free-quota-star {
+  color: var(--gold);
+  font-size: .85rem;
+  line-height: 1.45;
+  text-shadow: 0 0 12px rgba(201, 168, 76, .4);
+  flex-shrink: 0;
+}
+.free-quota-banner p {
+  margin: 0;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: .98rem;
+  font-style: italic;
+  line-height: 1.45;
+  color: var(--cream);
+  opacity: .92;
+}
+@media (min-width: 520px) {
+  .free-quota-banner { max-width: 480px; margin-left: auto; margin-right: auto; }
 }
 .avatar {
   width: 34px; height: 34px; border-radius: 50%;
