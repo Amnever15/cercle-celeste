@@ -1,4 +1,4 @@
-const CACHE = 'cercle-v40';
+const CACHE = 'cercle-v41';
 const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', (e) => {

@@ -2155,7 +2155,7 @@
     var canRead = natalCanRead();
     var natalCta = 'OBTENIR LE MANUSCRIT DE MA VIE';
     var natalCard = canNatal()
-      ? '<div class="card stack"><div class="label">' + NATAL.kicker + '</div><h2>' + natalTitleHtml() + '</h2><p class="muted">' + NATAL.pages + ' pages · écrit une fois, à ta demande</p><p>' + NATAL.intro + '</p>' +
+      ? '<div class="card stack"><div class="label">' + NATAL.kicker + '</div><h2>' + natalTitleHtml() + '</h2><p>' + NATAL.intro + '</p>' +
         natalStatusLine() +
         (readyProfile ? askBtn('natal', natalCta, natalCta) : '') +
         '</div>'
