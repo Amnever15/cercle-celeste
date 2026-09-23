@@ -284,3 +284,26 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   .nav, .topbar, .sheet .panel { max-width: 480px; left: 50%; transform: translateX(-50%); width: 100%; }
   .nav, .topbar { left: 50%; }
 }
+
+.gender-row {
+  display: flex; flex-wrap: wrap; gap: .55rem .85rem;
+  margin-top: .15rem;
+}
+.gender-opt {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: .82rem;
+  color: var(--cream);
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  cursor: pointer;
+}
+.gender-opt input { accent-color: var(--gold); }
+.natal-frame {
+  width: 100%;
+  min-height: 55vh;
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+  background: rgba(5, 2, 15, .55);
+  margin-top: .75rem;
+}

@@ -11,7 +11,7 @@ const path = require('path');
 
 const ROOT = __dirname;
 const PORT = parseInt(process.env.PORT || '8788', 10);
-const DEFAULT_API_ROUTES = ['/health', '/access', '/login', '/admin', '/systeme-webhook', '/webhook-debug', '/generate', '/ia'];
+const DEFAULT_API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/natal-file'];
 const types = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -45,6 +45,8 @@ function logBootLayout() {
   console.log('Contenu de ' + apiDir + ' : ' + listDir(apiDir));
   console.log('api/server.js : ' + (existsFile(path.join(apiDir, 'server.js')) ? 'OK' : 'MANQUANT'));
   console.log('api/plans.js  : ' + (existsFile(path.join(apiDir, 'plans.js')) ? 'OK' : 'MANQUANT'));
+  console.log('api/profile.js: ' + (existsFile(path.join(apiDir, 'profile.js')) ? 'OK' : 'MANQUANT'));
+  console.log('api/natal-generate.js : ' + (existsFile(path.join(apiDir, 'natal-generate.js')) ? 'OK' : 'MANQUANT'));
 }
 
 function printMissingApi() {
@@ -57,13 +59,17 @@ function printMissingApi() {
   console.error('Fichiers OBLIGATOIRES, au même niveau que host.js :');
   console.error('  api/server.js');
   console.error('  api/plans.js');
+  console.error('  api/profile.js');
+  console.error('  api/natal-generate.js');
   console.error('');
-  console.error('Sur ton PC, ouvre ce dossier puis envoie CES DEUX fichiers');
+  console.error('Sur ton PC, ouvre ce dossier puis envoie CES fichiers');
   console.error('dans un dossier api/ du dépôt GitHub :');
   console.error('  C:\\Users\\s-386\\Desktop\\CURSOR\\MANUSCRIT\\APP\\api\\server.js');
   console.error('  C:\\Users\\s-386\\Desktop\\CURSOR\\MANUSCRIT\\APP\\api\\plans.js');
+  console.error('  C:\\Users\\s-386\\Desktop\\CURSOR\\MANUSCRIT\\APP\\api\\profile.js');
+  console.error('  C:\\Users\\s-386\\Desktop\\CURSOR\\MANUSCRIT\\APP\\api\\natal-generate.js');
   console.error('');
-  console.error('Ne pas envoyer : .env, store.json, webhook.log');
+  console.error('Ne pas envoyer : .env, store.json, webhook.log, api/generated/');
   console.error('════════════════════════════════════════════════════════');
 }
 
@@ -90,6 +96,12 @@ function loadApi() {
   const rootPlans = path.join(ROOT, 'plans.js');
 
   if (existsFile(nestedServer) && existsFile(nestedPlans)) {
+    if (!existsFile(path.join(ROOT, 'api', 'profile.js'))) {
+      console.warn('api/profile.js manquant — profil natal indisponible jusqu’à upload.');
+    }
+    if (!existsFile(path.join(ROOT, 'api', 'natal-generate.js'))) {
+      console.warn('api/natal-generate.js manquant — génération natal indisponible jusqu’à upload.');
+    }
     const nested = tryLoad('./api/server');
     if (nested) return nested;
   }

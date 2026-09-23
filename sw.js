@@ -1,4 +1,4 @@
-const CACHE = 'cercle-v10';
+const CACHE = 'cercle-v11';
 const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', (e) => {
@@ -14,7 +14,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   var url = new URL(e.request.url);
-  if (/^\/(health|access|login|admin|systeme-webhook|webhook-debug|generate|ia)(\?|$)/.test(url.pathname)) return;
+  if (/^\/(health|access|login|admin(\/grant)?|systeme-webhook|webhook-debug|generate|ia|profile|natal-file)(\?|$)/.test(url.pathname)) return;
   e.respondWith(
     caches.match(e.request).then((cached) => cached || fetch(e.request).then((res) => {
       const copy = res.clone();
