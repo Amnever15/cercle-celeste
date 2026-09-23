@@ -171,8 +171,23 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 
 .hero-month { text-align: center; padding: 8px 0 18px; }
 .hero-month .month {
-  font-family: 'Cinzel', serif; font-size: 1.7rem; letter-spacing: .06em;
-  text-shadow: 0 0 32px rgba(201,168,76,.16);
+  font-family: 'Cinzel', serif; font-size: 1.35rem; letter-spacing: .05em;
+  line-height: 1.35; text-shadow: 0 0 32px rgba(201,168,76,.16);
+  max-width: 22rem; margin: 0 auto;
+}
+.de-ta-vie, .de-ce-mois {
+  display: inline;
+  font-weight: 600;
+  letter-spacing: .14em;
+  font-size: 1.08em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+}
+.card h2 .de-ta-vie,
+.card h2 .de-ce-mois,
+.pdf-body h2 .de-ta-vie,
+.pdf-body h2 .de-ce-mois {
+  font-size: 1.06em;
 }
 .quote {
   font-style: italic; color: var(--gold-light); line-height: 1.5;
@@ -213,8 +228,8 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 }
 .nav button {
   background: none; border: none; color: var(--muted); cursor: pointer;
-  font-family: 'Inter', sans-serif; font-size: .58rem; letter-spacing: .08em;
-  text-transform: uppercase; padding: 8px 4px 10px; display: flex;
+  font-family: 'Inter', sans-serif; font-size: .55rem; letter-spacing: .06em;
+  text-transform: uppercase; padding: 8px 2px 10px; display: flex;
   flex-direction: column; align-items: center; gap: 4px;
 }
 .nav button .ic { font-size: 1.05rem; color: var(--gold-dim); }
@@ -241,8 +256,42 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   width: 100%; max-width: 480px;
   background: var(--deep-2); border-top: 1px solid var(--stroke);
   padding: 18px 20px calc(24px + var(--safe-bot));
+  max-height: min(92vh, 720px); overflow: auto;
 }
-.sheet h3 { font-family: 'Cinzel', serif; font-weight: 400; margin-bottom: 12px; }
+.sheet h3 { font-family: 'Cinzel', serif; font-weight: 400; margin-bottom: 4px; letter-spacing: .06em; }
+
+.account-panel { gap: 14px; }
+.acct-block {
+  padding: 10px 0 12px;
+  border-bottom: 1px solid rgba(107, 79, 160, .22);
+}
+.acct-block:last-of-type { border-bottom: none; }
+.acct-block .label { margin-bottom: .45rem; }
+.acct-value {
+  font-family: 'Cinzel', serif; font-size: 1.05rem; letter-spacing: .04em;
+  color: var(--cream); margin: 0 0 .2rem; line-height: 1.35;
+}
+.acct-email {
+  font-family: 'Cormorant Garamond', serif; font-size: 1.05rem;
+  color: var(--muted); font-style: italic; margin: 0; word-break: break-all;
+}
+.acct-hint { margin: 0 0 10px; line-height: 1.55; }
+.acct-rows {
+  display: flex; flex-direction: column; gap: 0;
+  border-bottom: 1px solid rgba(107, 79, 160, .22);
+  padding-bottom: 4px;
+}
+.acct-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(107, 79, 160, .12);
+}
+.acct-row:last-child { border-bottom: none; }
+.acct-row .label { flex-shrink: 0; }
+.acct-row-val {
+  text-align: right; color: var(--cream); font-size: .98rem; line-height: 1.4;
+  font-family: 'Cormorant Garamond', serif;
+}
 
 .install-steps { color: var(--muted); font-style: italic; line-height: 1.6; font-size: 1.02rem; }
 .install-steps b { color: var(--cream); font-style: normal; font-family: 'Cinzel', serif; font-weight: 400; }

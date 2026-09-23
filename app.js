@@ -9,23 +9,19 @@
   };
 
   var NATAL = {
-    title: 'Manuscrit Céleste',
     pages: 28,
-    kicker: 'Ton livre natal',
-    intro: 'Les 28 pages de ton thème — toujours accessibles tant que l’abonnement est actif.',
+    kicker: 'Natal',
+    intro: 'Les 28 pages de ton thème — toujours accessibles tant que ton abonnement est actif.',
     body: [
-      'Ici se logera le PDF de 28 pages généré à partir de ta date, ton heure et ton lieu de naissance.',
-      'Il ne change pas : c’est qui tu es. Tu le relis autant de fois que tu veux, tant que tu restes dans le Cercle.',
-      'Si tu quittes l’abonnement, ce coffre se ferme. Tes données restent, le livre se rouvre dès que tu reviens.'
+      'Ici s’ouvrira le manuscrit de 28 pages, écrit à partir de ta date, ton heure et ton lieu de naissance.',
+      'Il ne change pas : c’est qui tu es. Tu le relis autant de fois que tu veux, tant que ton espace reste ouvert.',
+      'Si tu quittes l’abonnement, ce coffre se ferme. Tes données restent ; le livre se rouvre dès que tu reviens.'
     ]
   };
 
   var MONTHLY = {
-    id: '2026-09',
-    title: 'Manuscrit Céleste du mois',
-    label: 'Septembre 2026',
     pages: '8–12 pages',
-    intro: 'Disponible tout le mois — mais écrit seulement quand tu cliques. Si tu ne le demandes pas, il n’existe pas.',
+    intro: 'Disponible tout le mois — écrit seulement quand tu le demandes. Sans ton clic, il n’existe pas.',
     body: [
       'Ce mois-ci, le ciel te demande de ne plus avancer dans le brouillard : attends le signal, puis réponds avec tout ton être.',
       'Saturne touche ta Maison X : ta vocation veut un cadre, pas une fuite en avant. Un seul engagement public suffit.',
@@ -35,10 +31,8 @@
   };
 
   var TODAY = {
-    title: 'Manuscrit Céleste du jour',
-    label: 'Mardi 22 septembre 2026',
     pages: '2–4 pages',
-    intro: 'Un manuscrit court (2–4 pages), écrit uniquement si tu le demandes aujourd’hui. Pas de génération le matin pour tout le monde.',
+    intro: 'Un texte court et personnel, écrit pour toi aujourd’hui — seulement si tu le demandes. Pas d’envoi automatique le matin pour tout le monde.',
     body: [
       'Aujourd’hui, n’ouvre qu’une porte. Une conversation, un message, un pas visible — pas dix.',
       'Ton autorité émotionnelle te dit d’attendre la vague : si c’est agité à 10 h, ce n’est pas encore un oui.',
@@ -47,7 +41,6 @@
   };
 
   var ULTIME = {
-    title: 'Manuscrit Céleste Ultime',
     pages: 140,
     need: 6
   };
@@ -219,6 +212,34 @@
     var m = FR_MONTHS[d.getMonth()];
     return m.charAt(0).toUpperCase() + m.slice(1) + ' ' + d.getFullYear();
   }
+  function emphasizeLife(prefixHtml) {
+    return prefixHtml + ' <span class="de-ta-vie">de ta vie</span>';
+  }
+  function natalTitleHtml() {
+    return emphasizeLife('Le Manuscrit Céleste');
+  }
+  function natalTitlePlain() {
+    return 'Le Manuscrit Céleste de ta vie';
+  }
+  function ultimeTitleHtml() {
+    return emphasizeLife('Le Manuscrit Céleste Ultime');
+  }
+  function ultimeTitlePlain() {
+    return 'Le Manuscrit Céleste Ultime de ta vie';
+  }
+  function monthNameUpper() {
+    return FR_MONTHS[new Date().getMonth()].toLocaleUpperCase('fr-FR');
+  }
+  function moisTitleHtml() {
+    return 'Manuscrit Céleste <span class="de-ce-mois">DE CE MOIS DE ' + monthNameUpper() + '</span>';
+  }
+  function moisTitlePlain() {
+    return 'Manuscrit Céleste DE CE MOIS DE ' + monthNameUpper();
+  }
+  function jourTitlePlain() {
+    var d = new Date();
+    return 'Manuscrit Céleste du ' + d.getDate() + ' ' + FR_MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+  }
   function booksKey() {
     var email = (state.user && state.user.email) || 'anon';
     return 'cercle.books.' + email.toLowerCase();
@@ -376,7 +397,7 @@
     var q = input ? (input.value || '').trim() : '';
     if (!q) return;
     if (!canIa()) return;
-    if (iaLeft() <= 0) { alert('Quota du mois atteint (500). Il revient le 1er.'); return; }
+    if (iaLeft() <= 0) { alert('Tu as déjà posé tes 500 questions ce mois. Elles reviennent le 1er.'); return; }
     var email = state.user.email;
     state.iaMessages.push({ role: 'me', text: q });
     state.iaBusy = true;
@@ -428,15 +449,15 @@
   function loginView() {
     return '<div class="screen">' +
       '<div class="scroll noshift stack" style="justify-content:center;max-width:420px;margin:0 auto;width:100%">' +
-        '<div class="brand"><span class="star">✦</span><h1>Le Cercle<br><span>Céleste</span></h1>' +
-        '<p class="lede">Gratuit, Céleste (59 €) ou Divin (137 €).<br>L’IA Céleste vit dans le Divin — 500 questions / mois.</p></div>' +
+        '<div class="brand"><span class="star">✦</span><h1>Les Manuscrits<br><span>Célestes</span></h1>' +
+        '<p class="lede">Gratuit, Céleste (59 €) ou Divin (137 €).<br>L’IA Céleste t’accompagne dans le Divin — jusqu’à 500 questions / mois.</p></div>' +
         '<div class="card stack">' +
           '<div class="field"><label class="label" for="prenom">Prénom</label>' +
           '<input class="input" id="prenom" placeholder="Sophie" autocomplete="given-name"></div>' +
           '<div class="field"><label class="label" for="email">Email</label>' +
           '<input class="input" id="email" type="email" placeholder="toi@email.com" autocomplete="email"></div>' +
-          '<button class="btn" id="go-in">Entrer dans le Cercle</button>' +
-          '<p class="lede" style="font-size:.85rem;text-align:center">Démo : nina.gratuit@… · sophie.demo@… (Céleste) · clara.divin@…</p>' +
+          '<button class="btn" id="go-in">Entrer</button>' +
+          '<p class="lede" style="font-size:.85rem;text-align:center">Première visite ? Utilise l’email de ton abonnement.</p>' +
         '</div></div></div>';
   }
 
@@ -481,13 +502,13 @@
 
   function topbar() {
     var u = state.user || {};
-    return '<div class="topbar"><span class="kicker">Cercle Céleste</span>' +
+    return '<div class="topbar"><span class="kicker">Les Manuscrits Célestes</span>' +
       '<button class="avatar" id="open-account" aria-label="Compte">' + initial(u.prenom) + '</button></div>';
   }
 
   function nav() {
     var tabs = [
-      ['natal', '✦', 'Manuscrit'],
+      ['natal', '✦', 'De ta vie'],
       ['mois', '☽', 'Du mois'],
       ['jour', '☀', 'Du jour']
     ];
@@ -501,10 +522,10 @@
     var u = state.user || {};
     return '<div class="card pause-banner stack">' +
       '<div class="label">Abonnement en pause</div>' +
-      '<h2>Cercle en pause</h2>' +
-      '<p>Ton abo ' + ((u.planLabel) || '') + ' est inactif. Tu gardes l’accès Gratuit (5 manuscrits du jour / mois, 1 mensuel / an). Natal, Ultime et IA se rouvrent dès que tu reprends sur Systeme.io.</p>' +
+      '<h2>Espace en pause</h2>' +
+      '<p>Ton abo ' + ((u.planLabel) || '') + ' est en pause. Tu gardes l’accès Gratuit : 5 manuscrits du jour par mois, et 1 manuscrit du mois par an. Natal, Ultime et IA Céleste se rouvrent dès que tu reprends.</p>' +
       '<p class="muted">Mois Ultime conservés : ' + monthsPaid() + ' / 6.</p>' +
-      '<button class="btn" type="button" data-plan-link="manage">Reprendre sur Systeme.io</button>' +
+      '<button class="btn" type="button" data-plan-link="manage">Reprendre mon abonnement</button>' +
       '<button class="btn ghost" type="button" id="retry-access">J’ai repris, actualiser</button>' +
       '</div>';
   }
@@ -512,14 +533,14 @@
   function natalStatusLine() {
     var u = state.user || {};
     if (!profileComplete()) {
-      return '<p class="muted">Profil de naissance : à renseigner avant la génération.</p>' +
+      return '<p class="muted">Renseigne ton ciel de naissance pour que ton manuscrit puisse s’écrire.</p>' +
         '<button class="btn" type="button" id="edit-profile-natal">Renseigner mon ciel de naissance</button>';
     }
     if (u.natalStatus === 'generating' || state.busy === 'natal') {
-      return '<p class="muted">Génération… le ciel s’écrit sur le serveur.</p>';
+      return '<p class="muted">Le ciel s’écrit… ton manuscrit arrive.</p>';
     }
     if (u.natalReady) {
-      return '<p class="muted">Profil enregistré · manuscrit prêt (ouverture phase 1).</p>';
+      return '<p class="muted">Profil enregistré · ton manuscrit est prêt.</p>';
     }
     return '<p class="muted">Profil enregistré · en attente de ta demande.</p>';
   }
@@ -532,26 +553,26 @@
     var readyProfile = profileComplete();
     var natalAskLabel = (state.user && state.user.natalReady) ? 'Lire les 28 pages' : 'Demander les 28 pages';
     var natalCard = canNatal()
-      ? '<div class="card stack"><div class="label">' + NATAL.kicker + '</div><h2>' + NATAL.title + '</h2><p class="muted">' + NATAL.pages + ' pages · écrit une fois, à ta demande</p><p>' + NATAL.intro + '</p>' +
+      ? '<div class="card stack"><div class="label">' + NATAL.kicker + '</div><h2>' + natalTitleHtml() + '</h2><p class="muted">' + NATAL.pages + ' pages · écrit une fois, à ta demande</p><p>' + NATAL.intro + '</p>' +
         natalStatusLine() +
         (readyProfile ? askBtn('natal', natalAskLabel, 'Lire les 28 pages') : '') +
         (state.user && state.user.natalReady && natalPdfUrl()
           ? '<a class="btn ghost" href="' + natalPdfUrl() + '" target="_blank" rel="noopener">Télécharger le PDF</a>'
           : '') +
         '</div>'
-      : '<div class="card lock stack"><div class="label">Plan Céleste</div><h2>' + NATAL.title + '</h2><p class="muted">28 pages · 59 € / mois</p><p>' + (isPausedPaid() ? 'Abonnement en pause : le natal se rouvre dès que tu reprends.' : 'Le livre natal s’ouvre avec l’abonnement Céleste.') + '</p></div>';
+      : '<div class="card lock stack"><div class="label">Plan Céleste</div><h2>' + natalTitleHtml() + '</h2><p class="muted">28 pages · 59 € / mois</p><p>' + (isPausedPaid() ? 'Abonnement en pause : le natal se rouvre dès que tu reprends.' : 'Ton manuscrit de vie s’ouvre avec l’abonnement Céleste.') + '</p></div>';
     var ultime;
     if (unlocked) {
-      ultime = '<div class="card stack"><div class="label">Débloqué</div><h2>' + ULTIME.title + '</h2><p class="muted">' + ULTIME.pages + ' pages</p><p>' + (plan() === 'divin' ? 'Inclus tout de suite dans le Divin.' : 'Six mois payés, même avec des pauses.') + ' Écrit une seule fois, à ta demande.</p>' + askBtn('ultime', 'Demander l’Ultime', 'Relire l’Ultime') + '</div>';
+      ultime = '<div class="card stack"><div class="label">Débloqué</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + ULTIME.pages + ' pages</p><p>' + (plan() === 'divin' ? 'Inclus tout de suite dans le Divin.' : 'Six mois payés, même avec des pauses.') + ' Écrit une seule fois, à ta demande.</p>' + askBtn('ultime', 'Demander l’Ultime', 'Relire l’Ultime') + '</div>';
     } else if (plan() === 'gratuit' && months === 0) {
-      ultime = '<div class="card lock stack"><div class="label">Céleste ou Divin</div><h2>' + ULTIME.title + '</h2><p class="muted">140 pages</p><p>Après 6 mois Céleste, ou immédiatement en Divin.</p></div>';
+      ultime = '<div class="card lock stack"><div class="label">Céleste ou Divin</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">140 pages</p><p>Après 6 mois Céleste, ou immédiatement en Divin.</p></div>';
     } else if (ultimeOn() && isPausedPaid()) {
-      ultime = '<div class="card lock stack"><div class="label">En pause</div><h2>' + ULTIME.title + '</h2><p class="muted">' + ULTIME.pages + ' pages · déjà débloqué</p><p>L’Ultime se rouvre dès que tu reprends l’abonnement. Tes <b>' + months + ' mois</b> restent comptés.</p><p class="lock-banner">✦ Les mois payés ne s’effacent pas.</p></div>';
+      ultime = '<div class="card lock stack"><div class="label">En pause</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + ULTIME.pages + ' pages · déjà débloqué</p><p>L’Ultime se rouvre dès que tu reprends l’abonnement. Tes <b>' + months + ' mois</b> restent comptés.</p><p class="lock-banner">✦ Les mois payés ne s’effacent pas.</p></div>';
     } else {
-      ultime = '<div class="card lock stack"><div class="label">Verrouillé</div><h2>' + ULTIME.title + '</h2><p class="muted">' + ULTIME.pages + ' pages · 6 mois payés, cumulés</p><p>Tu as <b>' + months + ' mois</b> déjà réglés. Encore <b>' + left + '</b> — une pause ne casse pas la série.</p><p class="lock-banner">✦ Les mois payés ne s’effacent pas.</p></div>';
+      ultime = '<div class="card lock stack"><div class="label">Verrouillé</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + ULTIME.pages + ' pages · 6 mois payés, cumulés</p><p>Tu as <b>' + months + ' mois</b> déjà réglés. Encore <b>' + left + '</b> — une pause ne casse pas la série.</p><p class="lock-banner">✦ Les mois payés ne s’effacent pas.</p></div>';
     }
     return '<div class="hero-month"><div class="label">Plan ' + ((state.user && state.user.planLabel) || 'Gratuit') + (isPausedPaid() ? ' · pause' : '') + '</div>' +
-      '<div class="month">Manuscrit Céleste</div>' +
+      '<div class="month">' + natalTitleHtml() + '</div>' +
       '<p class="lede">Bon retour, ' + prenom + '.</p></div>' +
       '<div class="stack">' + pauseBanner() + natalCard + ultime + iaCard() + '</div>';
   }
@@ -567,20 +588,21 @@
 
   function iaCard() {
     if (canIa()) {
-      return '<div class="card stack"><div class="label">Plan Divin</div><h2>IA Céleste</h2><p class="muted">' + iaLeft() + ' / ' + ((state.user && state.user.iaQuota) || 500) + ' questions ce mois</p><p>Experte Human Design et astrologie. Pose ta question à tout moment — une réponse courte, jamais un nouveau livre.</p><button class="btn" id="open-ia">Poser une question</button></div>';
+      return '<div class="card stack"><div class="label">Plan Divin</div><h2>IA Céleste</h2><p class="muted">' + iaLeft() + ' / ' + ((state.user && state.user.iaQuota) || 500) + ' questions ce mois</p><p>Ta compagne intime pendant la lecture — amour, travail, timing… Une réponse courte, jamais un nouveau livre.</p><button class="btn" id="open-ia">Poser une question</button></div>';
     }
-    return '<div class="card lock stack"><div class="label">Plan Divin · 137 €</div><h2>IA Céleste</h2><p class="muted">500 questions / mois</p><p>Quand tu lis un manuscrit et que tu te demandes « aujourd’hui, l’amour ? » — elle répond. Réservée au Divin.</p></div>';
+    return '<div class="card lock stack"><div class="label">Plan Divin · 137 €</div><h2>IA Céleste</h2><p class="muted">Jusqu’à 500 questions / mois</p><p>Pendant que tu lis, elle t’écoute : aujourd’hui l’amour ? le travail ? le bon moment ? Une présence douce, réservée au Divin.</p></div>';
   }
 
   function moisTab() {
     var ready = bookReady('mois');
     var left = monthlyLeft();
     var blocked = left === 0 && !ready;
+    var title = moisTitleHtml();
     return '<div class="hero-month"><div class="label">À la demande</div>' +
-      '<div class="month">Du mois</div><p class="lede">' + monthLabel() + '</p></div>' +
-      '<div class="stack"><div class="card stack"><div class="label">Manuscrit Céleste du mois</div>' +
-      '<h2>' + MONTHLY.title + '</h2><p class="muted">' + MONTHLY.pages + (left != null ? ' · ' + (ready ? 1 : left) + ' / 1 cette année (Gratuit)' : '') + '</p><p>' + MONTHLY.intro + '</p>' +
-      '<p class="muted">' + (ready ? 'Déjà écrit. Relire ne relance pas l’écriture.' : (blocked ? 'Ton manuscrit mensuel de l’année est déjà utilisé.' : 'Un clic = un manuscrit. Pas de clic = pas d’écriture.')) + '</p>' +
+      '<div class="month">' + title + '</div><p class="lede">' + monthLabel() + '</p></div>' +
+      '<div class="stack"><div class="card stack"><div class="label">Ce mois</div>' +
+      '<h2>' + title + '</h2><p class="muted">' + MONTHLY.pages + (left != null ? ' · ' + (ready ? 1 : left) + ' / 1 cette année (Gratuit)' : '') + '</p><p>' + MONTHLY.intro + '</p>' +
+      '<p class="muted">' + (ready ? 'Déjà écrit. Relire ne relance pas l’écriture.' : (blocked ? 'Ton manuscrit mensuel de l’année est déjà utilisé.' : 'Un clic = un manuscrit. Sans clic, rien ne s’écrit.')) + '</p>' +
       (blocked ? '' : askBtn('mois', 'Demander le manuscrit du mois', 'Relire le manuscrit du mois')) + '</div>' + iaCard() + '</div>';
   }
 
@@ -588,11 +610,12 @@
     var ready = bookReady('jour');
     var left = dailyLeft();
     var blocked = left === 0 && !ready;
+    var title = jourTitlePlain();
     return '<div class="hero-month"><div class="label">À la demande</div>' +
-      '<div class="month">Du jour</div><p class="lede">' + todayLabel() + '</p></div>' +
-      '<div class="stack"><div class="card stack"><div class="label">Manuscrit Céleste du jour</div>' +
-      '<h2>' + TODAY.title + '</h2><p class="muted">' + TODAY.pages + (left != null ? ' · ' + (state.user.dailyUsed || 0) + ' / 5 ce mois (Gratuit)' : '') + '</p><p>' + TODAY.intro + '</p>' +
-      '<p class="muted">' + (ready ? 'Écrit pour aujourd’hui. Relire ne coûte rien.' : (blocked ? 'Tes 5 manuscrits du jour de ce mois sont utilisés.' : 'Les jours sans clic restent vides.')) + '</p>' +
+      '<div class="month">' + title + '</div><p class="lede">' + todayLabel() + '</p></div>' +
+      '<div class="stack"><div class="card stack"><div class="label">Aujourd’hui</div>' +
+      '<h2>' + title + '</h2><p class="muted">' + TODAY.pages + (left != null ? ' · ' + (state.user.dailyUsed || 0) + ' / 5 ce mois (Gratuit)' : '') + '</p><p>' + TODAY.intro + '</p>' +
+      '<p class="muted">' + (ready ? 'Écrit pour aujourd’hui. Relire est libre.' : (blocked ? 'Tes 5 manuscrits du jour de ce mois sont utilisés.' : 'Les jours sans demande restent silencieux.')) + '</p>' +
       (blocked ? '' : askBtn('jour', 'Demander le manuscrit du jour', 'Relire le manuscrit du jour')) + '</div>' + iaCard() + '</div>';
   }
 
@@ -602,7 +625,7 @@
     var actions = '';
     if (isPausedPaid()) {
       actions =
-        '<button class="btn" type="button" data-plan-link="manage">Reprendre / gérer sur Systeme.io</button>' +
+        '<button class="btn" type="button" data-plan-link="manage">Reprendre / gérer mon abonnement</button>' +
         '<button class="btn ghost" type="button" data-plan-link="celeste">Repasser Céleste · 59 €</button>' +
         '<button class="btn ghost" type="button" data-plan-link="divin">Passer Divin · 137 €</button>';
     } else if (p === 'divin') {
@@ -618,60 +641,108 @@
         '<button class="btn" type="button" data-plan-link="celeste">Passer Céleste · 59 €</button>' +
         '<button class="btn ghost" type="button" data-plan-link="divin">Passer Divin · 137 €</button>';
     }
-    var statusLine;
+
+    var planName = (u.planLabel) || (p === 'gratuit' ? 'Gratuit' : p);
+    var planPrice = u.price ? (u.price + ' € / mois') : (p === 'gratuit' ? 'Sans abonnement' : '');
+    var planState;
     if (isPausedPaid()) {
-      statusLine = 'Plan ' + ((u.planLabel) || '') + (u.price ? ' · ' + u.price + ' € / mois' : '') +
-        ' · inactif (pause). Accès Gratuit : 5 manuscrits du jour / mois, 1 mensuel / an.';
+      planState = 'En pause — accès Gratuit (5 manuscrits du jour / mois, 1 du mois / an)';
+    } else if (isActive()) {
+      planState = 'Actif';
     } else {
-      statusLine = 'Plan ' + ((u.planLabel) || 'Gratuit') + (u.price ? ' · ' + u.price + ' € / mois' : '') +
-        (isActive() ? ' · actif' : ' · inactif') + '.';
+      planState = 'Inactif';
     }
-    var extraLine = canIa()
-      ? ('IA Céleste : ' + iaLeft() + ' / ' + (u.iaQuota || 500) + ' ce mois.')
-      : (isPausedPaid() ? 'IA Céleste : verrouillée pendant la pause.' : 'IA Céleste : plan Divin.');
-    if (p === 'celeste' || p === 'divin' || monthsPaid() > 0) {
-      extraLine += ' Ultime : ' + monthsPaid() + ' / 6 mois payés' + (isPausedPaid() ? ' (conservés).' : '.');
+
+    var iaLine;
+    if (canIa()) {
+      iaLine = iaLeft() + ' / ' + (u.iaQuota || 500) + ' questions ce mois';
+    } else if (isPausedPaid()) {
+      iaLine = 'En pause — se rouvre avec le Divin';
+    } else {
+      iaLine = 'Réservée au plan Divin';
     }
-    var profileLine = profileComplete()
-      ? ('Profil natal : ' + (u.birthDate || '') + ' · ' + (u.birthPlace || '') + (u.natalReady ? ' · manuscrit prêt' : '') + '.')
-      : 'Profil natal : pas encore renseigné.';
-    return '<div class="sheet" id="account-sheet"><div class="panel stack">' +
+
+    var showUltime = (p === 'celeste' || p === 'divin' || monthsPaid() > 0);
+    var ultimeLine = monthsPaid() + ' / 6 mois payés' + (isPausedPaid() ? ' (conservés)' : '');
+
+    var profileBlock = profileComplete()
+      ? ('<div class="acct-block"><div class="label">Ciel de naissance</div>' +
+        '<p class="acct-value">' + (u.birthDate || '') + '</p>' +
+        '<p class="muted">' + (u.birthPlace || '') + (u.natalReady ? ' · manuscrit prêt' : '') + '</p></div>')
+      : ('<div class="acct-block"><div class="label">Ciel de naissance</div>' +
+        '<p class="muted">Pas encore renseigné.</p>' +
+        '<button class="btn ghost" type="button" id="edit-profile">Renseigner mon ciel de naissance</button></div>');
+
+    return '<div class="sheet" id="account-sheet"><div class="panel account-panel stack">' +
       '<h3>Ton compte</h3>' +
-      '<p>' + (u.prenom || '') + '<br><span class="lede">' + (u.email || '') + '</span></p>' +
-      '<p class="lede">' + statusLine + '</p>' +
-      '<p class="lede">' + extraLine + '</p>' +
-      '<p class="lede">' + profileLine + '</p>' +
-      (profileComplete() ? '' : '<button class="btn ghost" type="button" id="edit-profile">Renseigner mon ciel de naissance</button>') +
-      '<p class="muted">Monter de plan = nouvelle page de paiement Systeme.io. Rétrograder = arrêter l’offre actuelle puis reprendre l’autre (évite un double prélèvement).</p>' +
-      actions +
+      '<div class="acct-block">' +
+        '<div class="label">Identifiant</div>' +
+        '<p class="acct-value">' + (u.prenom || '—') + '</p>' +
+        '<p class="acct-email">' + (u.email || '') + '</p>' +
+      '</div>' +
+      '<div class="acct-block">' +
+        '<div class="label">Ton plan</div>' +
+        '<p class="acct-value">' + planName + '</p>' +
+        '<p class="muted">' + [planPrice, planState].filter(Boolean).join(' · ') + '</p>' +
+      '</div>' +
+      '<div class="acct-rows">' +
+        (showUltime
+          ? '<div class="acct-row"><span class="label">Progression Ultime</span><span class="acct-row-val">' + ultimeLine + '</span></div>'
+          : '') +
+        '<div class="acct-row"><span class="label">IA Céleste</span><span class="acct-row-val">' + iaLine + '</span></div>' +
+      '</div>' +
+      profileBlock +
+      '<div class="acct-block">' +
+        '<div class="label">Gérer mon abonnement</div>' +
+        '<p class="muted acct-hint">Pour monter de plan, choisis l’offre supérieure et finalise le paiement sur la page sécurisée. Pour descendre, arrête d’abord ton abonnement actuel, puis souscris à l’autre — ainsi tu n’es prélevé qu’une seule fois.</p>' +
+        '<div class="stack">' + actions + '</div>' +
+      '</div>' +
       '<button class="btn ghost" id="close-account">Fermer</button>' +
       '<button class="link" id="logout">Se déconnecter</button>' +
       '</div></div>';
   }
 
   function pdfView(id) {
-    var title = NATAL.title, kicker = NATAL.kicker, paras = NATAL.body;
-    if (id === 'mois') { title = MONTHLY.title; kicker = monthLabel(); paras = MONTHLY.body; }
-    if (id === 'jour') { title = TODAY.title; kicker = todayLabel(); paras = TODAY.body; }
-    if (id === 'ultime') { title = ULTIME.title; kicker = 'Édition extra-longue'; paras = ['Tes 140 pages s’ouvriront ici, une fois les 6 mois d’abonnement atteints.']; }
+    var titleHtml = natalTitleHtml();
+    var titlePlain = natalTitlePlain();
+    var kicker = NATAL.kicker;
+    var paras = NATAL.body;
+    if (id === 'mois') {
+      titleHtml = moisTitleHtml();
+      titlePlain = moisTitlePlain();
+      kicker = monthLabel();
+      paras = MONTHLY.body;
+    }
+    if (id === 'jour') {
+      titleHtml = jourTitlePlain();
+      titlePlain = jourTitlePlain();
+      kicker = todayLabel();
+      paras = TODAY.body;
+    }
+    if (id === 'ultime') {
+      titleHtml = ultimeTitleHtml();
+      titlePlain = ultimeTitlePlain();
+      kicker = 'Édition extra-longue';
+      paras = ['Tes 140 pages s’ouvriront ici, une fois les 6 mois d’abonnement atteints.'];
+    }
     var extra = '';
     if (id === 'natal') {
       var url = natalPdfUrl();
       paras = [
-        'Ouverture générée sur le serveur (phase 1) — pas encore les 28 pages illustrées du moteur complet.',
-        'Ton profil de naissance est enregistré pour toujours. Le PDF ci-dessous s’ouvre sans clé API sur ton téléphone.'
+        'Voici l’ouverture de ton manuscrit. Les 28 pages complètes s’écrivent à partir de ton ciel de naissance.',
+        'Ton profil est enregistré pour toujours. Tu peux rouvrir ou télécharger le PDF ci-dessous.'
       ];
       if (url) {
         extra = '<p><a class="btn" href="' + url + '" target="_blank" rel="noopener">Ouvrir / télécharger le PDF</a></p>' +
           '<iframe class="natal-frame" title="Manuscrit natal" src="' + url + '"></iframe>';
       }
     }
-    var body = '<p class="kicker">' + kicker + '</p><h2>' + title + '</h2>' +
+    var body = '<p class="kicker">' + kicker + '</p><h2>' + titleHtml + '</h2>' +
       paras.map(function (p) { return '<p>' + p + '</p>'; }).join('') + extra;
     var ia = canIa()
       ? '<div class="ia-dock"><button class="btn ghost" id="open-ia">Question à l’IA Céleste · ' + iaLeft() + ' restantes</button></div>'
-      : '<div class="ia-dock"><p class="muted">L’IA Céleste répond ici, dans le plan Divin (500 questions / mois).</p></div>';
-    return '<div class="pdf-view"><header><button id="close-pdf" aria-label="Retour">←</button><span class="kicker">' + title + '</span></header>' +
+      : '<div class="ia-dock"><p class="muted">L’IA Céleste t’accompagne ici, dans le plan Divin (jusqu’à 500 questions / mois).</p></div>';
+    return '<div class="pdf-view"><header><button id="close-pdf" aria-label="Retour">←</button><span class="kicker">' + titlePlain + '</span></header>' +
       '<div class="pdf-body">' + body + ia + '</div></div>';
   }
 
@@ -681,8 +752,8 @@
     }).join('');
     return '<div class="sheet" id="ia-sheet"><div class="panel stack">' +
       '<h3>IA Céleste</h3>' +
-      '<p class="lede">' + iaLeft() + ' / ' + ((state.user && state.user.iaQuota) || 500) + ' ce mois · Human Design + astrologie</p>' +
-      '<div class="ia-log">' + (log || '<p class="muted">Une question, une réponse courte. Ex. : aujourd’hui, l’amour ?</p>') + '</div>' +
+      '<p class="lede">' + iaLeft() + ' / ' + ((state.user && state.user.iaQuota) || 500) + ' questions ce mois · amour, travail, timing…</p>' +
+      '<div class="ia-log">' + (log || '<p class="muted">Une question, une réponse douce. Ex. : aujourd’hui, l’amour ?</p>') + '</div>' +
       '<div class="field"><label class="label" for="ia-q">Ta question</label>' +
       '<input class="input" id="ia-q" placeholder="Est-ce un bon jour pour l’amour ?" ' + (state.iaBusy || iaLeft() <= 0 ? 'disabled' : '') + '></div>' +
       '<button class="btn" id="send-ia"' + (state.iaBusy || iaLeft() <= 0 ? ' disabled' : '') + '>' + (state.iaBusy ? 'Le ciel répond…' : 'Envoyer') + '</button>' +
@@ -728,18 +799,18 @@
       go.textContent = 'Connexion…';
       apiLogin(prenom, email).then(function (res) {
         if (!res.ok) {
-          alert((res.data && res.data.error) || 'Aucun abonnement pour cet email. Paie d’abord sur Systeme.io.');
+          alert((res.data && res.data.error) || 'Aucun abonnement trouvé pour cet email. Souscris d’abord, puis reviens ici.');
           go.disabled = false;
-          go.textContent = 'Entrer dans le Cercle';
+          go.textContent = 'Entrer';
           return;
         }
         applyAccess(Object.assign({ prenom: prenom, email: email }, res.data));
         afterLogin();
         render();
       }).catch(function () {
-        alert('Le Cercle n’est pas joignable pour le moment. Réessaie dans un instant.');
+        alert('Les Manuscrits Célestes ne sont pas joignables pour le moment. Réessaie dans un instant.');
         go.disabled = false;
-        go.textContent = 'Entrer dans le Cercle';
+        go.textContent = 'Entrer';
       });
     };
 
@@ -828,7 +899,7 @@
         else if (kind === 'divin') openPlanLink(PLAN_LINKS.divinCheckout);
         else if (kind === 'manage') openPlanLink(PLAN_LINKS.manageAbo);
         else if (kind === 'downgrade-celeste') {
-          alert('Pour revenir à Céleste : arrête d’abord Divin via « Gérer / arrêter », puis paie Céleste. Sinon Systeme.io peut te prélever deux fois.');
+          alert('Pour revenir à Céleste : arrête d’abord Divin via « Gérer / arrêter », puis souscris à Céleste. Ainsi tu n’es prélevé qu’une seule fois.');
           openPlanLink(PLAN_LINKS.celesteCheckout);
         }
       };
@@ -874,6 +945,6 @@
     render();
   });
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js?v=12').catch(function () {});
+    navigator.serviceWorker.register('/sw.js?v=13').catch(function () {});
   }
 })();

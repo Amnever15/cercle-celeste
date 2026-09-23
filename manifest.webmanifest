@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Cercle Céleste",
-  "short_name": "Cercle",
-  "description": "Ton manuscrit, et le ciel de ce mois.",
+  "name": "Les Manuscrits Célestes",
+  "short_name": "Manuscrits",
+  "description": "Ton manuscrit de vie, du mois et du jour.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
