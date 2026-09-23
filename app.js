@@ -76,10 +76,25 @@
   function applyAccess(d) {
     if (!d) return;
     state.user = Object.assign({}, state.user || {}, d);
+    syncProfileFlag();
     saveUser();
+  }
+  /** Recalcule profileComplete à partir des champs (évite un flag localStorage obsolète). */
+  function syncProfileFlag() {
+    if (!state.user) return;
+    var u = state.user;
+    var g = String(u.gender || '').trim().toLowerCase();
+    var okGender = g === 'femme' || g === 'homme' || g === 'autre';
+    u.profileComplete = !!(
+      String(u.birthDate || '').trim() &&
+      String(u.birthTime || '').trim() &&
+      String(u.birthPlace || '').trim() &&
+      okGender
+    );
   }
   function afterLogin() {
     /* Même si abo en pause : accès app (quotas Gratuit), pas d’écran bloquant. */
+    syncProfileFlag();
     if (needsOnboarding()) {
       state.screen = 'onboarding';
       return;
@@ -91,11 +106,28 @@
     }
   }
   function profileComplete() {
-    return !!(state.user && state.user.profileComplete);
+    if (!state.user) return false;
+    syncProfileFlag();
+    return !!state.user.profileComplete;
   }
   function needsOnboarding() {
     /* Céleste/Divin actifs : profil avant l’app. Gratuit : plus tard (jour/mois/natal). */
     return !!(canNatal() && !profileComplete());
+  }
+  /** Affiche le formulaire « Ton ciel de naissance » (jamais un simple alert). */
+  function showBirthForm(pendingKind) {
+    if (pendingKind) state.pendingAsk = pendingKind;
+    state.busy = null;
+    state.account = false;
+    state.pdf = null;
+    state.screen = 'onboarding';
+    render();
+  }
+  function isNeedProfileError(data) {
+    if (!data) return false;
+    if (data.needProfile) return true;
+    var err = String(data.error || '');
+    return /profil de naissance/i.test(err) || /ciel de naissance/i.test(err);
   }
   function goAppOrInstall() {
     if (localStorage.getItem('cercle.installedHint')) state.screen = 'app';
@@ -216,9 +248,7 @@
     if (kind === 'jour' && dailyLeft() === 0) return;
     if (kind === 'mois' && monthlyLeft() === 0) return;
     if ((kind === 'natal' || kind === 'jour' || kind === 'mois') && !profileComplete()) {
-      state.pendingAsk = kind;
-      state.screen = 'onboarding';
-      render();
+      showBirthForm(kind);
       return;
     }
     if (kind === 'natal' && state.user && state.user.natalReady) {
@@ -243,10 +273,8 @@
         if (res.data && res.data.contact) applyAccess(res.data.contact);
         if (!res.ok) {
           state.busy = null;
-          if (res.data && res.data.needProfile) {
-            state.pendingAsk = kind;
-            state.screen = 'onboarding';
-            render();
+          if (isNeedProfileError(res.data)) {
+            showBirthForm(kind);
             return;
           }
           alert((res.data && res.data.error) || 'Impossible d’écrire ce manuscrit.');
@@ -291,6 +319,8 @@
     if (!email) return;
     var birthDate = (document.getElementById('birth-date') || {}).value || '';
     var birthTime = (document.getElementById('birth-time') || {}).value || '';
+    /* Certains navigateurs envoient HH:MM:SS — on normalise en HH:MM. */
+    if (/^\d{1,2}:\d{2}:\d{2}$/.test(birthTime)) birthTime = birthTime.slice(0, 5);
     var birthPlace = ((document.getElementById('birth-place') || {}).value || '').trim();
     var genderEl = document.querySelector('input[name="gender"]:checked');
     var gender = genderEl ? genderEl.value : '';
@@ -318,6 +348,16 @@
           return;
         }
         if (res.data && res.data.contact) applyAccess(res.data.contact);
+        else {
+          state.user = Object.assign({}, state.user || {}, {
+            birthDate: birthDate,
+            birthTime: birthTime,
+            birthPlace: birthPlace,
+            gender: gender
+          });
+          syncProfileFlag();
+          saveUser();
+        }
         var pending = state.pendingAsk;
         state.pendingAsk = null;
         localStorage.setItem('cercle.installedHint', '1');
@@ -372,8 +412,9 @@
     return fetch(API + '/access?email=' + encodeURIComponent(state.user.email))
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d || !d.exists && !d.demo) return;
+        if (!d || (!d.exists && !d.demo)) return;
         state.user = Object.assign({}, state.user, d);
+        syncProfileFlag();
         saveUser();
       })
       .catch(function () {});
@@ -470,7 +511,10 @@
 
   function natalStatusLine() {
     var u = state.user || {};
-    if (!profileComplete()) return '<p class="muted">Profil de naissance : à renseigner avant la génération.</p>';
+    if (!profileComplete()) {
+      return '<p class="muted">Profil de naissance : à renseigner avant la génération.</p>' +
+        '<button class="btn" type="button" id="edit-profile-natal">Renseigner mon ciel de naissance</button>';
+    }
     if (u.natalStatus === 'generating' || state.busy === 'natal') {
       return '<p class="muted">Génération… le ciel s’écrit sur le serveur.</p>';
     }
@@ -485,11 +529,12 @@
     var months = monthsPaid();
     var left = Math.max(0, ULTIME.need - months);
     var unlocked = canUltime();
+    var readyProfile = profileComplete();
     var natalAskLabel = (state.user && state.user.natalReady) ? 'Lire les 28 pages' : 'Demander les 28 pages';
     var natalCard = canNatal()
       ? '<div class="card stack"><div class="label">' + NATAL.kicker + '</div><h2>' + NATAL.title + '</h2><p class="muted">' + NATAL.pages + ' pages · écrit une fois, à ta demande</p><p>' + NATAL.intro + '</p>' +
         natalStatusLine() +
-        askBtn('natal', natalAskLabel, 'Lire les 28 pages') +
+        (readyProfile ? askBtn('natal', natalAskLabel, 'Lire les 28 pages') : '') +
         (state.user && state.user.natalReady && natalPdfUrl()
           ? '<a class="btn ghost" href="' + natalPdfUrl() + '" target="_blank" rel="noopener">Télécharger le PDF</a>'
           : '') +
@@ -772,9 +817,10 @@
     var ep = document.getElementById('edit-profile');
     if (ep) ep.onclick = function () {
       state.account = false;
-      state.screen = 'onboarding';
-      render();
+      showBirthForm(null);
     };
+    var epn = document.getElementById('edit-profile-natal');
+    if (epn) epn.onclick = function () { showBirthForm('natal'); };
     document.querySelectorAll('[data-plan-link]').forEach(function (b) {
       b.onclick = function () {
         var kind = b.getAttribute('data-plan-link');
@@ -821,10 +867,13 @@
 
   paintSky();
   load();
+  syncProfileFlag();
   render();
   refreshAccess().then(function () {
     if (state.user) afterLogin();
     render();
   });
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js?v=12').catch(function () {});
+  }
 })();
