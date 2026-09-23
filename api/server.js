@@ -90,7 +90,7 @@ const LOG = resolveLogPath();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file', '/ultime-file', '/download-all'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/couple-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file', '/ultime-file', '/download-all'];
 const LAST_WEBHOOKS_MAX = 20;
 const IA_MESSAGES_MAX = 1000;
 
@@ -1080,6 +1080,31 @@ async function handle(req, res) {
       return send(res, 200, {
         ok: true,
         action: 'ADMIN_NATAL_RESET',
+        contact: publicContact(c)
+      }, req);
+    }
+
+    /* POST /admin/couple-reset?secret=… — efface couple + quota mois (retest « Demander le manuscrit de couple »). */
+    if (route === '/admin/couple-reset' && req.method === 'POST') {
+      if (!SECRET || url.searchParams.get('secret') !== SECRET) {
+        return send(res, 401, { error: 'secret' }, req);
+      }
+      const body = (await readBody(req)).body;
+      const email = normEmail(body.email);
+      if (!email) return send(res, 400, { error: 'email requis' }, req);
+      const store = readStore();
+      const c = store.contacts[email];
+      if (!c) return send(res, 404, { error: 'compte inconnu' }, req);
+      const coupleJobKey = 'couple:' + email;
+      if (coupleGen.runningJobs[coupleJobKey]) {
+        return send(res, 409, { error: 'génération en cours — réessaie dans un moment' }, req);
+      }
+      coupleGen.clearCouple(c);
+      writeStore(store);
+      logLine('ADMIN_COUPLE_RESET ' + email);
+      return send(res, 200, {
+        ok: true,
+        action: 'ADMIN_COUPLE_RESET',
         contact: publicContact(c)
       }, req);
     }

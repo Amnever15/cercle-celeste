@@ -116,6 +116,44 @@ function hasCoupleFile(contact) {
   return !!resolveCoupleFile(contact);
 }
 
+function clearCouple(contact) {
+  if (!contact) return;
+  var paths = [];
+  [contact.coupleHtmlPath, contact.coupleJsonPath].forEach(function (p) {
+    if (p && paths.indexOf(p) < 0) paths.push(p);
+  });
+  if (contact.email) {
+    var keys = [];
+    if (contact.coupleKey) keys.push(contact.coupleKey);
+    var now = monthKey();
+    if (keys.indexOf(now) < 0) keys.push(now);
+    keys.forEach(function (k) {
+      var op = couplePaths(contact.email, k);
+      [op.html, op.json, op.txt].forEach(function (p) {
+        if (paths.indexOf(p) < 0) paths.push(p);
+      });
+    });
+  }
+  paths.forEach(function (p) {
+    try {
+      if (fileExists(p)) fs.unlinkSync(p);
+    } catch (_) {}
+  });
+  contact.coupleReady = false;
+  contact.coupleStatus = 'none';
+  contact.coupleHtmlPath = null;
+  contact.coupleJsonPath = null;
+  contact.coupleKey = null;
+  contact.coupleGeneratedAt = null;
+  contact.coupleProgress = null;
+  contact.coupleProgressPct = null;
+  contact.coupleError = null;
+  contact.couplePagesEst = null;
+  /* Autorise 1 nouvelle génération ce mois (quota couple = 1 / mois civil). */
+  contact.coupleUsed = 0;
+  contact.coupleUsedMonth = null;
+}
+
 function reconcileCouple(contact) {
   if (!contact) return false;
   if (!contact.coupleReady) return false;
@@ -306,6 +344,7 @@ module.exports = {
   monthKey,
   hasCoupleFile,
   resolveCoupleFile,
+  clearCouple,
   reconcileCouple,
   loadCouplePlain,
   generateCoupleManuscript,
