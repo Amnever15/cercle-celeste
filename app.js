@@ -742,6 +742,152 @@
     }
   }
 
+  /* Dictée gratuite : SpeechRecognition / webkitSpeechRecognition (fr-FR). */
+  var _iaRecognition = null;
+  var _iaListening = false;
+  var _iaListenFinal = '';
+  var _iaListenStopManual = false;
+
+  function iaSpeechRecognitionCtor() {
+    if (typeof window === 'undefined') return null;
+    return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  }
+
+  function iaSpeechSupported() {
+    return !!iaSpeechRecognitionCtor();
+  }
+
+  function setIaMicUi(listening) {
+    _iaListening = !!listening;
+    var btn = document.getElementById('ia-mic');
+    if (!btn) return;
+    btn.classList.toggle('is-listening', _iaListening);
+    btn.setAttribute('aria-pressed', _iaListening ? 'true' : 'false');
+    btn.setAttribute('aria-label', _iaListening ? 'Arrêter la dictée' : 'Dicter ta question');
+  }
+
+  function stopIaListen(opts) {
+    opts = opts || {};
+    _iaListenStopManual = !!opts.manual;
+    if (_iaRecognition) {
+      try { _iaRecognition.stop(); } catch (e) {
+        try { _iaRecognition.abort(); } catch (e2) { /* ignore */ }
+      }
+    }
+    _iaRecognition = null;
+    setIaMicUi(false);
+  }
+
+  function startIaListen() {
+    var Ctor = iaSpeechRecognitionCtor();
+    if (!Ctor) {
+      alert(
+        'La dictée vocale n’est pas disponible sur ce navigateur. ' +
+        'Sur iPhone ou iPad, Safari à jour peut la proposer ; sinon tape ta question. ' +
+        'Chrome ou Edge sur ordinateur fonctionnent le mieux.'
+      );
+      return;
+    }
+    var input = document.getElementById('ia-q');
+    if (!input || input.disabled) return;
+    if (state.iaBusy || iaLeft() <= 0) return;
+
+    stopIaSpeak();
+    _iaListenFinal = String(input.value || '').trim();
+    _iaListenStopManual = false;
+
+    var rec = new Ctor();
+    _iaRecognition = rec;
+    rec.lang = 'fr-FR';
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+
+    rec.onstart = function () { setIaMicUi(true); };
+    rec.onresult = function (event) {
+      var interim = '';
+      var finalChunk = '';
+      for (var i = event.resultIndex; i < event.results.length; i++) {
+        var r = event.results[i];
+        var t = (r[0] && r[0].transcript) || '';
+        if (r.isFinal) finalChunk += t;
+        else interim += t;
+      }
+      if (finalChunk) {
+        _iaListenFinal = (_iaListenFinal ? _iaListenFinal + ' ' : '') + finalChunk;
+        _iaListenFinal = _iaListenFinal.replace(/\s+/g, ' ').trim();
+      }
+      var shown = (_iaListenFinal + (interim ? ' ' + interim : '')).replace(/\s+/g, ' ').trim();
+      if (input) input.value = shown;
+    };
+    rec.onerror = function (event) {
+      var err = event && event.error;
+      if (err === 'not-allowed' || err === 'service-not-allowed') {
+        alert('Micro bloqué. Autorise le micro dans ton navigateur pour dicter ta question.');
+      } else if (err === 'audio-capture') {
+        alert('Aucun micro détecté. Branche un micro ou autorise l’accès audio.');
+      }
+      /* aborted / no-speech : silencieux */
+    };
+    rec.onend = function () {
+      var wasManual = _iaListenStopManual;
+      var text = (_iaListenFinal || (input && input.value) || '').trim();
+      if (input && text) input.value = text;
+      _iaRecognition = null;
+      _iaListenStopManual = false;
+      setIaMicUi(false);
+      if (wasManual) return;
+      if (text && !state.iaBusy && iaLeft() > 0) {
+        sendIa();
+        return;
+      }
+      if (input && text) {
+        var sendBtn = document.getElementById('send-ia');
+        if (sendBtn && !sendBtn.disabled) sendBtn.focus();
+        else input.focus();
+      }
+    };
+
+    try {
+      rec.start();
+      setIaMicUi(true);
+    } catch (e) {
+      _iaRecognition = null;
+      setIaMicUi(false);
+      alert('Impossible de démarrer la dictée. Réessaie dans un instant.');
+    }
+  }
+
+  function toggleIaMic() {
+    if (_iaListening) {
+      stopIaListen({ manual: true });
+      return;
+    }
+    if (!iaSpeechSupported()) {
+      alert(
+        'La dictée vocale n’est pas disponible sur ce navigateur. ' +
+        'Sur iPhone ou iPad, Safari à jour peut la proposer ; sinon tape ta question. ' +
+        'Chrome ou Edge sur ordinateur fonctionnent le mieux.'
+      );
+      return;
+    }
+    startIaListen();
+  }
+
+  function bindIaMicButton() {
+    var btn = document.getElementById('ia-mic');
+    if (!btn) return;
+    if (!iaSpeechSupported()) {
+      btn.title = 'Dictée non supportée sur ce navigateur';
+    }
+    btn.onclick = function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleIaMic();
+    };
+    if (_iaListening) setIaMicUi(true);
+  }
+
   function iaBubbleHtml(m) {
     var text = escapeHtml(m.text);
     if (m.role === 'me') {
@@ -784,6 +930,11 @@
     }
     var input = document.getElementById('ia-q');
     if (input) input.disabled = disabled;
+    var mic = document.getElementById('ia-mic');
+    if (mic) {
+      mic.disabled = disabled;
+      if (disabled && _iaListening) stopIaListen({ manual: true });
+    }
     return true;
   }
 
@@ -2399,6 +2550,7 @@
 
   function sendIa(opts) {
     opts = opts || {};
+    stopIaListen({ manual: true });
     var input = document.getElementById('ia-q');
     var q = String(opts.question != null ? opts.question : (input ? input.value : '') || '').trim();
     if (!q) return;
@@ -2789,7 +2941,16 @@
       '<div class="ia-log" id="ia-log">' + (log || empty) + '</div>' +
       '<div class="ia-compose">' +
         '<div class="field"><label class="label" for="ia-q">Ta question</label>' +
-        '<input class="input" id="ia-q" placeholder="Que me révèle ce passage ?" ' + (disabled ? 'disabled' : '') + ' autocomplete="off"></div>' +
+        '<div class="ia-q-row">' +
+          '<input class="input" id="ia-q" placeholder="Que me révèle ce passage ?" ' + (disabled ? 'disabled' : '') + ' autocomplete="off">' +
+          '<button type="button" class="ia-mic" id="ia-mic" aria-label="Dicter ta question" aria-pressed="false"' +
+            (disabled ? ' disabled' : '') +
+            ' title="Dicter ta question">' +
+            '<svg class="ia-mic-ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +
+              '<path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/>' +
+            '</svg>' +
+          '</button>' +
+        '</div></div>' +
         '<button class="btn" id="send-ia"' + (disabled ? ' disabled' : '') + '>' +
           (state.iaBusy ? 'Le ciel répond…' : (left <= 0 ? 'Le ciel se repose' : 'Envoyer')) +
         '</button>' +
@@ -3384,6 +3545,7 @@
     var cp = document.getElementById('close-pdf');
     if (cp) cp.onclick = function () {
       stopIaSpeak();
+      stopIaListen({ manual: true });
       clearPdfFullscreen();
       state.pdf = null;
       hideMsSelBar();
@@ -3392,6 +3554,7 @@
     bindPdfFullscreen();
     bindManuscriptSelection();
     bindIaSpeakButtons(document.getElementById('ia-log') || document);
+    bindIaMicButton();
     var si = document.getElementById('send-ia');
     if (si) si.onclick = function () { sendIa(); };
     var iq = document.getElementById('ia-q');

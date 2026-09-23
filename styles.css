@@ -804,6 +804,56 @@ html[data-theme="light"] .ms-sel-btn {
 .reader-ia-head .label { margin-bottom: .15rem; }
 .ia-card .ia-portrait { margin-bottom: .5rem; }
 .ia-compose { display: flex; flex-direction: column; gap: 10px; }
+.ia-q-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.ia-q-row .input {
+  flex: 1;
+  min-width: 0;
+}
+.ia-mic {
+  flex-shrink: 0;
+  width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(201,168,76,.35);
+  background: transparent;
+  color: var(--gold);
+  cursor: pointer;
+  line-height: 1;
+  transition: border-color .2s ease, color .2s ease, background .2s ease, box-shadow .2s ease;
+}
+.ia-mic:hover,
+.ia-mic:focus-visible {
+  border-color: var(--gold);
+  color: var(--gold-light);
+  outline: none;
+}
+.ia-mic:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.ia-mic.is-listening,
+.ia-mic[aria-pressed="true"] {
+  color: var(--gold-light);
+  border-color: rgba(201, 168, 76, .75);
+  background: rgba(201,168,76,.14);
+  animation: ia-mic-pulse 1.25s ease-in-out infinite;
+}
+.ia-mic-ic { display: block; }
+@keyframes ia-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201, 168, 76, .4); }
+  50% { box-shadow: 0 0 0 7px rgba(201, 168, 76, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ia-mic.is-listening,
+  .ia-mic[aria-pressed="true"] { animation: none; }
+}
 
 @media (min-width: 720px) {
   .screen { max-width: 480px; margin: 0 auto; border-left: 1px solid var(--screen-edge); border-right: 1px solid var(--screen-edge); }
