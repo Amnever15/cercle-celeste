@@ -40,7 +40,8 @@ loadEnv();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/systeme-webhook', '/generate', '/ia'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/systeme-webhook', '/webhook-debug', '/generate', '/ia'];
+const LAST_WEBHOOKS_MAX = 20;
 
 function isWeakSecret(s) {
   const t = String(s || '');
@@ -58,16 +59,45 @@ function warnProduction() {
 }
 
 function readStore() {
-  try { return JSON.parse(fs.readFileSync(STORE, 'utf8')); }
-  catch (e) { return { contacts: {} }; }
+  try {
+    const data = JSON.parse(fs.readFileSync(STORE, 'utf8'));
+    if (!data.contacts || typeof data.contacts !== 'object') data.contacts = {};
+    if (!Array.isArray(data.lastWebhooks)) data.lastWebhooks = [];
+    return data;
+  } catch (e) {
+    return { contacts: {}, lastWebhooks: [] };
+  }
 }
 function writeStore(data) {
+  if (!data.lastWebhooks) data.lastWebhooks = [];
   fs.writeFileSync(STORE, JSON.stringify(data, null, 2));
 }
 function logLine(msg) {
   const line = new Date().toISOString() + ' ' + msg + '\n';
-  fs.appendFileSync(LOG, line);
+  try { fs.appendFileSync(LOG, line); } catch (e) { /* ignore */ }
   console.log(msg);
+}
+
+function readLogTail(maxLines) {
+  try {
+    const raw = fs.readFileSync(LOG, 'utf8');
+    const lines = raw.split(/\r?\n/).filter(Boolean);
+    return lines.slice(-Math.max(1, maxLines || 40));
+  } catch (e) {
+    return [];
+  }
+}
+
+/** Keep last N webhook attempts (auth ok or not) for /webhook-debug. */
+function pushLastWebhook(entry) {
+  const store = readStore();
+  if (!Array.isArray(store.lastWebhooks)) store.lastWebhooks = [];
+  store.lastWebhooks.unshift(entry);
+  if (store.lastWebhooks.length > LAST_WEBHOOKS_MAX) {
+    store.lastWebhooks = store.lastWebhooks.slice(0, LAST_WEBHOOKS_MAX);
+  }
+  writeStore(store);
+  return store;
 }
 
 function normEmail(e) {
@@ -87,6 +117,7 @@ function emptyContact(email) {
     canceledAt: null,
     ultimeUnlocked: false,
     plan: 'gratuit',
+    lastPaidPlan: null,
     dailyUsed: 0,
     monthlyUsed: 0,
     iaUsed: 0,
@@ -112,8 +143,10 @@ function grantPayment(c, saleId, prenom, nom, planId) {
   c.active = true;
   c.canceledAt = null;
   c.lastPaymentAt = new Date().toISOString();
+  // Tags ou prix : on pose le plan. Sans indice, on ne casse pas un plan déjà payé.
   if (planId === 'divin' || planId === 'celeste') c.plan = planId;
   else if (!c.plan || c.plan === 'gratuit') c.plan = 'celeste';
+  plans.rememberPaidPlan(c, c.plan);
   const id = saleId ? String(saleId) : '';
   if (id && c.saleIds.indexOf(id) >= 0) {
     refreshUltime(c);
@@ -126,9 +159,34 @@ function grantPayment(c, saleId, prenom, nom, planId) {
 }
 
 function revoke(c) {
-  c.active = false;
-  c.canceledAt = new Date().toISOString();
-  refreshUltime(c);
+  /* Garde Céleste/Divin + monthsPaid ; active=false → droits Gratuit + bannière pause. */
+  plans.revokePlan(c);
+}
+
+function applyTagAccess(c, info, event) {
+  if (info.prenom) c.prenom = info.prenom;
+  if (info.nom) c.nom = info.nom;
+  if (info.hasDivin) {
+    c.plan = 'divin';
+    plans.rememberPaidPlan(c, 'divin');
+    c.active = true;
+    c.canceledAt = null;
+    refreshUltime(c);
+    return 'TAG_DIVIN_ACTIVE';
+  }
+  if (info.hasCeleste) {
+    c.plan = 'celeste';
+    plans.rememberPaidPlan(c, 'celeste');
+    c.active = true;
+    c.canceledAt = null;
+    refreshUltime(c);
+    return 'TAG_CELESTE_ACTIVE';
+  }
+  var contactLike = event === 'TAG' || event === 'CONTACT' || event === 'UNKNOWN';
+  if (!contactLike) return 'IGNORED_' + event;
+  if (event === 'UNKNOWN' && !info.sawTagField) return 'IGNORED_' + event;
+  revoke(c);
+  return 'TAG_ABSENT_REVOKED';
 }
 
 function pick(obj, paths) {
@@ -136,40 +194,205 @@ function pick(obj, paths) {
     var parts = paths[i].split('.');
     var v = obj;
     for (var j = 0; j < parts.length && v != null; j++) v = v[parts[j]];
-    if (v != null && v !== '') return v;
+    if (v == null || v === '') continue;
+    if (typeof v === 'object') continue;
+    return v;
   }
   return '';
 }
 
-function parseEvent(req, body) {
+function looksLikeEmail(s) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
+}
+
+function fieldKey(f) {
+  if (!f || typeof f !== 'object') return '';
+  return String(f.slug || f.field || f.name || f.key || f.fieldName || f.label || '')
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+}
+
+function valueFromFields(fields, names) {
+  if (!fields) return '';
+  var wanted = {};
+  names.forEach(function (n) { wanted[String(n).toLowerCase()] = true; });
+  if (Array.isArray(fields)) {
+    for (var i = 0; i < fields.length; i++) {
+      var f = fields[i];
+      if (!f || typeof f !== 'object') continue;
+      if (!wanted[fieldKey(f)]) continue;
+      var val = f.value != null ? f.value : (f.val != null ? f.val : f.text);
+      if (val != null && val !== '' && typeof val !== 'object') return val;
+    }
+    return '';
+  }
+  if (typeof fields === 'object') {
+    for (var j = 0; j < names.length; j++) {
+      var v = fields[names[j]];
+      if (v != null && v !== '' && typeof v !== 'object') return v;
+    }
+  }
+  return '';
+}
+
+function emailFromFields(fields) {
+  if (!fields) return '';
+  if (typeof fields === 'string' && looksLikeEmail(fields)) return fields;
+  if (Array.isArray(fields)) {
+    for (var i = 0; i < fields.length; i++) {
+      var f = fields[i];
+      if (typeof f === 'string' && looksLikeEmail(f)) return f;
+      if (!f || typeof f !== 'object') continue;
+      var key = fieldKey(f);
+      var val = f.value != null ? f.value : (f.email || f.val);
+      if ((key === 'email' || key === 'e_mail' || key === 'mail' || key === 'email_address') && looksLikeEmail(val)) return val;
+      if (looksLikeEmail(f.email)) return f.email;
+    }
+    return '';
+  }
+  if (typeof fields === 'object') {
+    if (looksLikeEmail(fields.email)) return fields.email;
+    if (looksLikeEmail(fields.Email)) return fields.Email;
+    if (looksLikeEmail(fields.emailAddress)) return fields.emailAddress;
+    if (looksLikeEmail(fields.email_address)) return fields.email_address;
+  }
+  return '';
+}
+
+function deepFindEmail(obj, depth) {
+  if (obj == null || depth > 8) return '';
+  if (typeof obj === 'string') return looksLikeEmail(obj) ? obj : '';
+  if (typeof obj !== 'object') return '';
+  if (Array.isArray(obj)) {
+    for (var i = 0; i < obj.length; i++) {
+      var a = deepFindEmail(obj[i], depth + 1);
+      if (a) return a;
+    }
+    return '';
+  }
+  var keys = Object.keys(obj);
+  for (var k = 0; k < keys.length; k++) {
+    var key = keys[k];
+    var val = obj[key];
+    if (/email/i.test(key) && looksLikeEmail(val)) return val;
+  }
+  for (var j = 0; j < keys.length; j++) {
+    var nested = deepFindEmail(obj[keys[j]], depth + 1);
+    if (nested) return nested;
+  }
+  return '';
+}
+
+function extractEmail(body) {
+  if (!body || typeof body !== 'object') return '';
+  var direct = pick(body, [
+    'email', 'Email', 'emailAddress', 'email_address', 'contactEmail', 'contact_email',
+    'mail', 'userEmail', 'customerEmail', 'customer_email', 'buyerEmail',
+    'contact.email', 'contact.Email', 'contact.emailAddress', 'contact.email_address',
+    'contact.contact.email', 'contact.contact.Email', 'contact.contact.emailAddress',
+    'customer.email', 'customer.Email', 'customer.emailAddress', 'customer.email_address',
+    'buyer.email', 'user.email', 'subscriber.email', 'client.email',
+    'data.email', 'data.contact.email', 'data.customer.email',
+    'data.contact.contact.email', 'data.customer.Email', 'data.customer.emailAddress',
+    'payload.email', 'payload.contact.email', 'payload.customer.email',
+    'payload.contact.contact.email',
+    'order.email', 'order.customer.email', 'order.customerEmail',
+    'orderItem.email'
+  ]);
+  if (looksLikeEmail(direct)) return normEmail(direct);
+  var nested = [
+    body.fields,
+    body.contact && body.contact.fields,
+    body.contact && body.contact.contact && body.contact.contact.fields,
+    body.customer && body.customer.fields,
+    body.data && body.data.fields,
+    body.data && body.data.contact && body.data.contact.fields,
+    body.data && body.data.customer && body.data.customer.fields,
+    body.payload && body.payload.fields,
+    body.payload && body.payload.contact && body.payload.contact.fields,
+    body.payload && body.payload.customer && body.payload.customer.fields
+  ];
+  for (var i = 0; i < nested.length; i++) {
+    var found = emailFromFields(nested[i]);
+    if (looksLikeEmail(found)) return normEmail(found);
+  }
+  var deep = deepFindEmail(body, 0);
+  return looksLikeEmail(deep) ? normEmail(deep) : '';
+}
+
+function parseEvent(req, body, url) {
+  var hook = '';
+  try {
+    var u = url || new URL(req.url, 'http://' + (req.headers.host || 'localhost'));
+    hook = String(u.searchParams.get('hook') || '').toLowerCase().replace(/_/g, '-');
+  } catch (e) { hook = ''; }
+  if (!hook) hook = String((body && body.hook) || '').toLowerCase().replace(/_/g, '-');
+  if (hook === 'sale-canceled' || hook === 'sale-cancelled' || hook === 'canceled' || hook === 'cancelled' || hook === 'refund') return 'REVOKE';
+  if (hook === 'sale-new' || hook === 'new-sale') return 'SALE_NEW';
+  if (hook === 'tag-added' || hook === 'tags-added' || hook === 'tag-add') return 'TAG';
+  if (hook === 'tag-removed' || hook === 'tags-removed' || hook === 'tag-remove') return 'TAG';
+  if (hook === 'tags' || hook === 'tag' || hook === 'contact') return 'TAG';
+
   var header = (req.headers['x-webhook-event'] || req.headers['x-systeme-event'] || '').toUpperCase();
-  var named = String(pick(body, ['event', 'type', 'name', 'trigger']) || header || '').toUpperCase();
-  if (/SALE_NEW|NEW_SALE|NOUVELLE VENTE|SUBSCRIPTION_STARTED|PAYMENT_SUCCEEDED|SALE\s*NEW/.test(named)) return 'SALE_NEW';
+  var named = String(pick(body, ['event', 'type', 'name', 'trigger', 'action']) || header || '').toUpperCase();
+  if (/TAG_REMOVED|CONTACT_TAG_REMOVED|TAG_ADDED|CONTACT_TAG_ADDED|TAG.?ADD|TAG.?REMOVE/.test(named)) return 'TAG';
+  if (/SALE_NEW|NEW_SALE|NOUVELLE VENTE|SUBSCRIPTION_STARTED|PAYMENT_SUCCEEDED|SALE\s*NEW|CUSTOMER\.SALE\.COMPLETED|SALE\.COMPLETED/.test(named)) return 'SALE_NEW';
   if (/SALE_CANCELED|SALE_CANCELLED|CANCELED|CANCELLED|REFUND|REVOK|UNPAID|FAILED|PAYMENT_FAILED|ECHEC/.test(named)) return 'REVOKE';
   if (/SALE_NEW/.test(header)) return 'SALE_NEW';
   if (/SALE_CANCELED/.test(header)) return 'REVOKE';
-  // Workflow Systeme.io "nouvelle vente" sans nom clair : présence d'un order / pricePlan
-  if (body.order || body.pricePlan || body.sale) return 'SALE_NEW';
+  if (/CONTACT_TAG/.test(header)) return 'TAG';
+  if (/CONTACT_OPT_IN|CONTACT_CREATED|CONTACT/.test(named)) return 'CONTACT';
+  if (/TAG/.test(named)) return 'TAG';
+  // Native SALE_NEW / workflow "nouvelle vente" : order / pricePlan / customer+orderItem
+  if (body.order || body.pricePlan || body.sale || body.orderItem) return 'SALE_NEW';
+  if (body.customer && (body.funnelStep || body.coupon)) return 'SALE_NEW';
+  if (body.tag && (body.contact || (body.contact && body.contact.contact))) return 'TAG';
   return named || 'UNKNOWN';
 }
 
 function extract(body) {
+  var tagInfo = plans.inspectTags(body);
+  var prenom = pick(body, [
+    'first_name', 'firstName', 'prenom', 'contact.first_name',
+    'contact.firstname', 'contact.contact.first_name',
+    'customer.first_name', 'customer.firstName',
+    'customer.fields.first_name', 'contact.fields.first_name',
+    'data.customer.fields.first_name', 'data.contact.fields.first_name'
+  ]);
+  var nom = pick(body, [
+    'surname', 'lastName', 'last_name', 'nom',
+    'contact.surname', 'contact.last_name', 'contact.contact.surname',
+    'customer.surname', 'customer.lastName',
+    'customer.fields.surname', 'contact.fields.surname',
+    'data.customer.fields.surname', 'data.contact.fields.surname'
+  ]);
+  if (!prenom) {
+    prenom = valueFromFields(body.fields, ['first_name', 'firstname', 'prenom'])
+      || valueFromFields(body.contact && body.contact.fields, ['first_name', 'firstname', 'prenom'])
+      || valueFromFields(body.contact && body.contact.contact && body.contact.contact.fields, ['first_name', 'firstname', 'prenom'])
+      || valueFromFields(body.customer && body.customer.fields, ['first_name', 'firstname', 'prenom'])
+      || valueFromFields(body.data && body.data.customer && body.data.customer.fields, ['first_name', 'firstname', 'prenom']);
+  }
+  if (!nom) {
+    nom = valueFromFields(body.fields, ['surname', 'last_name', 'lastname', 'nom'])
+      || valueFromFields(body.contact && body.contact.fields, ['surname', 'last_name', 'lastname', 'nom'])
+      || valueFromFields(body.contact && body.contact.contact && body.contact.contact.fields, ['surname', 'last_name', 'lastname', 'nom'])
+      || valueFromFields(body.customer && body.customer.fields, ['surname', 'last_name', 'lastname', 'nom'])
+      || valueFromFields(body.data && body.data.customer && body.data.customer.fields, ['surname', 'last_name', 'lastname', 'nom']);
+  }
   return {
-    email: normEmail(pick(body, [
-      'email', 'contact.email', 'contact.fields.email', 'customer.email',
-      'data.email', 'payload.email', 'contactEmail'
-    ])),
-    prenom: String(pick(body, [
-      'first_name', 'firstName', 'prenom', 'contact.first_name',
-      'contact.fields.first_name', 'contact.firstname'
-    ]) || ''),
-    nom: String(pick(body, [
-      'surname', 'lastName', 'nom', 'contact.surname', 'contact.fields.surname'
-    ]) || ''),
+    email: extractEmail(body),
+    prenom: String(prenom || ''),
+    nom: String(nom || ''),
     saleId: String(pick(body, [
-      'id', 'saleId', 'order.id', 'orderItem.id', 'uuid', 'transactionId'
+      'id', 'saleId', 'order.id', 'orderItem.id', 'uuid', 'transactionId',
+      'data.order.id', 'data.orderItem.id', 'pricePlan.id'
     ]) || ''),
-    plan: plans.detectPlan(body)
+    plan: tagInfo.plan || plans.detectPlanFallback(body),
+    tags: tagInfo.tags,
+    hasDivin: tagInfo.hasDivin,
+    hasCeleste: tagInfo.hasCeleste,
+    sawTagField: tagInfo.sawTagField
   };
 }
 
@@ -181,7 +404,8 @@ function corsHeaders(req) {
   const origin = req.headers.origin;
   return {
     'Access-Control-Allow-Origin': origin || '*',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Webhook-Secret, X-Webhook-Event',
+    'Access-Control-Allow-Headers':
+      'Content-Type, Authorization, X-Webhook-Secret, X-Webhook-Event, X-Webhook-Signature, X-Systemeio-Signature',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     Vary: 'Origin'
   };
@@ -195,19 +419,20 @@ function send(res, code, obj, req) {
   res.end(json);
 }
 
+/** @returns {Promise<{ raw: string, body: object }>} */
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     req.on('data', (c) => chunks.push(c));
     req.on('end', () => {
       const raw = Buffer.concat(chunks).toString('utf8');
-      if (!raw) return resolve({});
-      try { resolve(JSON.parse(raw)); }
+      if (!raw) return resolve({ raw: '', body: {} });
+      try { return resolve({ raw: raw, body: JSON.parse(raw) }); }
       catch (e) {
         const params = new URLSearchParams(raw);
         const o = {};
         params.forEach((v, k) => { o[k] = v; });
-        resolve(Object.keys(o).length ? o : { raw: raw });
+        resolve({ raw: raw, body: Object.keys(o).length ? o : { raw: raw } });
       }
     });
     req.on('error', reject);
@@ -227,14 +452,141 @@ function queryVal(query, key) {
   return query[key] || '';
 }
 
-function checkSecret(req, query, body) {
-  const got = req.headers['x-webhook-secret']
-    || req.headers['x-webhook-signature']
-    || queryVal(query, 'secret')
-    || body.secret
-    || '';
-  if (!SECRET) return false;
-  return safeEqual(got, SECRET);
+function bearerToken(req) {
+  const h = String(req.headers.authorization || '');
+  const m = h.match(/^\s*Bearer\s+(.+)\s*$/i);
+  return m ? m[1].trim() : '';
+}
+
+/**
+ * Systeme.io docs (developer.systeme.io/docs/webhooks):
+ * - Secret field = HMAC *key*, NOT a password sent as plaintext
+ * - Signature = hex HMAC-SHA256 of the (normalized) JSON body in X-Webhook-Signature
+ * Normalization: compact JSON, \/ for slashes, \uXXXX for non-ASCII
+ *
+ * CRITICAL: Never compare X-Webhook-Signature to WEBHOOK_SECRET as strings.
+ * Systeme.io often sends BOTH ?secret=… and X-Webhook-Signature (HMAC).
+ * A matching ?secret= must win even when the HMAC header is present / wrong.
+ */
+const WEBHOOK_AUTH_VERSION = 'v2-hmac-aware';
+
+function normalizeSystemeJson(obj) {
+  return JSON.stringify(obj)
+    .replace(/\//g, '\\/')
+    .replace(/[\u007f-\uffff]/g, function (ch) {
+      return '\\u' + ('0000' + ch.charCodeAt(0).toString(16)).slice(-4);
+    });
+}
+
+function hmacSha256Hex(secret, payload) {
+  return crypto.createHmac('sha256', String(secret)).update(String(payload), 'utf8').digest('hex');
+}
+
+function signatureHeader(req) {
+  return String(
+    req.headers['x-webhook-signature']
+    || req.headers['x-systemeio-signature']
+    || req.headers['x-systeme-signature']
+    || ''
+  ).trim();
+}
+
+/** True only for dedicated plaintext secret headers — never signature headers. */
+function plaintextSecretFromHeaders(req) {
+  return String(
+    req.headers['x-webhook-secret']
+    || req.headers['x-secret']
+    || ''
+  ).trim();
+}
+
+function verifySystemeHmac(req, rawBody, parsedBody, secret) {
+  const key = secret == null ? SECRET : secret;
+  const sig = signatureHeader(req);
+  if (!key || !sig) return false;
+  const got = sig.toLowerCase().replace(/^sha256=/, '');
+  // Hex HMAC is ~64 chars; a short plaintext secret in this header is never valid HMAC.
+  if (got.length < 32) return false;
+  const candidates = [];
+  if (rawBody) candidates.push(String(rawBody));
+  if (parsedBody && typeof parsedBody === 'object') {
+    try {
+      const norm = normalizeSystemeJson(parsedBody);
+      if (norm && candidates.indexOf(norm) < 0) candidates.push(norm);
+      const compact = JSON.stringify(parsedBody);
+      if (compact && candidates.indexOf(compact) < 0) candidates.push(compact);
+    } catch (e) { /* ignore */ }
+  }
+  for (var i = 0; i < candidates.length; i++) {
+    if (safeEqual(got, hmacSha256Hex(key, candidates[i]))) return true;
+  }
+  return false;
+}
+
+/**
+ * Auth result (no secret values logged):
+ *   ok + via: plaintext | hmac
+ *   !ok + via: no-server-secret | missing | plaintext-mismatch | hmac-mismatch
+ * Diagnostics: hasQuery, hasPlainHeader, hasBearer, hasSig, queryMatch, plainMatch
+ *
+ * Order:
+ *   1) Matching plaintext (?secret= / headers / bearer) ALWAYS wins — even if
+ *      X-Webhook-Signature is present and would fail as a password comparison.
+ *   2) Valid Systeme.io HMAC (secret = key only).
+ *   Signature headers are never treated as plaintext passwords.
+ */
+function checkSecret(req, query, body, rawBody) {
+  const hasQuery = !!queryVal(query, 'secret');
+  const hasPlainHeader = !!plaintextSecretFromHeaders(req);
+  const hasBearer = !!bearerToken(req);
+  const hasSig = !!signatureHeader(req);
+  const diag = {
+    hasQuery: hasQuery,
+    hasPlainHeader: hasPlainHeader,
+    hasBearer: hasBearer,
+    hasSig: hasSig,
+    queryMatch: false,
+    plainMatch: false,
+    secretLen: SECRET ? String(SECRET).length : 0
+  };
+
+  if (!SECRET) {
+    return Object.assign({ ok: false, via: 'no-server-secret' }, diag);
+  }
+
+  // 1) Plaintext secret FIRST — must win even if X-Webhook-Signature is present.
+  //    Signature headers are intentionally excluded from this list.
+  const plaintextCandidates = [
+    { src: 'query', val: queryVal(query, 'secret') },
+    { src: 'body', val: body && body.secret },
+    { src: 'header', val: plaintextSecretFromHeaders(req) },
+    { src: 'bearer', val: bearerToken(req) }
+  ];
+  var plaintextProvided = false;
+  for (var i = 0; i < plaintextCandidates.length; i++) {
+    const val = plaintextCandidates[i].val;
+    if (!val) continue;
+    plaintextProvided = true;
+    if (safeEqual(String(val), SECRET)) {
+      if (plaintextCandidates[i].src === 'query') diag.queryMatch = true;
+      else diag.plainMatch = true;
+      return Object.assign({ ok: true, via: 'plaintext' }, diag);
+    }
+  }
+
+  // 2) Systeme.io HMAC — Secret field is the HMAC key only (never compared as password).
+  if (hasSig && verifySystemeHmac(req, rawBody || '', body || {}, SECRET)) {
+    return Object.assign({ ok: true, via: 'hmac' }, diag);
+  }
+
+  if (plaintextProvided) {
+    // ?secret= / header was sent but ≠ WEBHOOK_SECRET (and HMAC did not save it).
+    return Object.assign({ ok: false, via: 'plaintext-mismatch' }, diag);
+  }
+  if (hasSig) {
+    return Object.assign({ ok: false, via: 'hmac-mismatch' }, diag);
+  }
+  return Object.assign({ ok: false, via: 'missing' }, diag);
 }
 
 async function handle(req, res) {
@@ -253,7 +605,8 @@ async function handle(req, res) {
         service: 'cercle-celeste',
         ultimeMonths: ULTIME_MONTHS,
         dev: DEV,
-        hasSecret: !!(SECRET && !isWeakSecret(SECRET))
+        hasSecret: !!(SECRET && !isWeakSecret(SECRET)),
+        webhookAuth: WEBHOOK_AUTH_VERSION
       }, req);
     }
 
@@ -274,7 +627,7 @@ async function handle(req, res) {
     }
 
     if (route === '/login' && req.method === 'POST') {
-      const body = await readBody(req);
+      const body = (await readBody(req)).body;
       const email = normEmail(body.email);
       const prenom = String(body.prenom || '').trim();
       if (!email) return send(res, 400, { error: 'email requis' });
@@ -308,22 +661,101 @@ async function handle(req, res) {
     if (route === '/admin' && req.method === 'GET') {
       if (!SECRET || url.searchParams.get('secret') !== SECRET) return send(res, 401, { error: 'secret' });
       const store = readStore();
-      return send(res, 200, { contacts: Object.values(store.contacts).map(publicContact) });
+      return send(res, 200, {
+        contacts: Object.values(store.contacts).map(publicContact),
+        lastWebhooks: store.lastWebhooks || []
+      });
+    }
+
+    if (route === '/webhook-debug' && req.method === 'GET') {
+      if (!SECRET || url.searchParams.get('secret') !== SECRET) return send(res, 401, { error: 'secret' }, req);
+      const store = readStore();
+      const n = Math.min(50, Math.max(1, parseInt(url.searchParams.get('n') || '20', 10) || 20));
+      return send(res, 200, {
+        ok: true,
+        lastWebhooks: (store.lastWebhooks || []).slice(0, n),
+        logTail: readLogTail(n),
+        hint: 'Si lastWebhooks est vide après un paiement, Systeme.io n’atteint pas ce serveur (URL / redeploy / abonnement événement).'
+      }, req);
+    }
+
+    if (route === '/systeme-webhook' && req.method === 'GET') {
+      return send(res, 200, {
+        ok: true,
+        hint: 'POST JSON ici. Auth: ?secret=… OU header X-Webhook-Secret / X-Secret OU Authorization: Bearer OU signature HMAC Systeme.io (X-Webhook-Signature). Event: header X-Webhook-Event (SALE_NEW, SALE_CANCELED, CONTACT_TAG_*) ou ?hook=sale-new|sale-canceled|tag-added|tag-removed. Debug: GET /webhook-debug?secret=…'
+      }, req);
     }
 
     if (route === '/systeme-webhook' && req.method === 'POST') {
-      const body = await readBody(req);
-      if (!checkSecret(req, url.searchParams, body)) {
-        logLine('WEBHOOK refusé : secret invalide');
-        return send(res, 401, { error: 'secret invalide' });
+      const parsed = await readBody(req);
+      const body = parsed.body;
+      const raw = parsed.raw;
+      const auth = checkSecret(req, url.searchParams, body, raw);
+      const eventHdr = String(req.headers['x-webhook-event'] || '');
+      const baseDiag = {
+        at: new Date().toISOString(),
+        authVia: auth.via,
+        authOk: !!auth.ok,
+        eventHeader: eventHdr,
+        hasSig: !!auth.hasSig,
+        hasQuerySecret: !!auth.hasQuery,
+        queryMatch: !!auth.queryMatch,
+        plainMatch: !!auth.plainMatch,
+        secretLen: auth.secretLen || 0,
+        bytes: raw ? raw.length : 0,
+        rawPreview: String(raw || '').slice(0, 1200)
+      };
+
+      if (!auth.ok) {
+        pushLastWebhook(Object.assign({}, baseDiag, { status: 401, reason: 'secret-invalide' }));
+        logLine('WEBHOOK → 401 via=' + auth.via +
+          ' hasSig=' + !!auth.hasSig +
+          ' hasQuery=' + !!auth.hasQuery +
+          ' queryMatch=' + !!auth.queryMatch +
+          ' secretLen=' + (auth.secretLen || 0) +
+          ' eventHdr=' + eventHdr +
+          ' bytes=' + (raw ? raw.length : 0) +
+          (auth.via === 'plaintext-mismatch'
+            ? ' HINT=Railway_WEBHOOK_SECRET_doit_egaler_secret_URL_Systemeio'
+            : ''));
+        return send(res, 401, {
+          error: 'secret invalide',
+          via: auth.via,
+          hasSig: !!auth.hasSig,
+          hasQuery: !!auth.hasQuery,
+          hint: auth.via === 'plaintext-mismatch'
+            ? 'WEBHOOK_SECRET (Railway) ≠ ?secret= (URL Systeme.io). Ils doivent être identiques.'
+            : (auth.via === 'hmac-mismatch'
+              ? 'X-Webhook-Signature HMAC invalide et aucun ?secret= correct.'
+              : 'Fournir ?secret=… ou un HMAC valide (Secret Systeme.io = clé HMAC, pas un mot de passe).')
+        }, req);
       }
-      logLine('WEBHOOK ' + JSON.stringify(body).slice(0, 2000));
-      const event = parseEvent(req, body);
+
+      logLine('WEBHOOK raw=' + String(raw || '').slice(0, 2000));
+      const event = parseEvent(req, body, url);
       const info = extract(body);
+      logLine('WEBHOOK auth=' + auth.via + ' TAGS seen=' + JSON.stringify(info.tags || []) +
+        ' divin=' + !!info.hasDivin + ' celeste=' + !!info.hasCeleste +
+        ' event=' + event + ' email=' + (info.email || ''));
+
       if (!info.email) {
-        logLine('WEBHOOK sans email, event=' + event);
-        return send(res, 200, { ok: false, reason: 'no-email', event: event });
+        pushLastWebhook(Object.assign({}, baseDiag, {
+          status: 200,
+          event: event,
+          email: '',
+          reason: 'no-email',
+          tags: info.tags || []
+        }));
+        logLine('WEBHOOK → 200 no-email event=' + event);
+        return send(res, 200, {
+          ok: false,
+          reason: 'no-email',
+          event: event,
+          tags: info.tags,
+          hint: 'Payload sans email (attendu: customer.email, contact.email ou contact.contact.email)'
+        }, req);
       }
+
       const store = readStore();
       const c = getContact(store, info.email);
       let action = event;
@@ -334,15 +766,36 @@ async function handle(req, res) {
         revoke(c);
         action = 'REVOKED';
       } else {
-        action = 'IGNORED_' + event;
+        action = applyTagAccess(c, info, event);
+      }
+      if (!Array.isArray(store.lastWebhooks)) store.lastWebhooks = [];
+      store.lastWebhooks.unshift({
+        at: baseDiag.at,
+        status: 200,
+        authVia: auth.via,
+        authOk: true,
+        event: event,
+        eventHeader: eventHdr,
+        email: info.email,
+        action: action,
+        plan: c.plan,
+        active: c.active,
+        tags: info.tags || [],
+        hasSig: baseDiag.hasSig,
+        hasQuerySecret: baseDiag.hasQuerySecret,
+        rawPreview: baseDiag.rawPreview
+      });
+      if (store.lastWebhooks.length > LAST_WEBHOOKS_MAX) {
+        store.lastWebhooks = store.lastWebhooks.slice(0, LAST_WEBHOOKS_MAX);
       }
       writeStore(store);
-      logLine(action + ' ' + info.email + ' months=' + c.monthsPaid + ' active=' + c.active);
-      return send(res, 200, { ok: true, action: action, contact: publicContact(c) });
+      logLine('WEBHOOK → 200 ' + action + ' ' + info.email + ' months=' + c.monthsPaid +
+        ' active=' + c.active + ' plan=' + c.plan + ' tags=' + JSON.stringify(info.tags || []));
+      return send(res, 200, { ok: true, action: action, tags: info.tags, contact: publicContact(c) }, req);
     }
 
     if (route === '/generate' && req.method === 'POST') {
-      const body = await readBody(req);
+      const body = (await readBody(req)).body;
       const email = normEmail(body.email);
       const kind = String(body.kind || '');
       if (!email || ['natal', 'mois', 'jour', 'ultime'].indexOf(kind) < 0) {
@@ -359,7 +812,7 @@ async function handle(req, res) {
     }
 
     if (route === '/ia' && req.method === 'POST') {
-      const body = await readBody(req);
+      const body = (await readBody(req)).body;
       const email = normEmail(body.email);
       const question = String(body.question || '').trim();
       if (!email || !question) return send(res, 400, { error: 'email et question requis' });
@@ -380,9 +833,13 @@ async function handle(req, res) {
   }
 }
 
+function createServer() {
+  return http.createServer((req, res) => { handle(req, res); });
+}
+
 function listen(port) {
   const p = port == null ? PORT : port;
-  const server = http.createServer((req, res) => { handle(req, res); });
+  const server = createServer();
   server.listen(p, '0.0.0.0', () => {
     if (!hosted() && !fs.existsSync(path.join(ROOT, '.env')) && fs.existsSync(path.join(ROOT, '.env.example'))) {
       fs.copyFileSync(path.join(ROOT, '.env.example'), path.join(ROOT, '.env'));
@@ -397,4 +854,18 @@ function listen(port) {
 
 if (require.main === module) listen();
 
-module.exports = { handle, listen, API_ROUTES, warnProduction };
+module.exports = {
+  handle,
+  listen,
+  createServer,
+  API_ROUTES,
+  warnProduction,
+  parseEvent,
+  extract,
+  grantPayment,
+  extractEmail,
+  checkSecret,
+  verifySystemeHmac,
+  hmacSha256Hex,
+  WEBHOOK_AUTH_VERSION
+};

@@ -53,19 +53,236 @@ function planOf(id) {
   return PLANS[id] || PLANS.gratuit;
 }
 
-function detectPlan(body) {
-  const blob = JSON.stringify(body || {}).toLowerCase();
+function foldAccents(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tagItemName(item) {
+  if (item == null || item === '') return '';
+  if (typeof item === 'string' || typeof item === 'number') return String(item).trim();
+  if (typeof item !== 'object') return '';
+  var n = item.name || item.label || item.title || item.value || item.text || item.tagName || item.tag_name;
+  if (n && typeof n !== 'object') return String(n).trim();
+  if (typeof item.tag === 'string' || typeof item.tag === 'number') return String(item.tag).trim();
+  return '';
+}
+
+function pushTagName(out, seen, name) {
+  var n = String(name || '').trim();
+  if (!n) return;
+  var key = foldAccents(n);
+  if (!key || seen[key]) return;
+  seen[key] = true;
+  out.push(n);
+}
+
+function addTagValue(out, seen, raw, depth) {
+  if (raw == null || raw === '' || depth > 6) return;
+  if (Array.isArray(raw)) {
+    raw.forEach(function (item) { addTagValue(out, seen, item, depth + 1); });
+    return;
+  }
+  if (typeof raw === 'string') {
+    var s = raw.trim();
+    if (!s) return;
+    if (s.charAt(0) === '[' || s.charAt(0) === '{') {
+      try {
+        addTagValue(out, seen, JSON.parse(s), depth + 1);
+        return;
+      } catch (e) { /* texte brut */ }
+    }
+    if (s.indexOf(',') >= 0) {
+      s.split(',').forEach(function (part) { pushTagName(out, seen, part); });
+      return;
+    }
+    pushTagName(out, seen, s);
+    return;
+  }
+  if (typeof raw === 'object') {
+    if (raw.tags != null) addTagValue(out, seen, raw.tags, depth + 1);
+    if (raw.tag_names != null) addTagValue(out, seen, raw.tag_names, depth + 1);
+    var n = tagItemName(raw);
+    if (n) pushTagName(out, seen, n);
+  }
+}
+
+function fieldsHaveTagsKey(fields) {
+  if (!fields) return false;
+  if (fields.tags != null || fields.tag != null) return true;
+  if (!Array.isArray(fields)) return false;
+  for (var i = 0; i < fields.length; i++) {
+    var f = fields[i];
+    if (!f || typeof f !== 'object') continue;
+    var key = foldAccents(f.slug || f.field || f.name || f.key || '');
+    if (key === 'tags' || key === 'tag') return true;
+  }
+  return false;
+}
+
+function collectFromFields(out, seen, fields) {
+  if (!fields) return;
+  if (fields.tags != null) addTagValue(out, seen, fields.tags, 0);
+  if (fields.tag != null) addTagValue(out, seen, fields.tag, 0);
+  if (!Array.isArray(fields)) return;
+  fields.forEach(function (f) {
+    if (!f || typeof f !== 'object') return;
+    var key = foldAccents(f.slug || f.field || f.name || f.key || '');
+    if (key === 'tags' || key === 'tag') {
+      addTagValue(out, seen, f.value != null ? f.value : (f.values || f.tags || f.tag), 0);
+    }
+  });
+}
+
+function hasTagContainer(body) {
+  if (!body || typeof body !== 'object') return false;
+  if (body.tags != null || body.tag != null || body.tagName != null || body.tag_name != null) return true;
+  if (body.removedTag != null || body.removed_tag != null || body.addedTag != null) return true;
+  var c = body.contact || body.data || body.payload || body.customer;
+  if (c && typeof c === 'object') {
+    if (c.tags != null || c.tag != null || c.tag_names != null) return true;
+    if (c.fields && fieldsHaveTagsKey(c.fields)) return true;
+    if (c.contact && typeof c.contact === 'object') {
+      if (c.contact.tags != null || c.contact.tag != null || c.contact.tag_names != null) return true;
+      if (c.contact.fields && fieldsHaveTagsKey(c.contact.fields)) return true;
+    }
+  }
+  if (body.fields && fieldsHaveTagsKey(body.fields)) return true;
+  if (body.data && body.data.contact && (body.data.contact.tags != null || body.data.contact.tag != null)) return true;
+  return false;
+}
+
+function collectTags(body) {
+  var out = [];
+  var seen = {};
+  if (!body || typeof body !== 'object') return out;
+  addTagValue(out, seen, body.tags, 0);
+  addTagValue(out, seen, body.tag, 0);
+  addTagValue(out, seen, body.tagName || body.tag_name, 0);
+  addTagValue(out, seen, body.tag_names, 0);
+  addTagValue(out, seen, body.addedTag || body.added_tag, 0);
+  addTagValue(out, seen, body.removedTag || body.removed_tag, 0);
+  var roots = [
+    body.contact,
+    body.contact && body.contact.contact,
+    body.customer,
+    body.data,
+    body.payload,
+    body.data && body.data.contact,
+    body.data && body.data.customer,
+    body.payload && body.payload.customer
+  ];
+  roots.forEach(function (root) {
+    if (!root || typeof root !== 'object') return;
+    addTagValue(out, seen, root.tags, 0);
+    addTagValue(out, seen, root.tag, 0);
+    addTagValue(out, seen, root.tag_names, 0);
+    collectFromFields(out, seen, root.fields);
+  });
+  if (body.orderItem && Array.isArray(body.orderItem.resources)) {
+    body.orderItem.resources.forEach(function (res) {
+      if (res && res.tag) addTagValue(out, seen, res.tag, 0);
+    });
+  }
+  collectFromFields(out, seen, body.fields);
+  if (body.contact && body.contact.fields) collectFromFields(out, seen, body.contact.fields);
+  return out;
+}
+
+function eventLooksLikeTagRemoval(body) {
+  var named = String(
+    (body && (body.event || body.type || body.name || body.trigger || body.action)) || ''
+  ).toUpperCase();
+  return /TAG_REMOVED|CONTACT_TAG_REMOVED|TAG.?REMOVE|UNTAG/.test(named);
+}
+
+function collectRemovedTagNames(body) {
+  var out = [];
+  var seen = {};
+  if (!body || typeof body !== 'object') return out;
+  addTagValue(out, seen, body.removedTag || body.removed_tag, 0);
+  addTagValue(out, seen, body.removedTags || body.removed_tags, 0);
+  if (eventLooksLikeTagRemoval(body)) {
+    addTagValue(out, seen, body.tag, 0);
+    addTagValue(out, seen, body.tagName || body.tag_name, 0);
+    if (body.contact) addTagValue(out, seen, body.contact.tag, 0);
+  }
+  return out;
+}
+
+function isPlanTag(name, plan) {
+  var f = foldAccents(name);
+  if (!f) return false;
+  if (plan === 'divin') {
+    if (f === 'app plan divin - en cours') return true;
+    if (f.indexOf('app plan divin') >= 0) return true;
+    return f.indexOf('plan divin') >= 0 && f.indexOf('en cours') >= 0;
+  }
+  if (plan === 'celeste') {
+    if (f === 'app plan celeste - en cours') return true;
+    if (f.indexOf('app plan celeste') >= 0) return true;
+    return f.indexOf('plan celeste') >= 0 && f.indexOf('en cours') >= 0;
+  }
+  return false;
+}
+
+function inspectTags(body) {
+  var raw = collectTags(body);
+  var removed = collectRemovedTagNames(body);
+  var removedKeys = {};
+  removed.forEach(function (n) { removedKeys[foldAccents(n)] = true; });
+  var tags = raw.filter(function (n) { return !removedKeys[foldAccents(n)]; });
+  var hasDivin = tags.some(function (n) { return isPlanTag(n, 'divin'); });
+  var hasCeleste = tags.some(function (n) { return isPlanTag(n, 'celeste'); });
+  var plan = '';
+  if (hasDivin) plan = 'divin';
+  else if (hasCeleste) plan = 'celeste';
+  return {
+    tags: tags,
+    rawTags: raw,
+    removedTags: removed,
+    hasDivin: hasDivin,
+    hasCeleste: hasCeleste,
+    plan: plan,
+    active: !!(hasDivin || hasCeleste),
+    sawTagField: hasTagContainer(body) || raw.length > 0 || removed.length > 0
+  };
+}
+
+function detectPlanFallback(body) {
+  if (!body || typeof body !== 'object') return '';
+  /* Unwrap legacy workflow wrapper { type, data: { customer, pricePlan… } } */
+  var root = body.data && (body.data.customer || body.data.pricePlan || body.data.order)
+    ? body.data
+    : body;
+  var blob = JSON.stringify(root || {}).toLowerCase();
   if (/divin/.test(blob)) return 'divin';
   if (/c[eé]leste/.test(blob)) return 'celeste';
-  const amount = Number(
-    body.amount || body.price || (body.order && body.order.amount) ||
-    (body.pricePlan && (body.pricePlan.price || body.pricePlan.amount)) || 0
+  var amount = Number(
+    root.amount || root.price ||
+    (root.order && (root.order.amount || root.order.totalPrice)) ||
+    (root.pricePlan && (root.pricePlan.price || root.pricePlan.amount)) || 0
   );
   if (amount >= 130 && amount <= 150) return 'divin';
   if (amount >= 50 && amount <= 70) return 'celeste';
   if (amount >= 13000 && amount <= 15000) return 'divin';
   if (amount >= 5900 && amount <= 7000) return 'celeste';
+  var planName = foldAccents(
+    (root.pricePlan && (root.pricePlan.name || root.pricePlan.innerName)) || ''
+  );
+  if (/divin/.test(planName)) return 'divin';
+  if (/celeste/.test(planName)) return 'celeste';
   return '';
+}
+
+function detectPlan(body) {
+  var fromTags = inspectTags(body);
+  if (fromTags.plan) return fromTags.plan;
+  return detectPlanFallback(body);
 }
 
 function demoPlanFromEmail(email) {
@@ -98,13 +315,47 @@ function rollUsage(c) {
   }
 }
 
+function isPaidPlanId(id) {
+  return id === 'celeste' || id === 'divin';
+}
+
+function rememberPaidPlan(c, planId) {
+  if (isPaidPlanId(planId)) c.lastPaidPlan = planId;
+}
+
+/**
+ * Annulation / pause : on garde le libellé Céleste/Divin (ou lastPaidPlan),
+ * active=false, droits = Gratuit. Jamais de downgrade plan → gratuit.
+ */
+function revokePlan(c) {
+  if (isPaidPlanId(c.plan)) c.lastPaidPlan = c.plan;
+  else if (isPaidPlanId(c.lastPaidPlan)) c.plan = c.lastPaidPlan;
+  else if ((c.monthsPaid || 0) > 0) {
+    c.plan = 'celeste';
+    c.lastPaidPlan = 'celeste';
+  }
+  c.active = false;
+  c.canceledAt = new Date().toISOString();
+  applyPlan(c);
+}
+
 function applyPlan(c, planId) {
   if (planId && PLANS[planId]) c.plan = planId;
+  if (isPaidPlanId(c.plan)) c.lastPaidPlan = c.plan;
+  /* Compte qui a déjà payé : ne jamais afficher « Gratuit » comme plan d’abo. */
+  if ((!c.plan || c.plan === 'gratuit') && ((c.monthsPaid || 0) > 0 || isPaidPlanId(c.lastPaidPlan))) {
+    c.plan = isPaidPlanId(c.lastPaidPlan) ? c.lastPaidPlan : 'celeste';
+  }
   if (!c.plan) c.plan = (c.monthsPaid > 0) ? 'celeste' : 'gratuit';
   const p = planOf(c.plan);
   if (p.ultime === 'now' && c.active) c.ultimeUnlocked = true;
   else if (p.ultime === 'never') c.ultimeUnlocked = false;
   else c.ultimeUnlocked = (c.monthsPaid || 0) >= ULTIME_MONTHS;
+}
+
+function wasEverPaid(c) {
+  if (!c) return false;
+  return isPaidPlanId(c.plan) || isPaidPlanId(c.lastPaidPlan) || (c.monthsPaid || 0) > 0;
 }
 
 function entitlements(c) {
@@ -116,6 +367,7 @@ function entitlements(c) {
       planLabel: PLANS.gratuit.label,
       price: 0,
       monthsPaid: 0,
+      lastPaidPlan: null,
       ultimeUnlocked: false,
       need: ULTIME_MONTHS,
       monthsLeft: ULTIME_MONTHS,
@@ -137,10 +389,21 @@ function entitlements(c) {
   applyPlan(c);
   rollUsage(c);
   const p = planOf(c.plan);
-  const active = p.id === 'gratuit' ? true : !!c.active;
-  const dailyLeft = p.dailyLimit == null ? null : Math.max(0, p.dailyLimit - (c.dailyUsed || 0));
-  const monthlyLeft = p.monthlyLimitYear == null ? null : Math.max(0, p.monthlyLimitYear - (c.monthlyUsed || 0));
-  const iaLeft = p.ia ? Math.max(0, p.iaQuota - (c.iaUsed || 0)) : 0;
+  const free = PLANS.gratuit;
+  const pureFree = p.id === 'gratuit' && !wasEverPaid(c);
+  /* Gratuit pur = toujours « actif » (pas de notion de pause). Sinon c.active. */
+  const active = pureFree ? true : !!c.active;
+  /* Abo payé en pause/annulé : libellé Céleste/Divin, droits Gratuit, mois Ultime conservés. */
+  const pausedPaid = !active && wasEverPaid(c);
+  const dailyLimit = pausedPaid ? free.dailyLimit : p.dailyLimit;
+  const monthlyLimitYear = pausedPaid ? free.monthlyLimitYear : p.monthlyLimitYear;
+  const iaQuota = pausedPaid ? 0 : p.iaQuota;
+  const canNatal = pausedPaid ? false : !!(p.natal && active);
+  const canUltime = pausedPaid ? false : !!(c.ultimeUnlocked && active);
+  const canIa = pausedPaid ? false : !!(p.ia && active);
+  const dailyLeft = dailyLimit == null ? null : Math.max(0, dailyLimit - (c.dailyUsed || 0));
+  const monthlyLeft = monthlyLimitYear == null ? null : Math.max(0, monthlyLimitYear - (c.monthlyUsed || 0));
+  const iaLeft = canIa ? Math.max(0, iaQuota - (c.iaUsed || 0)) : 0;
   return {
     exists: true,
     email: c.email,
@@ -151,19 +414,20 @@ function entitlements(c) {
     planLabel: p.label,
     price: p.price,
     monthsPaid: c.monthsPaid || 0,
+    lastPaidPlan: isPaidPlanId(c.lastPaidPlan) ? c.lastPaidPlan : (isPaidPlanId(p.id) ? p.id : null),
     ultimeUnlocked: !!c.ultimeUnlocked,
     need: ULTIME_MONTHS,
     monthsLeft: Math.max(0, ULTIME_MONTHS - (c.monthsPaid || 0)),
-    canNatal: !!(p.natal && active),
-    canUltime: !!(c.ultimeUnlocked && active),
-    canIa: !!(p.ia && active),
-    dailyLimit: p.dailyLimit,
+    canNatal: canNatal,
+    canUltime: canUltime,
+    canIa: canIa,
+    dailyLimit: dailyLimit,
     dailyUsed: c.dailyUsed || 0,
     dailyLeft: dailyLeft,
-    monthlyLimitYear: p.monthlyLimitYear,
+    monthlyLimitYear: monthlyLimitYear,
     monthlyUsed: c.monthlyUsed || 0,
     monthlyLeft: monthlyLeft,
-    iaQuota: p.iaQuota,
+    iaQuota: iaQuota,
     iaUsed: c.iaUsed || 0,
     iaLeft: iaLeft,
     iaCostEur: IA_COST_EUR
@@ -172,9 +436,23 @@ function entitlements(c) {
 
 function canGenerate(c, kind) {
   const e = entitlements(c);
-  if (!e.active && e.plan !== 'gratuit') return { ok: false, error: 'Abonnement inactif.' };
-  if (kind === 'natal' && !e.canNatal) return { ok: false, error: 'Le manuscrit de 28 pages est dans le plan Céleste.' };
-  if (kind === 'ultime' && !e.canUltime) return { ok: false, error: 'L’Ultime s’ouvre après 6 mois Céleste, ou tout de suite en Divin.' };
+  const paused = e.active === false && wasEverPaid(c);
+  if (kind === 'natal' && !e.canNatal) {
+    return {
+      ok: false,
+      error: paused
+        ? 'Abonnement en pause : le manuscrit natal se rouvre dès que tu reprends. En attendant, utilise les quotas Gratuit (jour / mois).'
+        : 'Le manuscrit de 28 pages est dans le plan Céleste.'
+    };
+  }
+  if (kind === 'ultime' && !e.canUltime) {
+    return {
+      ok: false,
+      error: paused
+        ? 'Abonnement en pause : l’Ultime se rouvre dès que tu reprends. Tes mois payés sont conservés.'
+        : 'L’Ultime s’ouvre après 6 mois Céleste, ou tout de suite en Divin.'
+    };
+  }
   if (kind === 'jour' && e.dailyLeft === 0) return { ok: false, error: 'Tes 5 manuscrits du jour de ce mois sont utilisés. Reviens le mois prochain, ou passe Céleste.' };
   if (kind === 'mois' && e.monthlyLeft === 0) return { ok: false, error: 'Ton manuscrit mensuel de l’année est déjà écrit. Reviens l’an prochain, ou passe Céleste.' };
   return { ok: true };
@@ -182,8 +460,9 @@ function canGenerate(c, kind) {
 
 function consumeGenerate(c, kind) {
   rollUsage(c);
-  if (kind === 'jour' && planOf(c.plan).dailyLimit != null) c.dailyUsed = (c.dailyUsed || 0) + 1;
-  if (kind === 'mois' && planOf(c.plan).monthlyLimitYear != null) c.monthlyUsed = (c.monthlyUsed || 0) + 1;
+  const e = entitlements(c);
+  if (kind === 'jour' && e.dailyLimit != null) c.dailyUsed = (c.dailyUsed || 0) + 1;
+  if (kind === 'mois' && e.monthlyLimitYear != null) c.monthlyUsed = (c.monthlyUsed || 0) + 1;
 }
 
 function consumeIa(c) {
@@ -201,8 +480,15 @@ module.exports = {
   IA_BUDGET_SHARE,
   planOf,
   detectPlan,
+  detectPlanFallback,
+  collectTags,
+  inspectTags,
   demoPlanFromEmail,
   applyPlan,
+  revokePlan,
+  rememberPaidPlan,
+  isPaidPlanId,
+  wasEverPaid,
   entitlements,
   canGenerate,
   consumeGenerate,
