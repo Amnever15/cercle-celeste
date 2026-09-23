@@ -52,6 +52,8 @@ const PLANS = {
 };
 
 const ULTIME_MONTHS = 6;
+/** Mois Divin payés requis pour débloquer le téléchargement de tous les manuscrits. */
+const DOWNLOAD_UNLOCK_MONTHS = 2;
 
 function planOf(id) {
   return PLANS[id] || PLANS.gratuit;
@@ -375,10 +377,15 @@ function entitlements(c) {
       planLabel: PLANS.gratuit.label,
       price: 0,
       monthsPaid: 0,
+      divinMonthsPaid: 0,
       lastPaidPlan: null,
       ultimeUnlocked: false,
       need: ULTIME_MONTHS,
       monthsLeft: ULTIME_MONTHS,
+      downloadNeed: DOWNLOAD_UNLOCK_MONTHS,
+      downloadMonthsLeft: DOWNLOAD_UNLOCK_MONTHS,
+      canDownloadAll: false,
+      showDownload: false,
       canNatal: false,
       canCouple: false,
       canUltime: false,
@@ -415,6 +422,14 @@ function entitlements(c) {
   const canCouple = pausedPaid ? false : !!(p.couple && active);
   const canUltime = pausedPaid ? false : !!(c.ultimeUnlocked && active);
   const canIa = pausedPaid ? false : !!(p.ia && active);
+  var divinMonths = c.divinMonthsPaid || 0;
+  /* Soft count : Divin actif déjà payé au moins 1 fois → au minimum mois 1 (décompte visible). */
+  if (divinMonths === 0 && p.id === 'divin' && active && (c.monthsPaid || 0) >= 1) {
+    divinMonths = 1;
+  }
+  const showDownload = p.id === 'divin' || c.lastPaidPlan === 'divin';
+  const canDownloadAll = !pausedPaid && p.id === 'divin' && active && divinMonths >= DOWNLOAD_UNLOCK_MONTHS;
+  const downloadMonthsLeft = Math.max(0, DOWNLOAD_UNLOCK_MONTHS - divinMonths);
   const dailyLeft = dailyLimit == null ? null : Math.max(0, dailyLimit - (c.dailyUsed || 0));
   const monthlyLeft = monthlyLimitYear == null ? null : Math.max(0, monthlyLimitYear - (c.monthlyUsed || 0));
   const m = monthStamp();
@@ -432,10 +447,15 @@ function entitlements(c) {
     planLabel: p.label,
     price: p.price,
     monthsPaid: c.monthsPaid || 0,
+    divinMonthsPaid: divinMonths,
     lastPaidPlan: isPaidPlanId(c.lastPaidPlan) ? c.lastPaidPlan : (isPaidPlanId(p.id) ? p.id : null),
     ultimeUnlocked: !!c.ultimeUnlocked,
     need: ULTIME_MONTHS,
     monthsLeft: Math.max(0, ULTIME_MONTHS - (c.monthsPaid || 0)),
+    downloadNeed: DOWNLOAD_UNLOCK_MONTHS,
+    downloadMonthsLeft: downloadMonthsLeft,
+    canDownloadAll: canDownloadAll,
+    showDownload: showDownload,
     canNatal: canNatal,
     canCouple: canCouple,
     canUltime: canUltime,
@@ -519,6 +539,7 @@ function consumeIa(c) {
 module.exports = {
   PLANS,
   ULTIME_MONTHS,
+  DOWNLOAD_UNLOCK_MONTHS,
   IA_COST_EUR,
   IA_BUDGET_SHARE,
   planOf,

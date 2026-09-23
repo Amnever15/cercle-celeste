@@ -31,7 +31,7 @@
   };
 
   var TODAY = {
-    pages: '1–4 pages',
+    pages: '2–7 pages',
     intro: 'Ton Manuscrit Céleste relatif à cette journée en cours. Comment tes étoiles parlent AUJOURD\'HUI',
     body: [
       'Aujourd’hui, n’ouvre qu’une porte. Une conversation, un message, un pas visible — pas dix.',
@@ -473,6 +473,75 @@
     return s;
   }
 
+  /** Animation d’attente livre 3D + cosmos — tous les manuscrits. */
+  function manuscriptWaitHtml(kind, opts) {
+    opts = opts || {};
+    var meta = {
+      natal: {
+        title: 'Le Manuscrit Céleste de ta vie s’écrit',
+        hint: 'Alignement des planètes · calculs du code de vie · assemblage du langage de l’univers. Ne ferme pas cette page.',
+        fallback: 'Le ciel compose ton manuscrit — quelques minutes de silence.'
+      },
+      mois: {
+        title: 'Le Manuscrit Céleste du mois s’écrit',
+        hint: 'Ton thème natal · le climat du mois · reliure des chapitres. Ne ferme pas cette page.',
+        fallback: 'Le ciel compose ton Manuscrit du mois… Quelques minutes.'
+      },
+      jour: {
+        title: 'Le Manuscrit Céleste du jour s’écrit',
+        hint: 'Ton thème · l’énergie d’aujourd’hui · une seule porte à ouvrir. Ne ferme pas cette page.',
+        fallback: 'Le ciel compose ton Manuscrit du jour…'
+      },
+      couple: {
+        title: 'Le Manuscrit Céleste de couple s’écrit',
+        hint: 'Deux thèmes · synastrie · assemblage. Ne ferme pas cette page.',
+        fallback: 'Le ciel compose votre manuscrit de couple…'
+      },
+      ultime: {
+        title: 'Le Manuscrit Ultime s’écrit',
+        hint: 'Édition longue · patience céleste. Ne ferme pas cette page.',
+        fallback: 'Le ciel compose ton Manuscrit Ultime…'
+      }
+    };
+    var m = meta[kind] || meta.natal;
+    var pct = opts.pct != null ? Math.max(0, Math.min(100, Number(opts.pct) || 0)) : 12;
+    if (pct < 4) pct = 8;
+    var progRaw = poeticNatalProgress(opts.progress || m.fallback);
+    var progSafe = escapeHtml(progRaw);
+    return '<div class="natal-cosmos" role="status" aria-live="polite">' +
+      '<div class="natal-galaxy"></div>' +
+      '<div class="natal-stars" aria-hidden="true"></div>' +
+      '<div class="natal-book-stage">' +
+        '<div class="natal-book">' +
+          '<div class="book-spine"></div>' +
+          '<div class="book-cover book-left"></div>' +
+          '<div class="book-pages">' +
+            '<div class="book-page p1"></div>' +
+            '<div class="book-page p2"></div>' +
+            '<div class="book-page p3"></div>' +
+          '</div>' +
+          '<div class="book-cover book-right"></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="natal-cosmos-copy">' +
+        '<p class="natal-cosmos-title">' + escapeHtml(m.title) + '</p>' +
+        '<p class="natal-cosmos-step">' + progSafe + '</p>' +
+        '<div class="natal-cosmos-bar"><span style="width:' + pct + '%"></span></div>' +
+        '<p class="muted natal-cosmos-hint">' + escapeHtml(m.hint) + '</p>' +
+      '</div>' +
+      '</div>';
+  }
+
+  function isKindGenerating(kind) {
+    var u = state.user || {};
+    if (state.busy === kind) return true;
+    if (kind === 'natal') return u.natalStatus === 'generating';
+    if (kind === 'mois') return u.moisStatus === 'generating';
+    if (kind === 'jour') return u.jourStatus === 'generating';
+    if (kind === 'couple') return u.coupleStatus === 'generating';
+    return false;
+  }
+
   function saveIaLocal(ctx) {
     var key = iaStorageKey(ctx);
     if (!key) return;
@@ -540,36 +609,43 @@
     }
   }
 
+  var MS_SEL_MIN = 12;
+
   function askIaDevelopPassage(passage) {
     passage = String(passage || '').trim().replace(/\s+/g, ' ');
-    if (passage.length < 20) return;
+    if (passage.length < MS_SEL_MIN) return;
     hideMsSelBar();
-    if (!canIa()) {
-      scrollReaderIaIntoView();
-      return;
+    if (state.pdf === 'natal' || state.pdf === 'mois' || state.pdf === 'jour' || state.pdf === 'couple') {
+      state.iaContext = state.pdf;
     }
-    var q = 'Développe et approfondis ce passage de mon manuscrit :\n\n« ' + passage.slice(0, 1500) + ' »';
-    sendIa({ question: q, selectedPassage: passage });
     scrollReaderIaIntoView();
+    if (!canIa()) return;
+    var q = 'Peux-tu mieux m’expliquer et développer ce passage de mon manuscrit ?\n\n« ' +
+      passage.slice(0, 1500) + ' »';
+    sendIa({ question: q, selectedPassage: passage });
   }
 
   function hideMsSelBar() {
     var bar = document.getElementById('ms-sel-bar');
-    if (bar) bar.hidden = true;
+    if (bar) {
+      bar.hidden = true;
+      bar.setAttribute('aria-hidden', 'true');
+    }
     state._msSelText = '';
+    state._msSelFromIframe = false;
   }
 
   function showMsSelBar(text) {
     text = String(text || '').trim().replace(/\s+/g, ' ');
     var bar = document.getElementById('ms-sel-bar');
     if (!bar) return;
-    if (text.length < 20) {
-      bar.hidden = true;
-      state._msSelText = '';
+    if (text.length < MS_SEL_MIN) {
+      hideMsSelBar();
       return;
     }
     state._msSelText = text;
     bar.hidden = false;
+    bar.setAttribute('aria-hidden', 'false');
   }
 
   function blockManuscriptCopy(root) {
@@ -579,43 +655,89 @@
     root.addEventListener('copy', stop);
     root.addEventListener('cut', stop);
     root.addEventListener('dragstart', stop);
-    root.addEventListener('contextmenu', function (e) {
-      /* laisse le menu natif mais copy est bloqué via l’événement copy */
-      if (e.target && e.target.closest && e.target.closest('input, textarea, #ia-q')) return;
-    });
+  }
+
+  /** Bridge sélection dans l’iframe (fichiers anciens ou nouveaux). */
+  function installIframeSelectionBridge(frame) {
+    try {
+      var doc = frame.contentDocument;
+      var win = frame.contentWindow;
+      if (!doc || !doc.documentElement || !win) return false;
+      applyIframeManuscriptTheme(frame);
+      if (doc.documentElement.getAttribute('data-ms-sel-bridge') === '1') return true;
+      doc.documentElement.setAttribute('data-ms-sel-bridge', '1');
+
+      var style = doc.createElement('style');
+      style.id = 'ms-sel-enable';
+      style.textContent =
+        'html, body, body * { -webkit-user-select: text !important; user-select: text !important; }';
+      (doc.head || doc.documentElement).appendChild(style);
+
+      function stop(e) { e.preventDefault(); }
+      doc.addEventListener('copy', stop);
+      doc.addEventListener('cut', stop);
+      doc.addEventListener('dragstart', stop);
+
+      var last = '';
+      function report() {
+        var sel = doc.getSelection && doc.getSelection();
+        var t = sel && !sel.isCollapsed
+          ? String(sel.toString() || '').replace(/\s+/g, ' ').trim()
+          : '';
+        if (t.length < MS_SEL_MIN) t = '';
+        if (t === last) return;
+        last = t;
+        try {
+          win.parent.postMessage({ type: 'ms-celeste-sel', text: t }, '*');
+        } catch (err) {}
+        /* Fallback direct si same-origin (plus fiable que postMessage seul). */
+        state._msSelFromIframe = t.length >= MS_SEL_MIN;
+        if (state._msSelFromIframe) showMsSelBar(t);
+        else if (!fromParentManuscriptSelection()) hideMsSelBar();
+      }
+
+      doc.addEventListener('selectionchange', report);
+      doc.addEventListener('mouseup', report);
+      doc.addEventListener('keyup', report);
+      doc.addEventListener('touchend', function () { setTimeout(report, 80); });
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   function injectNatalFrameGuards(frame) {
-    if (!frame || frame._msGuard) return;
+    if (!frame) return;
+    if (frame._msSelLoadBound) return;
+    frame._msSelLoadBound = true;
     function attach() {
-      try {
-        var doc = frame.contentDocument;
-        if (!doc || !doc.body) return;
-        applyIframeManuscriptTheme(frame);
-        if (doc.documentElement.getAttribute('data-ms-guard') === '1') {
-          frame._msGuard = true;
-          return;
-        }
-        doc.documentElement.setAttribute('data-ms-guard', '1');
-        function stop(e) { e.preventDefault(); }
-        doc.addEventListener('copy', stop);
-        doc.addEventListener('cut', stop);
-        doc.addEventListener('dragstart', stop);
-        var last = '';
-        doc.addEventListener('selectionchange', function () {
-          var sel = doc.getSelection && doc.getSelection();
-          var t = sel && !sel.isCollapsed ? String(sel.toString() || '').replace(/\s+/g, ' ').trim() : '';
-          if (t === last) return;
-          last = t;
-          state._msSelFromIframe = t.length >= 20;
-          if (state._msSelFromIframe) showMsSelBar(t);
-          else hideMsSelBar();
-        });
-        frame._msGuard = true;
-      } catch (e) {}
+      installIframeSelectionBridge(frame);
     }
     frame.addEventListener('load', attach);
-    if (frame.contentDocument && frame.contentDocument.readyState === 'complete') attach();
+    try {
+      if (frame.contentDocument && frame.contentDocument.readyState === 'complete') attach();
+    } catch (e) {}
+    /* Retry si le doc n’est pas encore prêt (token / réseau). */
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      if (installIframeSelectionBridge(frame) || tries >= 20) clearInterval(timer);
+    }, 400);
+  }
+
+  function fromParentManuscriptSelection() {
+    var sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return '';
+    var t = String(sel.toString() || '').replace(/\s+/g, ' ').trim();
+    if (t.length < MS_SEL_MIN) return '';
+    var pdfBody = document.querySelector('.pdf-body');
+    if (!pdfBody) return '';
+    var anchor = sel.anchorNode;
+    if (!anchor) return '';
+    var el = anchor.nodeType === 1 ? anchor : anchor.parentElement;
+    if (!el || !pdfBody.contains(el)) return '';
+    if (el.closest && el.closest('.reader-ia, .ms-sel-bar, .pdf-view > header, .natal-frame')) return '';
+    return t;
   }
 
   function bindManuscriptSelection() {
@@ -627,7 +749,8 @@
 
     var ask = document.getElementById('ms-sel-ask');
     if (ask) {
-      ask.onclick = function () {
+      ask.onclick = function (e) {
+        if (e) e.preventDefault();
         askIaDevelopPassage(state._msSelText || '');
       };
     }
@@ -635,24 +758,9 @@
     if (document._msSelBound) return;
     document._msSelBound = true;
 
-    function fromDocSelection() {
-      var sel = window.getSelection();
-      if (!sel || sel.isCollapsed) return '';
-      var t = String(sel.toString() || '').trim();
-      if (t.length < 20) return '';
-      var pdfBody = document.querySelector('.pdf-body');
-      if (!pdfBody) return '';
-      var anchor = sel.anchorNode;
-      if (!anchor) return '';
-      var el = anchor.nodeType === 1 ? anchor : anchor.parentElement;
-      if (!el || !pdfBody.contains(el)) return '';
-      if (el.closest && el.closest('.reader-ia, .ms-sel-bar, .pdf-view > header')) return '';
-      return t;
-    }
-
     document.addEventListener('selectionchange', function () {
       if (!state.pdf) return;
-      var t = fromDocSelection();
+      var t = fromParentManuscriptSelection();
       if (t) {
         state._msSelFromIframe = false;
         showMsSelBar(t);
@@ -666,66 +774,138 @@
       if (!d || d.type !== 'ms-celeste-sel') return;
       var fr = document.querySelector('.natal-frame');
       if (fr && ev.source && fr.contentWindow && ev.source !== fr.contentWindow) return;
-      var text = String(d.text || '').trim();
-      state._msSelFromIframe = text.length >= 20;
-      if (state._msSelFromIframe) showMsSelBar(text);
-      else hideMsSelBar();
+      var text = String(d.text || '').replace(/\s+/g, ' ').trim();
+      if (text.length >= MS_SEL_MIN) {
+        state._msSelFromIframe = true;
+        showMsSelBar(text);
+      } else if (state._msSelFromIframe) {
+        hideMsSelBar();
+      }
     });
   }
 
+  function pdfViewEl() {
+    return document.querySelector('.pdf-view');
+  }
+
+  function msFrameWrap() {
+    return document.getElementById('natal-frame-wrap') || document.querySelector('.natal-frame-wrap');
+  }
+
+  function isNativeMsFullscreen() {
+    var wrap = msFrameWrap();
+    var fs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+    if (!wrap || !fs) return false;
+    return fs === wrap || (wrap.contains && wrap.contains(fs));
+  }
+
   function isPdfFullscreen() {
-    var fs = document.fullscreenElement || document.webkitFullscreenElement;
-    return !!(fs && fs.classList && fs.classList.contains('pdf-view'));
+    var wrap = msFrameWrap();
+    if (wrap && wrap.classList.contains('is-ms-fs')) return true;
+    return isNativeMsFullscreen();
+  }
+
+  function setPdfFsFallback(on) {
+    var wrap = msFrameWrap();
+    if (wrap) {
+      if (on) wrap.classList.add('is-ms-fs');
+      else wrap.classList.remove('is-ms-fs');
+    }
+    document.documentElement.classList.toggle('pdf-fs-active', !!on);
+    if (document.body) document.body.classList.toggle('pdf-fs-active', !!on);
+  }
+
+  function clearPdfFullscreen() {
+    if (isNativeMsFullscreen()) {
+      var exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+      if (exit) {
+        try { exit.call(document); } catch (e) {}
+      }
+    }
+    setPdfFsFallback(false);
   }
 
   function updateFsButton() {
     var btn = document.getElementById('pdf-fs');
     if (!btn) return;
     var on = isPdfFullscreen();
-    btn.textContent = on ? 'Quitter' : 'Plein écran';
+    btn.textContent = on ? '✕' : '⛶';
+    btn.setAttribute('aria-label', on ? 'Quitter le plein écran' : 'Manuscrit en plein écran');
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.title = on ? 'Quitter le plein écran' : 'Manuscrit en plein écran';
   }
 
-  function togglePdfFullscreen() {
-    var view = document.querySelector('.pdf-view');
-    if (!view) return;
-    var doc = document;
-    if (isPdfFullscreen()) {
-      var exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
-      if (exit) {
-        try { exit.call(doc); } catch (e) {}
-      }
-      view.classList.remove('is-fs-fallback');
+  function enterPdfFullscreen() {
+    var wrap = msFrameWrap();
+    if (!wrap) return;
+    var req = wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.msRequestFullscreen;
+    if (!req) {
+      setPdfFsFallback(true);
       updateFsButton();
       return;
     }
-    var req = view.requestFullscreen || view.webkitRequestFullscreen || view.msRequestFullscreen;
-    if (req) {
-      try {
-        var p = req.call(view);
-        if (p && p.catch) {
-          p.catch(function () {
-            view.classList.add('is-fs-fallback');
-            updateFsButton();
-          });
-        }
-      } catch (e) {
-        view.classList.add('is-fs-fallback');
-      }
-    } else {
-      view.classList.add('is-fs-fallback');
+    var settled = false;
+    function applyFallback() {
+      if (settled) return;
+      settled = true;
+      if (!isNativeMsFullscreen()) setPdfFsFallback(true);
+      updateFsButton();
     }
-    updateFsButton();
+    try {
+      var p = req.call(wrap);
+      if (p && typeof p.then === 'function') {
+        p.then(function () {
+          settled = true;
+          setPdfFsFallback(false);
+          updateFsButton();
+        }).catch(applyFallback);
+        setTimeout(function () {
+          if (!settled && !isNativeMsFullscreen()) applyFallback();
+        }, 450);
+        return;
+      }
+    } catch (e) {
+      applyFallback();
+      return;
+    }
+    setTimeout(function () {
+      if (!isNativeMsFullscreen()) applyFallback();
+      else {
+        settled = true;
+        updateFsButton();
+      }
+    }, 300);
+  }
+
+  function togglePdfFullscreen() {
+    if (isPdfFullscreen()) {
+      clearPdfFullscreen();
+      updateFsButton();
+      return;
+    }
+    enterPdfFullscreen();
   }
 
   function bindPdfFullscreen() {
     var btn = document.getElementById('pdf-fs');
-    if (btn) btn.onclick = togglePdfFullscreen;
+    if (btn) btn.onclick = function (e) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      togglePdfFullscreen();
+    };
     updateFsButton();
     if (!document._pdfFsBound) {
       document._pdfFsBound = true;
       document.addEventListener('fullscreenchange', updateFsButton);
       document.addEventListener('webkitfullscreenchange', updateFsButton);
+      document.addEventListener('MSFullscreenChange', updateFsButton);
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        var wrap = msFrameWrap();
+        if (wrap && wrap.classList.contains('is-ms-fs')) {
+          setPdfFsFallback(false);
+          updateFsButton();
+        }
+      });
     }
   }
 
@@ -2112,33 +2292,10 @@
         '</div>';
     }
     if (u.natalStatus === 'generating' || state.busy === 'natal') {
-      var pct = u.natalProgressPct != null ? Math.max(0, Math.min(100, Number(u.natalProgressPct) || 0)) : 12;
-      var progRaw = poeticNatalProgress(u.natalProgress
-        ? String(u.natalProgress)
-        : 'Le ciel compose ton manuscrit — quelques minutes de silence.');
-      var progSafe = progRaw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return '<div class="natal-cosmos" role="status" aria-live="polite">' +
-        '<div class="natal-galaxy"></div>' +
-        '<div class="natal-stars" aria-hidden="true"></div>' +
-        '<div class="natal-book-stage">' +
-          '<div class="natal-book">' +
-            '<div class="book-spine"></div>' +
-            '<div class="book-cover book-left"></div>' +
-            '<div class="book-pages">' +
-              '<div class="book-page p1"></div>' +
-              '<div class="book-page p2"></div>' +
-              '<div class="book-page p3"></div>' +
-            '</div>' +
-            '<div class="book-cover book-right"></div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="natal-cosmos-copy">' +
-          '<p class="natal-cosmos-title">Le Manuscrit Céleste de ta vie s’écrit</p>' +
-          '<p class="natal-cosmos-step">' + progSafe + '</p>' +
-          '<div class="natal-cosmos-bar"><span style="width:' + pct + '%"></span></div>' +
-          '<p class="muted natal-cosmos-hint">Alignement des planètes · calculs du code de vie · assemblage du langage de l’univers. Ne ferme pas cette page.</p>' +
-        '</div>' +
-        '</div>';
+      return manuscriptWaitHtml('natal', {
+        pct: u.natalProgressPct,
+        progress: u.natalProgress
+      });
     }
     if (natalCanRead()) {
       return '<p class="muted">Profil enregistré · ton manuscrit est prêt.</p>';
@@ -2179,14 +2336,8 @@
   }
 
   function askBtn(kind, askLabel, readLabel) {
-    if (state.busy === kind) {
-      var busyMsg = 'Le ciel s’écrit…';
-      if (kind === 'natal') busyMsg = 'Écriture en cours… quelques minutes';
-      else if (kind === 'mois') busyMsg = 'Écriture du mois… quelques minutes';
-      else if (kind === 'jour') busyMsg = 'Écriture du jour…';
-      else if (kind === 'couple') busyMsg = 'Écriture du couple… quelques minutes';
-      return '<button class="btn" disabled>' + busyMsg + '</button>';
-    }
+    /* Pendant la génération : l’animation livre 3D suffit (pas de bouton grisé). */
+    if (isKindGenerating(kind)) return '';
     /* Natal : jamais data-pdf / cache local books — uniquement fichier confirmé serveur. */
     if (kind === 'natal') {
       if (natalCanRead()) {
@@ -2250,10 +2401,11 @@
       return '<div class="natal-wait natal-wait-error" role="alert"><p>' + eSafe + '</p></div>';
     }
     var st = kind === 'jour' ? u.jourStatus : u.moisStatus;
-    var prog = kind === 'jour' ? u.jourProgress : u.moisProgress;
     if (st === 'generating' || state.busy === kind) {
-      var pSafe = String(prog || 'Le ciel s’écrit…').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return '<p class="muted">' + pSafe + '</p>';
+      return manuscriptWaitHtml(kind, {
+        pct: kind === 'jour' ? u.jourProgressPct : u.moisProgressPct,
+        progress: kind === 'jour' ? u.jourProgress : u.moisProgress
+      });
     }
     if (st === 'error') {
       var err = kind === 'jour' ? u.jourError : u.moisError;
@@ -2297,11 +2449,10 @@
       return '<div class="natal-wait natal-wait-error" role="alert"><p>' + errSafe + '</p></div>';
     }
     if (u.coupleStatus === 'generating' || state.busy === 'couple') {
-      var pct = u.coupleProgressPct != null ? Math.max(0, Math.min(100, Number(u.coupleProgressPct) || 0)) : 12;
-      var progSafe = escapeHtml(poeticNatalProgress(u.coupleProgress || 'Le ciel compose votre manuscrit de couple…'));
-      return '<div class="natal-wait" role="status"><p>' + progSafe + '</p>' +
-        '<div class="natal-cosmos-bar"><span style="width:' + pct + '%"></span></div>' +
-        '<p class="muted">Deux thèmes · synastrie · assemblage. Ne ferme pas cette page.</p></div>';
+      return manuscriptWaitHtml('couple', {
+        pct: u.coupleProgressPct,
+        progress: u.coupleProgress
+      });
     }
     return '';
   }
@@ -2443,6 +2594,30 @@
     var showUltime = (p === 'celeste' || monthsPaid() > 0) && p !== 'divin';
     var ultimeLine = monthsPaid() + ' / 6 mois payés' + (isPausedPaid() ? ' (conservés)' : '');
 
+    var downloadBlock = '';
+    if (u.showDownload || p === 'divin') {
+      var dNeed = u.downloadNeed || 2;
+      var dHave = u.divinMonthsPaid || 0;
+      if (dHave === 0 && p === 'divin' && isActive()) dHave = Math.max(1, monthsPaid() > 0 ? 1 : 0);
+      var dLeft = u.downloadMonthsLeft != null ? u.downloadMonthsLeft : Math.max(0, dNeed - dHave);
+      if (u.canDownloadAll) {
+        downloadBlock =
+          '<div class="acct-block">' +
+            '<div class="label">Téléchargement · Divin</div>' +
+            '<p class="muted acct-hint">Télécharge tous tes manuscrits prêts (natal, mois, jour, couple…) en un fichier ZIP.</p>' +
+            '<button class="btn" type="button" id="download-all-ms">Télécharger tous mes manuscrits</button>' +
+          '</div>';
+      } else {
+        downloadBlock =
+          '<div class="acct-block">' +
+            '<div class="label">Téléchargement · Divin</div>' +
+            '<p class="acct-value">Déblocage dans ' + dLeft + ' mois</p>' +
+            '<p class="muted acct-hint">Option réservée au Divin, après ' + dNeed +
+            ' mois d’abonnement. Progression : <b>' + dHave + ' / ' + dNeed + '</b>.</p>' +
+          '</div>';
+      }
+    }
+
     var birthTimeDisp = '';
     if (u.birthTime) {
       var tm = String(u.birthTime).trim().match(/^(\d{1,2}):(\d{2})/);
@@ -2488,6 +2663,7 @@
           : '') +
         '<div class="acct-row"><span class="label">IA Céleste</span><span class="acct-row-val">' + iaLine + '</span></div>' +
       '</div>' +
+      downloadBlock +
       profileBlock +
       '<div class="acct-block">' +
         '<div class="label">Apparence</div>' +
@@ -2506,6 +2682,12 @@
   }
 
   function pdfView(id) {
+    function manuscriptFrameHtml(src, title) {
+      return '<div class="natal-frame-wrap" id="natal-frame-wrap">' +
+        '<iframe class="natal-frame" title="' + escapeHtml(title || 'Manuscrit') + '" src="' + escapeHtml(src) + '"></iframe>' +
+        '<button type="button" class="ms-fs-btn" id="pdf-fs" aria-pressed="false" aria-label="Manuscrit en plein écran" title="Manuscrit en plein écran">⛶</button>' +
+        '</div>';
+    }
     var titleHtml = natalTitleHtml();
     var titlePlain = natalTitlePlain();
     var kicker = NATAL.kicker;
@@ -2541,7 +2723,7 @@
         'Voici ton Manuscrit Céleste de ta vie. Lecture dans l’app uniquement, tant que ton abonnement est actif.'
       ];
       if (url && natalCanRead()) {
-        extra = '<iframe class="natal-frame" title="Manuscrit natal" src="' + escapeHtml(url) + '"></iframe>';
+        extra = manuscriptFrameHtml(url, 'Manuscrit natal');
       } else {
         extra = '<p class="muted">Manuscrit indisponible pour le moment. Reviens à l’accueil et appuie sur OBTENIR LE MANUSCRIT DE MA VIE.</p>';
       }
@@ -2558,7 +2740,7 @@
           : 'Voici ton Manuscrit Céleste du mois. Lecture dans l’app uniquement, tant que ton abonnement est actif.'
       ];
       if (pUrl && periodCanRead(id)) {
-        extra = '<iframe class="natal-frame" title="Manuscrit ' + id + '" src="' + escapeHtml(pUrl) + '"></iframe>';
+        extra = manuscriptFrameHtml(pUrl, 'Manuscrit ' + id);
       } else {
         extra = '<p class="muted">Manuscrit indisponible pour le moment. Reviens à l’onglet et demande-le à nouveau.</p>';
       }
@@ -2574,7 +2756,7 @@
         'Voici votre Manuscrit Céleste de couple. Lecture dans l’app uniquement, tant que ton abonnement Divin est actif.'
       ];
       if (cUrl && coupleCanRead()) {
-        extra = '<iframe class="natal-frame" title="Manuscrit couple" src="' + escapeHtml(cUrl) + '"></iframe>';
+        extra = manuscriptFrameHtml(cUrl, 'Manuscrit couple');
       } else {
         extra = '<p class="muted">Manuscrit de couple indisponible. Reviens à l’onglet Couple.</p>';
       }
@@ -2585,7 +2767,6 @@
     var ia = iaCtx ? readerIaPanel(iaCtx) : '';
     return '<div class="pdf-view"><header>' +
       '<button type="button" class="pdf-back" id="close-pdf">← Retour</button>' +
-      '<button type="button" class="pdf-fs" id="pdf-fs" aria-pressed="false">Plein écran</button>' +
       '<span class="kicker">' + titlePlain + '</span></header>' +
       '<div class="pdf-body manuscript-protect">' + body + ia + '</div>' +
       '<div class="ms-sel-bar" id="ms-sel-bar" hidden>' +
@@ -2596,6 +2777,7 @@
   }
 
   function render() {
+    if (!state.pdf) setPdfFsFallback(false);
     var root = document.getElementById('app');
     var html = '';
     if (state.screen === 'login') html = loginView();
@@ -2779,12 +2961,7 @@
     initPartnerPlaceAutocomplete();
     var cp = document.getElementById('close-pdf');
     if (cp) cp.onclick = function () {
-      if (isPdfFullscreen()) {
-        var exit = document.exitFullscreen || document.webkitExitFullscreen;
-        if (exit) try { exit.call(document); } catch (e) {}
-      }
-      var view = document.querySelector('.pdf-view');
-      if (view) view.classList.remove('is-fs-fallback');
+      clearPdfFullscreen();
       state.pdf = null;
       hideMsSelBar();
       render();
@@ -2800,6 +2977,51 @@
     if (oa) oa.onclick = function () { state.account = true; render(); };
     var ca = document.getElementById('close-account');
     if (ca) ca.onclick = function () { state.account = false; render(); };
+    var dlAll = document.getElementById('download-all-ms');
+    if (dlAll) {
+      dlAll.onclick = function () {
+        if (!(state.user && state.user.canDownloadAll)) {
+          alert('Le téléchargement se débloque après 2 mois en Divin.');
+          return;
+        }
+        var url = withAuthQuery('/download-all?email=' + encodeURIComponent(state.user.email || ''));
+        dlAll.disabled = true;
+        dlAll.textContent = 'Préparation…';
+        fetch(url, { headers: authHeaders(false) })
+          .then(function (r) {
+            if (!r.ok) {
+              return r.json().then(function (j) {
+                throw new Error((j && j.error) || 'Téléchargement impossible');
+              }).catch(function (e) {
+                if (e && e.message && e.message.indexOf('Téléchargement') >= 0) throw e;
+                throw new Error('Téléchargement impossible');
+              });
+            }
+            var cd = r.headers.get('content-disposition') || '';
+            var m = cd.match(/filename="([^"]+)"/i);
+            var fname = (m && m[1]) || 'manuscrits-celestes.zip';
+            return r.blob().then(function (blob) { return { blob: blob, fname: fname }; });
+          })
+          .then(function (pack) {
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(pack.blob);
+            a.download = pack.fname;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function () {
+              URL.revokeObjectURL(a.href);
+              a.remove();
+            }, 2000);
+          })
+          .catch(function (err) {
+            alert((err && err.message) || 'Téléchargement impossible.');
+          })
+          .finally(function () {
+            dlAll.disabled = false;
+            dlAll.textContent = 'Télécharger tous mes manuscrits';
+          });
+      };
+    }
     var themeChip = document.getElementById('theme-chip');
     if (themeChip) themeChip.onclick = function () {
       setTheme(state.theme === 'light' ? 'dark' : 'light');
@@ -2872,6 +3094,6 @@
     render();
   });
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js?v=36').catch(function () {});
+    navigator.serviceWorker.register('/sw.js?v=37').catch(function () {});
   }
 })();

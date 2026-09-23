@@ -672,7 +672,19 @@ ${skipSynthese ? '' : synHtml}
   document.addEventListener('selectionchange', function () {
     var sel = window.getSelection();
     var t = sel && !sel.isCollapsed ? String(sel.toString() || '') : '';
-    emit(t.length >= 20 ? t : '');
+    emit(t.replace(/\s+/g, ' ').trim().length >= 12 ? t : '');
+  });
+  document.addEventListener('mouseup', function () {
+    var sel = window.getSelection();
+    var t = sel && !sel.isCollapsed ? String(sel.toString() || '') : '';
+    emit(t.replace(/\s+/g, ' ').trim().length >= 12 ? t : '');
+  });
+  document.addEventListener('touchend', function () {
+    setTimeout(function () {
+      var sel = window.getSelection();
+      var t = sel && !sel.isCollapsed ? String(sel.toString() || '') : '';
+      emit(t.replace(/\s+/g, ' ').trim().length >= 12 ? t : '');
+    }, 80);
   });
 })();
 </script>

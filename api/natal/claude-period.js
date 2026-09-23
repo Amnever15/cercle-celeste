@@ -1,5 +1,5 @@
 /**
- * Rédaction Manuscrit du mois (~10 pages) et du jour (1–4 pages).
+ * Rédaction Manuscrit du mois (~10 pages) et du jour (2–6 pages, max 6).
  * Réutilise le thème HD/Astro en cache (pas de re-fetch si déjà stocké).
  */
 const { claudeJsonApi, claudeKey } = require('./claude-natal');
@@ -102,7 +102,7 @@ async function generateMois(contact, hd, astro, onProgress) {
 }
 
 /**
- * ~1–4 pages pour aujourd’hui.
+ * ~2–6 pages pour aujourd’hui (plafond 6).
  */
 async function generateJour(contact, hd, astro, onProgress) {
   if (!claudeKey()) throw new Error('CLAUDE_KEY manquant');
@@ -112,7 +112,7 @@ async function generateJour(contact, hd, astro, onProgress) {
 
   var data = await claudeJsonApi(
     'Tu es l’auteur des Manuscrits Célestes (français, ton intime, précis).\n' +
-    'Écris le MANUSCRIT DU JOUR pour le ' + label + ' — environ 1 à 4 pages (~400 à 1100 mots).\n' +
+    'Écris le MANUSCRIT DU JOUR pour le ' + label + ' — environ 2 à 6 pages de lecture, JAMAIS plus de 6 (~600 à 1600 mots au total).\n' +
     'Concentre-toi sur AUJOURD’HUI pour CE thème HD + astral : énergie, autorité, une porte à ouvrir, une vigilance.\n' +
     'Interdits : mention d’IA, d’API, de modèle.\n\n' +
     ctx + '\n\n' +
@@ -128,7 +128,7 @@ async function generateJour(contact, hd, astro, onProgress) {
     '  "conclusion": "1 paragraphe de clôture",\n' +
     '  "rituel": {"titre":"Geste du soir","description":"2-4 phrases"}\n' +
     '}\n',
-    3500,
+    4200,
     'Jour-' + label
   );
 

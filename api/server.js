@@ -15,6 +15,7 @@ const natalGen = require('./natal-generate');
 const periodGen = require('./period-generate');
 const coupleGen = require('./couple-generate');
 const chartCache = require('./natal/chart-cache');
+const downloadBundle = require('./download-bundle');
 
 const ROOT = __dirname;
 const ULTIME_MONTHS = plans.ULTIME_MONTHS;
@@ -81,7 +82,7 @@ const LOG = resolveLogPath();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file', '/download-all'];
 const LAST_WEBHOOKS_MAX = 20;
 const IA_MESSAGES_MAX = 1000;
 
@@ -191,6 +192,7 @@ function emptyContact(email) {
     sessionToken: null,
     active: false,
     monthsPaid: 0,
+    divinMonthsPaid: 0,
     saleIds: [],
     createdAt: new Date().toISOString(),
     lastPaymentAt: null,
@@ -340,6 +342,9 @@ function grantPayment(c, saleId, prenom, nom, planId) {
   }
   if (id) c.saleIds.push(id);
   c.monthsPaid = (c.monthsPaid || 0) + 1;
+  if (c.plan === 'divin') {
+    c.divinMonthsPaid = (c.divinMonthsPaid || 0) + 1;
+  }
   refreshUltime(c);
   return { doubled: false };
 }
@@ -609,6 +614,8 @@ function publicContact(c) {
   out.jourStatus = (c && c.jourStatus) || 'none';
   out.moisProgress = (c && c.moisProgress) || null;
   out.jourProgress = (c && c.jourProgress) || null;
+  out.moisProgressPct = (c && c.moisProgressPct != null) ? c.moisProgressPct : null;
+  out.jourProgressPct = (c && c.jourProgressPct != null) ? c.jourProgressPct : null;
   out.moisError = (c && c.moisError) || null;
   out.jourError = (c && c.jourError) || null;
   out.moisKey = (c && c.moisKey) || null;
@@ -930,6 +937,7 @@ async function handle(req, res) {
         c.plan = plans.demoPlanFromEmail(email);
         c.active = true;
         c.monthsPaid = c.plan === 'gratuit' ? 0 : (c.plan === 'divin' ? 1 : 2);
+        c.divinMonthsPaid = c.plan === 'divin' ? 1 : 0;
         refreshUltime(c);
         c.passwordHash = hashPassword(password);
         c.sessionToken = newSessionToken();
@@ -1014,8 +1022,16 @@ async function handle(req, res) {
         c.monthsPaid = months;
         refreshUltime(c);
       }
+      const divinMonths = parseInt(body.divinMonthsPaid, 10);
+      if (Number.isFinite(divinMonths) && divinMonths >= 0) {
+        c.divinMonthsPaid = divinMonths;
+      } else if (planId === 'divin' && (!c.divinMonthsPaid || c.divinMonthsPaid < 1)) {
+        /* Premier grant Divin : au moins 1 mois compté. */
+        c.divinMonthsPaid = Math.max(1, c.divinMonthsPaid || 0);
+      }
       writeStore(store);
-      logLine('ADMIN_GRANT ' + email + ' plan=' + c.plan + ' months=' + c.monthsPaid + ' active=' + c.active);
+      logLine('ADMIN_GRANT ' + email + ' plan=' + c.plan + ' months=' + c.monthsPaid +
+        ' divinMonths=' + (c.divinMonthsPaid || 0) + ' active=' + c.active);
       return send(res, 200, { ok: true, action: 'ADMIN_GRANT', contact: publicContact(c) }, req);
     }
 
@@ -1359,6 +1375,35 @@ async function handle(req, res) {
       } catch (e) {
         return send(res, 500, { error: 'lecture fichier' }, req);
       }
+    }
+
+    if (route === '/download-all' && req.method === 'GET') {
+      const auth = requireSession(req, url, null);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const c = auth.c;
+      const ent = plans.entitlements(c);
+      if (!ent.showDownload) {
+        return send(res, 403, { error: 'Le téléchargement des manuscrits est réservé au plan Divin.' }, req);
+      }
+      if (!ent.canDownloadAll) {
+        const left = ent.downloadMonthsLeft || plans.DOWNLOAD_UNLOCK_MONTHS;
+        return send(res, 403, {
+          error: left <= 1
+            ? 'Encore 1 mois en Divin pour débloquer le téléchargement.'
+            : ('Encore ' + left + ' mois en Divin pour débloquer le téléchargement.'),
+          contact: publicContact(c)
+        }, req);
+      }
+      const pack = downloadBundle.buildDownloadZip(c);
+      if (!pack.ok) {
+        return send(res, 404, { error: pack.error || 'aucun manuscrit' }, req);
+      }
+      res.writeHead(200, Object.assign({
+        'Content-Type': 'application/zip',
+        'Content-Length': pack.buffer.length,
+        'Content-Disposition': 'attachment; filename="' + pack.filename + '"'
+      }, corsHeaders(req)));
+      return res.end(pack.buffer);
     }
 
     if (route === '/natal-file' && req.method === 'GET') {
