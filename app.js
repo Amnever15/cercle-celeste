@@ -61,7 +61,9 @@
     account: false,
     ia: false,
     iaMessages: [],
-    iaBusy: false
+    iaBusy: false,
+    pendingAsk: null,
+    natalPreview: null
   };
 
   function load() {
@@ -78,11 +80,26 @@
   }
   function afterLogin() {
     /* Même si abo en pause : accès app (quotas Gratuit), pas d’écran bloquant. */
+    if (needsOnboarding()) {
+      state.screen = 'onboarding';
+      return;
+    }
     if (localStorage.getItem('cercle.installedHint')) {
       state.screen = 'app';
     } else {
       state.screen = 'install';
     }
+  }
+  function profileComplete() {
+    return !!(state.user && state.user.profileComplete);
+  }
+  function needsOnboarding() {
+    /* Céleste/Divin actifs : profil avant l’app. Gratuit : plus tard (jour/mois/natal). */
+    return !!(canNatal() && !profileComplete());
+  }
+  function goAppOrInstall() {
+    if (localStorage.getItem('cercle.installedHint')) state.screen = 'app';
+    else state.screen = 'install';
   }
   function monthsPaid() {
     return (state.user && state.user.monthsPaid) || 0;
@@ -198,7 +215,17 @@
     if (kind === 'ultime' && !canUltime()) return;
     if (kind === 'jour' && dailyLeft() === 0) return;
     if (kind === 'mois' && monthlyLeft() === 0) return;
-    if (bookReady(kind)) {
+    if ((kind === 'natal' || kind === 'jour' || kind === 'mois') && !profileComplete()) {
+      state.pendingAsk = kind;
+      state.screen = 'onboarding';
+      render();
+      return;
+    }
+    if (kind === 'natal' && state.user && state.user.natalReady) {
+      openNatalReader();
+      return;
+    }
+    if (bookReady(kind) && kind !== 'natal') {
       state.pdf = kind;
       render();
       return;
@@ -216,8 +243,20 @@
         if (res.data && res.data.contact) applyAccess(res.data.contact);
         if (!res.ok) {
           state.busy = null;
+          if (res.data && res.data.needProfile) {
+            state.pendingAsk = kind;
+            state.screen = 'onboarding';
+            render();
+            return;
+          }
           alert((res.data && res.data.error) || 'Impossible d’écrire ce manuscrit.');
           render();
+          return;
+        }
+        if (kind === 'natal') {
+          state.busy = null;
+          markBook(kind);
+          openNatalReader(res.data && res.data.pdfUrl);
           return;
         }
         setTimeout(function () {
@@ -231,6 +270,64 @@
         state.busy = null;
         alert('Le serveur d’accès n’est pas joignable.');
         render();
+      });
+  }
+
+  function natalPdfUrl() {
+    if (state.user && state.user.natalPdfUrl) return state.user.natalPdfUrl;
+    if (state.user && state.user.email) return '/natal-file?email=' + encodeURIComponent(state.user.email);
+    return '';
+  }
+
+  function openNatalReader(url) {
+    var u = url || natalPdfUrl();
+    state.natalPreview = u || true;
+    state.pdf = 'natal';
+    render();
+  }
+
+  function saveProfile() {
+    var email = state.user && state.user.email;
+    if (!email) return;
+    var birthDate = (document.getElementById('birth-date') || {}).value || '';
+    var birthTime = (document.getElementById('birth-time') || {}).value || '';
+    var birthPlace = ((document.getElementById('birth-place') || {}).value || '').trim();
+    var genderEl = document.querySelector('input[name="gender"]:checked');
+    var gender = genderEl ? genderEl.value : '';
+    if (!birthDate) { alert('Ta date de naissance ✦'); return; }
+    if (!birthTime) { alert('Ton heure de naissance ✦'); return; }
+    if (!birthPlace) { alert('Ton lieu de naissance ✦'); return; }
+    if (!gender) { alert('Choisis un genre (pour le ton d’écriture) ✦'); return; }
+    var btn = document.getElementById('save-profile');
+    if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+    fetch(API + '/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: email,
+        birthDate: birthDate,
+        birthTime: birthTime,
+        birthPlace: birthPlace,
+        gender: gender
+      })
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          alert((res.data && res.data.error) || 'Impossible d’enregistrer le profil.');
+          if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer mon profil'; }
+          return;
+        }
+        if (res.data && res.data.contact) applyAccess(res.data.contact);
+        var pending = state.pendingAsk;
+        state.pendingAsk = null;
+        localStorage.setItem('cercle.installedHint', '1');
+        state.screen = 'app';
+        render();
+        if (pending) askManuscript(pending);
+      })
+      .catch(function () {
+        alert('Le serveur n’est pas joignable.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer mon profil'; }
       });
   }
 
@@ -316,6 +413,31 @@
       '</div></div></div>';
   }
 
+  function onboardingView() {
+    var u = state.user || {};
+    var g = u.gender || '';
+    function genderOpt(val, label) {
+      return '<label class="gender-opt"><input type="radio" name="gender" value="' + val + '"' +
+        (g === val ? ' checked' : '') + '> ' + label + '</label>';
+    }
+    return '<div class="screen">' +
+      '<div class="scroll noshift stack" style="justify-content:center;max-width:420px;margin:0 auto;width:100%">' +
+        '<div class="brand"><span class="star">✦</span><h1>Ton ciel<br><span>de naissance</span></h1>' +
+        '<p class="lede">Une seule fois. Enregistré pour toujours sous ' + (u.email || 'ton email') + ' — pour le natal, le jour et le mois.</p></div>' +
+        '<div class="card stack">' +
+          '<div class="field"><label class="label" for="birth-date">Date de naissance</label>' +
+          '<input class="input" id="birth-date" type="date" value="' + (u.birthDate || '') + '" required></div>' +
+          '<div class="field"><label class="label" for="birth-time">Heure de naissance</label>' +
+          '<input class="input" id="birth-time" type="time" value="' + (u.birthTime || '') + '" required></div>' +
+          '<div class="field"><label class="label" for="birth-place">Lieu de naissance</label>' +
+          '<input class="input" id="birth-place" type="text" placeholder="Paris, France" value="' + (u.birthPlace || '').replace(/"/g, '&quot;') + '" autocomplete="off"></div>' +
+          '<div class="field"><span class="label">Genre (ton d’écriture)</span>' +
+          '<div class="gender-row">' + genderOpt('femme', 'Femme') + genderOpt('homme', 'Homme') + genderOpt('autre', 'Autre') + '</div></div>' +
+          '<button class="btn" id="save-profile">Enregistrer mon profil</button>' +
+          (canNatal() ? '' : '<button class="link" id="skip-onboarding">Plus tard</button>') +
+        '</div></div></div>';
+  }
+
   function topbar() {
     var u = state.user || {};
     return '<div class="topbar"><span class="kicker">Cercle Céleste</span>' +
@@ -346,13 +468,32 @@
       '</div>';
   }
 
+  function natalStatusLine() {
+    var u = state.user || {};
+    if (!profileComplete()) return '<p class="muted">Profil de naissance : à renseigner avant la génération.</p>';
+    if (u.natalStatus === 'generating' || state.busy === 'natal') {
+      return '<p class="muted">Génération… le ciel s’écrit sur le serveur.</p>';
+    }
+    if (u.natalReady) {
+      return '<p class="muted">Profil enregistré · manuscrit prêt (ouverture phase 1).</p>';
+    }
+    return '<p class="muted">Profil enregistré · en attente de ta demande.</p>';
+  }
+
   function natalTab() {
     var prenom = (state.user && state.user.prenom) || 'toi';
     var months = monthsPaid();
     var left = Math.max(0, ULTIME.need - months);
     var unlocked = canUltime();
+    var natalAskLabel = (state.user && state.user.natalReady) ? 'Lire les 28 pages' : 'Demander les 28 pages';
     var natalCard = canNatal()
-      ? '<div class="card stack"><div class="label">' + NATAL.kicker + '</div><h2>' + NATAL.title + '</h2><p class="muted">' + NATAL.pages + ' pages · écrit une fois, à ta demande</p><p>' + NATAL.intro + '</p>' + askBtn('natal', 'Demander les 28 pages', 'Relire les 28 pages') + '</div>'
+      ? '<div class="card stack"><div class="label">' + NATAL.kicker + '</div><h2>' + NATAL.title + '</h2><p class="muted">' + NATAL.pages + ' pages · écrit une fois, à ta demande</p><p>' + NATAL.intro + '</p>' +
+        natalStatusLine() +
+        askBtn('natal', natalAskLabel, 'Lire les 28 pages') +
+        (state.user && state.user.natalReady && natalPdfUrl()
+          ? '<a class="btn ghost" href="' + natalPdfUrl() + '" target="_blank" rel="noopener">Télécharger le PDF</a>'
+          : '') +
+        '</div>'
       : '<div class="card lock stack"><div class="label">Plan Céleste</div><h2>' + NATAL.title + '</h2><p class="muted">28 pages · 59 € / mois</p><p>' + (isPausedPaid() ? 'Abonnement en pause : le natal se rouvre dès que tu reprends.' : 'Le livre natal s’ouvre avec l’abonnement Céleste.') + '</p></div>';
     var ultime;
     if (unlocked) {
@@ -372,6 +513,9 @@
 
   function askBtn(kind, askLabel, readLabel) {
     if (state.busy === kind) return '<button class="btn" disabled>Le ciel s’écrit…</button>';
+    if (kind === 'natal' && state.user && state.user.natalReady) {
+      return '<button class="btn" data-ask="natal">' + readLabel + '</button>';
+    }
     if (bookReady(kind)) return '<button class="btn" data-pdf="' + kind + '">' + readLabel + '</button>';
     return '<button class="btn" data-ask="' + kind + '">' + askLabel + '</button>';
   }
@@ -443,11 +587,16 @@
     if (p === 'celeste' || p === 'divin' || monthsPaid() > 0) {
       extraLine += ' Ultime : ' + monthsPaid() + ' / 6 mois payés' + (isPausedPaid() ? ' (conservés).' : '.');
     }
+    var profileLine = profileComplete()
+      ? ('Profil natal : ' + (u.birthDate || '') + ' · ' + (u.birthPlace || '') + (u.natalReady ? ' · manuscrit prêt' : '') + '.')
+      : 'Profil natal : pas encore renseigné.';
     return '<div class="sheet" id="account-sheet"><div class="panel stack">' +
       '<h3>Ton compte</h3>' +
       '<p>' + (u.prenom || '') + '<br><span class="lede">' + (u.email || '') + '</span></p>' +
       '<p class="lede">' + statusLine + '</p>' +
       '<p class="lede">' + extraLine + '</p>' +
+      '<p class="lede">' + profileLine + '</p>' +
+      (profileComplete() ? '' : '<button class="btn ghost" type="button" id="edit-profile">Renseigner mon ciel de naissance</button>') +
       '<p class="muted">Monter de plan = nouvelle page de paiement Systeme.io. Rétrograder = arrêter l’offre actuelle puis reprendre l’autre (évite un double prélèvement).</p>' +
       actions +
       '<button class="btn ghost" id="close-account">Fermer</button>' +
@@ -460,8 +609,20 @@
     if (id === 'mois') { title = MONTHLY.title; kicker = monthLabel(); paras = MONTHLY.body; }
     if (id === 'jour') { title = TODAY.title; kicker = todayLabel(); paras = TODAY.body; }
     if (id === 'ultime') { title = ULTIME.title; kicker = 'Édition extra-longue'; paras = ['Tes 140 pages s’ouvriront ici, une fois les 6 mois d’abonnement atteints.']; }
+    var extra = '';
+    if (id === 'natal') {
+      var url = natalPdfUrl();
+      paras = [
+        'Ouverture générée sur le serveur (phase 1) — pas encore les 28 pages illustrées du moteur complet.',
+        'Ton profil de naissance est enregistré pour toujours. Le PDF ci-dessous s’ouvre sans clé API sur ton téléphone.'
+      ];
+      if (url) {
+        extra = '<p><a class="btn" href="' + url + '" target="_blank" rel="noopener">Ouvrir / télécharger le PDF</a></p>' +
+          '<iframe class="natal-frame" title="Manuscrit natal" src="' + url + '"></iframe>';
+      }
+    }
     var body = '<p class="kicker">' + kicker + '</p><h2>' + title + '</h2>' +
-      paras.map(function (p) { return '<p>' + p + '</p>'; }).join('');
+      paras.map(function (p) { return '<p>' + p + '</p>'; }).join('') + extra;
     var ia = canIa()
       ? '<div class="ia-dock"><button class="btn ghost" id="open-ia">Question à l’IA Céleste · ' + iaLeft() + ' restantes</button></div>'
       : '<div class="ia-dock"><p class="muted">L’IA Céleste répond ici, dans le plan Divin (500 questions / mois).</p></div>';
@@ -487,14 +648,19 @@
     var root = document.getElementById('app');
     var html = '';
     if (state.screen === 'login') html = loginView();
+    else if (state.screen === 'onboarding') html = onboardingView();
     else if (state.screen === 'install') html = installView();
     else {
       if (state.screen === 'paused') state.screen = 'app';
-      var tab = state.tab === 'mois' ? moisTab() : state.tab === 'jour' ? jourTab() : natalTab();
-      html = '<div class="screen">' + topbar() + '<div class="scroll">' + tab + '</div>' + nav() + '</div>';
-      if (state.account) html += accountSheet();
-      if (state.pdf) html += pdfView(state.pdf);
-      if (state.ia) html += iaSheet();
+      if (needsOnboarding()) {
+        html = onboardingView();
+      } else {
+        var tab = state.tab === 'mois' ? moisTab() : state.tab === 'jour' ? jourTab() : natalTab();
+        html = '<div class="screen">' + topbar() + '<div class="scroll">' + tab + '</div>' + nav() + '</div>';
+        if (state.account) html += accountSheet();
+        if (state.pdf) html += pdfView(state.pdf);
+        if (state.ia) html += iaSheet();
+      }
     }
     root.innerHTML = html;
     bind();
@@ -548,7 +714,8 @@
         state.deferredPrompt.userChoice.then(function () {
           state.deferredPrompt = null;
           localStorage.setItem('cercle.installedHint', '1');
-          state.screen = 'app';
+          if (needsOnboarding()) state.screen = 'onboarding';
+          else state.screen = 'app';
           render();
         });
       } else {
@@ -558,7 +725,17 @@
     var skip = document.getElementById('skip-install');
     if (skip) skip.onclick = function () {
       localStorage.setItem('cercle.installedHint', '1');
-      state.screen = 'app';
+      if (needsOnboarding()) state.screen = 'onboarding';
+      else state.screen = 'app';
+      render();
+    };
+
+    var saveP = document.getElementById('save-profile');
+    if (saveP) saveP.onclick = saveProfile;
+    var skipOn = document.getElementById('skip-onboarding');
+    if (skipOn) skipOn.onclick = function () {
+      state.pendingAsk = null;
+      goAppOrInstall();
       render();
     };
 
@@ -592,6 +769,12 @@
     if (oa) oa.onclick = function () { state.account = true; render(); };
     var ca = document.getElementById('close-account');
     if (ca) ca.onclick = function () { state.account = false; render(); };
+    var ep = document.getElementById('edit-profile');
+    if (ep) ep.onclick = function () {
+      state.account = false;
+      state.screen = 'onboarding';
+      render();
+    };
     document.querySelectorAll('[data-plan-link]').forEach(function (b) {
       b.onclick = function () {
         var kind = b.getAttribute('data-plan-link');
@@ -608,7 +791,7 @@
     if (lo) lo.onclick = function () {
       localStorage.removeItem('cercle.user');
       state.user = null; state.screen = 'login'; state.account = false; state.tab = 'natal';
-      state.ia = false; state.iaMessages = []; state.pdf = null;
+      state.ia = false; state.iaMessages = []; state.pdf = null; state.pendingAsk = null; state.natalPreview = null;
       render();
     };
   }
