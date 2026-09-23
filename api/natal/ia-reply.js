@@ -1,127 +1,211 @@
 /**
  * Réponses IA Céleste ancrées dans le manuscrit lu (Divin).
- * Pas de jargon technique côté client.
+ * Appel Claude réel — jamais de stub générique « autorité intérieure ».
  */
-const https = require('https');
 const natalGen = require('../natal-generate');
 const htmlDoc = require('./html-doc');
+const { requestJson } = require('./http');
+const claudeNatal = require('./claude-natal');
 
-function claudeKey() {
-  return process.env.CLAUDE_KEY || process.env.ANTHROPIC_API_KEY || '';
+/** Contenu mois / jour aligné sur l’app (pas encore généré serveur). */
+var MOIS_BODY = [
+  'Ce mois-ci, le ciel te demande de ne plus avancer dans le brouillard : attends le signal, puis réponds avec tout ton être.',
+  'Saturne touche ta Maison X : ta vocation veut un cadre, pas une fuite en avant. Un seul engagement public suffit.',
+  'Fenêtre de puissance : du 8 au 14 — pose une demande claire (projet, lieu, relation) sans forcer le rythme.',
+  'La frustration est ton panneau stop. Si tu pousses sans invitation, tu t’épuises.'
+].join('\n\n');
+
+var JOUR_BODY = [
+  'Aujourd’hui, n’ouvre qu’une porte. Une conversation, un message, un pas visible — pas dix.',
+  'Ton autorité émotionnelle te dit d’attendre la vague : si c’est agité à 10 h, ce n’est pas encore un oui.',
+  'Ce soir, une phrase à écrire : « Qu’est-ce qui s’est ouvert sans que je force ? »'
+].join('\n\n');
+
+function loadNatalPlain(contact, maxChars) {
+  maxChars = maxChars || 14000;
+  try {
+    var file = natalGen.resolveNatalFile(contact, 'json');
+    if (file && file.path) {
+      var raw = require('fs').readFileSync(file.path, 'utf8');
+      var data = JSON.parse(raw);
+      if (data && data.manuscrit) {
+        return htmlDoc.extractPlainText(data.manuscrit, maxChars);
+      }
+    }
+    var htmlFile = natalGen.resolveNatalFile(contact, 'html') || natalGen.resolveNatalFile(contact);
+    if (htmlFile && htmlFile.path) {
+      var html = require('fs').readFileSync(htmlFile.path, 'utf8');
+      var text = html
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (text.length > maxChars) text = text.slice(0, maxChars) + '…';
+      return text;
+    }
+  } catch (e) {}
+  return '';
 }
 
 function loadManuscriptContext(contact, context) {
   context = String(context || 'natal');
-  if (context === 'natal') {
-    try {
-      var file = natalGen.resolveNatalFile(contact, 'json');
-      if (file && file.path) {
-        var raw = require('fs').readFileSync(file.path, 'utf8');
-        var data = JSON.parse(raw);
-        if (data && data.manuscrit) {
-          return htmlDoc.extractPlainText(data.manuscrit, 10000);
-        }
-      }
-      var htmlFile = natalGen.resolveNatalFile(contact, 'html') || natalGen.resolveNatalFile(contact);
-      if (htmlFile && htmlFile.path) {
-        var html = require('fs').readFileSync(htmlFile.path, 'utf8');
-        var text = html
-          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        if (text.length > 10000) text = text.slice(0, 10000) + '…';
-        return text;
-      }
-    } catch (e) {}
-    return '';
+  if (context === 'natal') return loadNatalPlain(contact, 14000);
+  if (context === 'mois') {
+    var natalM = loadNatalPlain(contact, 8000);
+    return (
+      'Manuscrit du mois (texte lu dans l’app) :\n' + MOIS_BODY +
+      (natalM ? '\n\nRepères du manuscrit de ta vie (extrait) :\n' + natalM : '')
+    ).trim();
   }
-  /* mois / jour : contenu encore stub côté app — contexte natal + note temporelle */
-  var natalCtx = loadManuscriptContext(contact, 'natal');
-  var note = context === 'mois'
-    ? 'Contexte : manuscrit du mois en cours. Réponds aussi à la lumière du ciel natal.'
-    : 'Contexte : manuscrit du jour. Réponds pour aujourd’hui, à la lumière du ciel natal.';
-  return (note + '\n\n' + natalCtx).trim();
+  if (context === 'jour') {
+    var natalJ = loadNatalPlain(contact, 8000);
+    return (
+      'Manuscrit du jour (texte lu dans l’app) :\n' + JOUR_BODY +
+      (natalJ ? '\n\nRepères du manuscrit de ta vie (extrait) :\n' + natalJ : '')
+    ).trim();
+  }
+  return loadNatalPlain(contact, 14000);
 }
 
-function fallbackAnswer(question, context) {
-  var q = String(question || '').slice(0, 100);
-  return 'À la lumière de ton manuscrit, pour « ' + q +
-    ' » : écoute d’abord ton autorité intérieure. Si la vague n’est pas claire, ce n’est pas encore un oui. Relis le passage qui parle de ton timing — la réponse est déjà écrite pour toi.';
+/** Fenêtre autour du passage sélectionné, sinon tête + queue du manuscrit. */
+function smartContext(full, selected, maxChars) {
+  maxChars = maxChars || 12000;
+  full = String(full || '');
+  selected = String(selected || '').trim();
+  if (!full) return '';
+  if (selected && selected.length >= 12) {
+    var needle = selected.slice(0, Math.min(48, selected.length));
+    var i = full.indexOf(needle);
+    if (i < 0) {
+      var soft = selected.replace(/\s+/g, ' ').slice(0, 36);
+      i = full.replace(/\s+/g, ' ').indexOf(soft);
+    }
+    if (i >= 0) {
+      var start = Math.max(0, i - 2200);
+      var end = Math.min(full.length, i + selected.length + 4500);
+      var chunk = full.slice(start, end);
+      if (start > 0) chunk = '…' + chunk;
+      if (end < full.length) chunk = chunk + '…';
+      return chunk;
+    }
+  }
+  if (full.length <= maxChars) return full;
+  var head = Math.floor(maxChars * 0.72);
+  var tail = Math.floor(maxChars * 0.22);
+  return full.slice(0, head) + '\n…\n' + full.slice(-tail);
 }
 
-function callClaude(system, userMsg) {
-  return new Promise(function (resolve, reject) {
-    var key = claudeKey();
-    if (!key) return reject(new Error('no-key'));
-    var body = JSON.stringify({
-      model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514',
-      max_tokens: 900,
-      system: system,
-      messages: [{ role: 'user', content: userMsg }]
-    });
-    var req = https.request({
-      hostname: 'api.anthropic.com',
-      path: '/v1/messages',
+function historyToClaudeMessages(history) {
+  var out = [];
+  var list = Array.isArray(history) ? history.slice(-14) : [];
+  for (var i = 0; i < list.length; i++) {
+    var m = list[i];
+    if (!m || !m.text) continue;
+    var role = m.role === 'me' || m.role === 'user' ? 'user' : 'assistant';
+    out.push({ role: role, content: String(m.text).slice(0, 4000) });
+  }
+  return out;
+}
+
+async function callClaude(system, messages) {
+  var key = claudeNatal.claudeKey();
+  if (!key) {
+    var err = new Error('no-key');
+    err.friendly = 'Le ciel ne répond pas pour le moment. Réessaie dans un instant.';
+    throw err;
+  }
+  var model = claudeNatal.claudeModel();
+  var data = await requestJson('https://api.anthropic.com/v1/messages', {
+    label: 'IA Céleste',
+    retries: 2,
+    timeout_ms: 90000,
+    retry_delay_ms: 1200,
+    fetch_options: {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'Content-Length': Buffer.byteLength(body)
-      }
-    }, function (res) {
-      var chunks = [];
-      res.on('data', function (d) { chunks.push(d); });
-      res.on('end', function () {
-        var raw = Buffer.concat(chunks).toString('utf8');
-        try {
-          var j = JSON.parse(raw);
-          var text = (j.content || []).map(function (b) {
-            return b && b.type === 'text' ? b.text : '';
-          }).join('\n').trim();
-          if (!text) return reject(new Error('empty'));
-          resolve(text);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-    req.on('error', reject);
-    req.setTimeout(60000, function () { req.destroy(new Error('timeout')); });
-    req.write(body);
-    req.end();
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: model,
+        max_tokens: 1200,
+        system: system,
+        messages: messages
+      })
+    }
   });
+  var text = (data.content || []).map(function (b) {
+    return b && b.type === 'text' ? b.text : '';
+  }).join('\n').trim();
+  if (!text) {
+    var empty = new Error('empty');
+    empty.friendly = 'Le ciel se tait un instant. Repose ta question dans un moment.';
+    throw empty;
+  }
+  return text;
 }
 
-async function answerFromManuscript(contact, question, context) {
+/**
+ * @param {object} contact
+ * @param {string} question
+ * @param {string} context natal|mois|jour
+ * @param {{ history?: array, selectedPassage?: string }} opts
+ */
+async function answerFromManuscript(contact, question, context, opts) {
+  opts = opts || {};
   var ctx = String(context || 'natal');
-  var manuscript = loadManuscriptContext(contact, ctx);
+  var selected = String(opts.selectedPassage || '').trim();
+  if (selected.length > 4000) selected = selected.slice(0, 4000) + '…';
+  var rawMs = loadManuscriptContext(contact, ctx);
+  var manuscript = smartContext(rawMs, selected, 12000);
   var label = ctx === 'mois' ? 'du mois' : (ctx === 'jour' ? 'du jour' : 'de ta vie');
-  var system =
-    'Tu es l’IA Céleste, presence douce et claire. Tu accompagnes ' +
-    (contact.prenom || 'la lectrice') +
-    ' pendant qu’elle lit son Manuscrit Céleste ' + label + '. ' +
-    'Réponds en français, tutoiement, 2 à 4 courts paragraphes. ' +
-    'Ancre ta réponse dans le manuscrit fourni. Ne mentionne jamais Claude, OpenAI, ni « intelligence artificielle ». ' +
-    'Parle du ciel, des planètes, du code de vie, du langage de l’univers.';
+  var prenom = (contact && contact.prenom) || 'toi';
 
-  var userMsg =
-    (manuscript
-      ? 'Extrait du manuscrit :\n"""\n' + manuscript + '\n"""\n\n'
-      : 'Le manuscrit n’est pas encore disponible en entier. Réponds avec douceur et invite à relire les pages déjà ouvertes.\n\n') +
-    'Question : ' + question;
+  var system =
+    'Tu es l’IA Céleste, présence douce, claire et précise. Tu accompagnes ' + prenom +
+    ' pendant qu’elle ou il lit son Manuscrit Céleste ' + label + '. ' +
+    'Réponds en français, tutoiement, 2 à 5 courts paragraphes. ' +
+    'Ancre CHAQUE réponse dans le contenu concret du manuscrit fourni : cite ou paraphrases des éléments réels ' +
+    '(type / autorité / stratégie HD, planètes, maisons, canaux, chapitres, insights) quand ils apparaissent. ' +
+    'Interdits : phrases toutes faites génériques du type « écoute ton autorité intérieure » / « si la vague n’est pas claire » ' +
+    'sans les relier à CE manuscrit ; ne mentionne jamais Claude, OpenAI, ni « intelligence artificielle ». ' +
+    'Ton : céleste, chaleureux, concret — comme une lecture qui continue le manuscrit, pas un template.';
+
+  var userParts = [];
+  if (manuscript) {
+    userParts.push('Extrait du manuscrit ' + label + ' :\n"""\n' + manuscript + '\n"""');
+  } else {
+    userParts.push(
+      'Le manuscrit n’est pas encore disponible en entier. Dis-le avec douceur et invite à relire les pages déjà ouvertes, ' +
+      'sans inventer de placements fictifs.'
+    );
+  }
+  if (selected) {
+    userParts.push(
+      'Passage sélectionné par la lectrice (à développer et approfondir à la lumière du manuscrit) :\n« ' +
+      selected + ' »\n' +
+      'Continue l’analyse de CE passage : élargis, précise, relie aux autres fils du manuscrit. Ne te contente pas de le reformuler.'
+    );
+  }
+  userParts.push('Question : ' + String(question || '').trim());
+
+  var messages = historyToClaudeMessages(opts.history);
+  messages.push({ role: 'user', content: userParts.join('\n\n') });
 
   try {
-    return await callClaude(system, userMsg);
+    return await callClaude(system, messages);
   } catch (e) {
-    return fallbackAnswer(question, ctx);
+    if (e && e.friendly) throw e;
+    var soft = new Error('claude-fail');
+    soft.friendly = 'Le ciel ne répond pas pour le moment. Réessaie dans un instant.';
+    throw soft;
   }
 }
 
 module.exports = {
   answerFromManuscript,
   loadManuscriptContext,
-  fallbackAnswer
+  smartContext
 };

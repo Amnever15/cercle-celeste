@@ -1301,26 +1301,54 @@ async function handle(req, res) {
       if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
       const question = String(body.question || '').trim();
       const ctx = normalizeIaContext(body.context);
+      const selectedPassage = String(body.selectedPassage || body.developPassage || '').trim().slice(0, 4000);
       if (!question) return send(res, 400, { error: 'question requise' }, req);
       if (question.length > 2000) return send(res, 400, { error: 'Question trop longue.' }, req);
       const store = auth.store;
       const c = auth.c;
-      const check = plans.consumeIa(c);
-      if (!check.ok) {
-        const chatsDenied = ensureIaChats(c);
+      const chatsPre = ensureIaChats(c);
+      const history = normalizeIaMessages(chatsPre[ctx]);
+      const entitlements = plans.entitlements(c);
+      if (!entitlements.canIa) {
         return send(res, 403, {
-          error: check.error,
+          error: 'L’IA Céleste est réservée au plan Divin.',
           context: ctx,
-          messages: normalizeIaMessages(chatsDenied[ctx]),
+          messages: history,
+          contact: publicContact(c)
+        }, req);
+      }
+      if (entitlements.iaLeft <= 0) {
+        return send(res, 403, {
+          error: 'Le ciel se repose pour ce mois. Reviens le 1er.',
+          context: ctx,
+          messages: history,
           contact: publicContact(c)
         }, req);
       }
       let answer;
       try {
         const iaReply = require('./natal/ia-reply');
-        answer = await iaReply.answerFromManuscript(c, question, ctx);
+        answer = await iaReply.answerFromManuscript(c, question, ctx, {
+          history: history,
+          selectedPassage: selectedPassage
+        });
       } catch (e) {
-        answer = 'Le ciel se tait un instant. Repose ta question dans un moment — ton manuscrit garde déjà la réponse.';
+        const soft = (e && e.friendly) || 'Le ciel ne répond pas pour le moment. Réessaie dans un instant.';
+        return send(res, 503, {
+          error: soft,
+          context: ctx,
+          messages: history,
+          contact: publicContact(c)
+        }, req);
+      }
+      const check = plans.consumeIa(c);
+      if (!check.ok) {
+        return send(res, 403, {
+          error: check.error,
+          context: ctx,
+          messages: history,
+          contact: publicContact(c)
+        }, req);
       }
       const messages = appendIaExchange(c, question, answer, ctx);
       writeStore(store);

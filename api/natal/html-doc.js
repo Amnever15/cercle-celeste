@@ -565,6 +565,30 @@ ${sectionsHtml}
 ${synHtml}
 
 </body>
+<script>
+(function () {
+  function stop(e) { e.preventDefault(); }
+  document.addEventListener('copy', stop);
+  document.addEventListener('cut', stop);
+  document.addEventListener('dragstart', stop);
+  var last = '';
+  function emit(text) {
+    text = String(text || '').replace(/\s+/g, ' ').trim();
+    if (text === last) return;
+    last = text;
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'ms-celeste-sel', text: text }, '*');
+      }
+    } catch (err) {}
+  }
+  document.addEventListener('selectionchange', function () {
+    var sel = window.getSelection();
+    var t = sel && !sel.isCollapsed ? String(sel.toString() || '') : '';
+    emit(t.length >= 20 ? t : '');
+  });
+})();
+</script>
 </html>`;
 }
 

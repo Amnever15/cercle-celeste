@@ -348,9 +348,230 @@
     if (!msg || /^server$/i.test(msg) || /\b50[0-9]\b/.test(msg) || /internal/i.test(msg)) {
       return 'Le ciel ne répond pas pour le moment. Réessaie dans un instant.';
     }
-    if (status === 403 && msg) return msg;
+    if ((status === 403 || status === 503) && msg) return msg;
     if (status === 404) return 'Compte introuvable. Reconnecte-toi.';
     return msg;
+  }
+
+  function iaBubbleHtml(m) {
+    return '<div class="ia-bubble ' + (m.role === 'me' ? 'me' : 'bot') + '">' + escapeHtml(m.text) + '</div>';
+  }
+
+  /** Met à jour le chat IA sans re-render de toute la page (conserve le scroll lecteur). */
+  function refreshIaChatDom() {
+    var logEl = document.getElementById('ia-log');
+    if (!logEl) return false;
+    var msgs = state.iaMessages || [];
+    var empty = '<p class="muted ia-empty">Une question sur ce que tu lis… Ex. : que me dit cette page sur l’amour ?</p>';
+    logEl.innerHTML = msgs.length ? msgs.map(iaBubbleHtml).join('') : empty;
+    logEl.scrollTop = logEl.scrollHeight;
+    var left = iaLeft();
+    var disabled = state.iaBusy || left <= 0;
+    var sendBtn = document.getElementById('send-ia');
+    if (sendBtn) {
+      sendBtn.disabled = disabled;
+      sendBtn.textContent = state.iaBusy
+        ? 'Le ciel répond…'
+        : (left <= 0 ? 'Le ciel se repose' : 'Envoyer');
+    }
+    var input = document.getElementById('ia-q');
+    if (input) input.disabled = disabled;
+    return true;
+  }
+
+  function scrollReaderIaIntoView() {
+    var panel = document.querySelector('.reader-ia');
+    if (panel && panel.scrollIntoView) {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function askIaDevelopPassage(passage) {
+    passage = String(passage || '').trim().replace(/\s+/g, ' ');
+    if (passage.length < 20) return;
+    hideMsSelBar();
+    if (!canIa()) {
+      scrollReaderIaIntoView();
+      return;
+    }
+    var q = 'Développe et approfondis ce passage de mon manuscrit :\n\n« ' + passage.slice(0, 1500) + ' »';
+    sendIa({ question: q, selectedPassage: passage });
+    scrollReaderIaIntoView();
+  }
+
+  function hideMsSelBar() {
+    var bar = document.getElementById('ms-sel-bar');
+    if (bar) bar.hidden = true;
+    state._msSelText = '';
+  }
+
+  function showMsSelBar(text) {
+    text = String(text || '').trim().replace(/\s+/g, ' ');
+    var bar = document.getElementById('ms-sel-bar');
+    if (!bar) return;
+    if (text.length < 20) {
+      bar.hidden = true;
+      state._msSelText = '';
+      return;
+    }
+    state._msSelText = text;
+    bar.hidden = false;
+  }
+
+  function blockManuscriptCopy(root) {
+    if (!root || root._msCopyBound) return;
+    root._msCopyBound = true;
+    function stop(e) { e.preventDefault(); }
+    root.addEventListener('copy', stop);
+    root.addEventListener('cut', stop);
+    root.addEventListener('dragstart', stop);
+    root.addEventListener('contextmenu', function (e) {
+      /* laisse le menu natif mais copy est bloqué via l’événement copy */
+      if (e.target && e.target.closest && e.target.closest('input, textarea, #ia-q')) return;
+    });
+  }
+
+  function injectNatalFrameGuards(frame) {
+    if (!frame || frame._msGuard) return;
+    function attach() {
+      try {
+        var doc = frame.contentDocument;
+        if (!doc || !doc.body) return;
+        if (doc.documentElement.getAttribute('data-ms-guard') === '1') {
+          frame._msGuard = true;
+          return;
+        }
+        doc.documentElement.setAttribute('data-ms-guard', '1');
+        function stop(e) { e.preventDefault(); }
+        doc.addEventListener('copy', stop);
+        doc.addEventListener('cut', stop);
+        doc.addEventListener('dragstart', stop);
+        var last = '';
+        doc.addEventListener('selectionchange', function () {
+          var sel = doc.getSelection && doc.getSelection();
+          var t = sel && !sel.isCollapsed ? String(sel.toString() || '').replace(/\s+/g, ' ').trim() : '';
+          if (t === last) return;
+          last = t;
+          state._msSelFromIframe = t.length >= 20;
+          if (state._msSelFromIframe) showMsSelBar(t);
+          else hideMsSelBar();
+        });
+        frame._msGuard = true;
+      } catch (e) {}
+    }
+    frame.addEventListener('load', attach);
+    if (frame.contentDocument && frame.contentDocument.readyState === 'complete') attach();
+  }
+
+  function bindManuscriptSelection() {
+    var body = document.querySelector('.pdf-body');
+    if (body) blockManuscriptCopy(body);
+
+    var frame = document.querySelector('.natal-frame');
+    if (frame) injectNatalFrameGuards(frame);
+
+    var ask = document.getElementById('ms-sel-ask');
+    if (ask) {
+      ask.onclick = function () {
+        askIaDevelopPassage(state._msSelText || '');
+      };
+    }
+
+    if (document._msSelBound) return;
+    document._msSelBound = true;
+
+    function fromDocSelection() {
+      var sel = window.getSelection();
+      if (!sel || sel.isCollapsed) return '';
+      var t = String(sel.toString() || '').trim();
+      if (t.length < 20) return '';
+      var pdfBody = document.querySelector('.pdf-body');
+      if (!pdfBody) return '';
+      var anchor = sel.anchorNode;
+      if (!anchor) return '';
+      var el = anchor.nodeType === 1 ? anchor : anchor.parentElement;
+      if (!el || !pdfBody.contains(el)) return '';
+      if (el.closest && el.closest('.reader-ia, .ms-sel-bar, .pdf-view > header')) return '';
+      return t;
+    }
+
+    document.addEventListener('selectionchange', function () {
+      if (!state.pdf) return;
+      var t = fromDocSelection();
+      if (t) {
+        state._msSelFromIframe = false;
+        showMsSelBar(t);
+      } else if (!state._msSelFromIframe) {
+        hideMsSelBar();
+      }
+    });
+
+    window.addEventListener('message', function (ev) {
+      var d = ev && ev.data;
+      if (!d || d.type !== 'ms-celeste-sel') return;
+      var fr = document.querySelector('.natal-frame');
+      if (fr && ev.source && fr.contentWindow && ev.source !== fr.contentWindow) return;
+      var text = String(d.text || '').trim();
+      state._msSelFromIframe = text.length >= 20;
+      if (state._msSelFromIframe) showMsSelBar(text);
+      else hideMsSelBar();
+    });
+  }
+
+  function isPdfFullscreen() {
+    var fs = document.fullscreenElement || document.webkitFullscreenElement;
+    return !!(fs && fs.classList && fs.classList.contains('pdf-view'));
+  }
+
+  function updateFsButton() {
+    var btn = document.getElementById('pdf-fs');
+    if (!btn) return;
+    var on = isPdfFullscreen();
+    btn.textContent = on ? 'Quitter' : 'Plein écran';
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
+  function togglePdfFullscreen() {
+    var view = document.querySelector('.pdf-view');
+    if (!view) return;
+    var doc = document;
+    if (isPdfFullscreen()) {
+      var exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+      if (exit) {
+        try { exit.call(doc); } catch (e) {}
+      }
+      view.classList.remove('is-fs-fallback');
+      updateFsButton();
+      return;
+    }
+    var req = view.requestFullscreen || view.webkitRequestFullscreen || view.msRequestFullscreen;
+    if (req) {
+      try {
+        var p = req.call(view);
+        if (p && p.catch) {
+          p.catch(function () {
+            view.classList.add('is-fs-fallback');
+            updateFsButton();
+          });
+        }
+      } catch (e) {
+        view.classList.add('is-fs-fallback');
+      }
+    } else {
+      view.classList.add('is-fs-fallback');
+    }
+    updateFsButton();
+  }
+
+  function bindPdfFullscreen() {
+    var btn = document.getElementById('pdf-fs');
+    if (btn) btn.onclick = togglePdfFullscreen;
+    updateFsButton();
+    if (!document._pdfFsBound) {
+      document._pdfFsBound = true;
+      document.addEventListener('fullscreenchange', updateFsButton);
+      document.addEventListener('webkitfullscreenchange', updateFsButton);
+    }
   }
 
   function fetchIaHistory(ctx) {
@@ -375,10 +596,12 @@
           setIaMessages(local, false);
         }
         state.iaLoaded = true;
+        if (state.pdf) refreshIaChatDom();
       })
       .catch(function () {
         if (local.length) setIaMessages(local, false);
         state.iaLoaded = true;
+        if (state.pdf) refreshIaChatDom();
       });
   }
 
@@ -995,31 +1218,39 @@
     });
   }
 
-  function sendIa() {
+  function sendIa(opts) {
+    opts = opts || {};
     var input = document.getElementById('ia-q');
-    var q = input ? (input.value || '').trim() : '';
+    var q = String(opts.question != null ? opts.question : (input ? input.value : '') || '').trim();
     if (!q) return;
-    if (!canIa()) return;
+    if (!canIa()) {
+      scrollReaderIaIntoView();
+      return;
+    }
     if (state.iaBusy) return;
     if (iaLeft() <= 0) {
       alert('Le ciel se repose pour ce mois. Reviens le 1er.');
       return;
     }
     var email = state.user.email;
+    var selectedPassage = String(opts.selectedPassage || '').trim();
     var draft = trimIaMessages(state.iaMessages.concat([{ role: 'me', text: q }]));
     setIaMessages(draft, true);
     state.iaBusy = true;
-    if (input) input.value = '';
-    render();
+    if (input && opts.question == null) input.value = '';
+    else if (input && opts.clearInput !== false) input.value = '';
+    if (!refreshIaChatDom()) render();
+    var payload = {
+      email: email,
+      question: q,
+      context: normalizeIaCtx(state.iaContext),
+      token: state.user && state.user.token
+    };
+    if (selectedPassage) payload.selectedPassage = selectedPassage.slice(0, 4000);
     fetch(API + '/ia', {
       method: 'POST',
       headers: authHeaders(true),
-      body: JSON.stringify({
-        email: email,
-        question: q,
-        context: normalizeIaCtx(state.iaContext),
-        token: state.user && state.user.token
-      })
+      body: JSON.stringify(payload)
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
       .then(function (res) {
         if (res.status === 401) {
@@ -1037,7 +1268,7 @@
         }
         state.iaBusy = false;
         state.iaLoaded = true;
-        render();
+        if (!refreshIaChatDom()) render();
       })
       .catch(function () {
         var withBot = trimIaMessages(state.iaMessages.concat([{
@@ -1046,7 +1277,7 @@
         }]));
         setIaMessages(withBot, true);
         state.iaBusy = false;
-        render();
+        if (!refreshIaChatDom()) render();
       });
   }
 
@@ -1322,23 +1553,17 @@
     }
     ensureIaHistory(ctx);
     var left = iaLeft();
-    var quotaLine = left != null
-      ? ('<p class="muted ia-quota">' + left + ' question' + (left === 1 ? '' : 's') + ' ce mois</p>')
-      : '';
-    var log = (state.iaMessages || []).map(function (m) {
-      return '<div class="ia-bubble ' + (m.role === 'me' ? 'me' : 'bot') + '">' + escapeHtml(m.text) + '</div>';
-    }).join('');
+    var log = (state.iaMessages || []).map(iaBubbleHtml).join('');
     var empty = '<p class="muted ia-empty">Une question sur ce que tu lis… Ex. : que me dit cette page sur l’amour ?</p>';
-    var disabled = state.iaBusy || (left != null && left <= 0);
+    var disabled = state.iaBusy || left <= 0;
     return '<div class="reader-ia stack" data-ia-context="' + ctx + '">' +
       '<div class="label">IA Céleste · ce manuscrit</div>' +
-      quotaLine +
       '<div class="ia-log" id="ia-log">' + (log || empty) + '</div>' +
       '<div class="ia-compose">' +
         '<div class="field"><label class="label" for="ia-q">Ta question</label>' +
         '<input class="input" id="ia-q" placeholder="Que me révèle ce passage ?" ' + (disabled ? 'disabled' : '') + ' autocomplete="off"></div>' +
         '<button class="btn" id="send-ia"' + (disabled ? ' disabled' : '') + '>' +
-          (state.iaBusy ? 'Le ciel répond…' : (left != null && left <= 0 ? 'Quota atteint' : 'Envoyer')) +
+          (state.iaBusy ? 'Le ciel répond…' : (left <= 0 ? 'Le ciel se repose' : 'Envoyer')) +
         '</button>' +
       '</div></div>';
   }
@@ -1513,8 +1738,16 @@
       paras.map(function (p) { return '<p>' + p + '</p>'; }).join('') + extra;
     var iaCtx = (id === 'natal' || id === 'mois' || id === 'jour') ? id : null;
     var ia = iaCtx ? readerIaPanel(iaCtx) : '';
-    return '<div class="pdf-view"><header><button type="button" class="pdf-back" id="close-pdf">← Retour</button><span class="kicker">' + titlePlain + '</span></header>' +
-      '<div class="pdf-body">' + body + ia + '</div></div>';
+    return '<div class="pdf-view"><header>' +
+      '<button type="button" class="pdf-back" id="close-pdf">← Retour</button>' +
+      '<button type="button" class="pdf-fs" id="pdf-fs" aria-pressed="false">Plein écran</button>' +
+      '<span class="kicker">' + titlePlain + '</span></header>' +
+      '<div class="pdf-body manuscript-protect">' + body + ia + '</div>' +
+      '<div class="ms-sel-bar" id="ms-sel-bar" hidden>' +
+        '<button type="button" class="ms-sel-btn" id="ms-sel-ask">' +
+          'Demander à l’IA Céleste de développer ce passage' +
+        '</button>' +
+      '</div></div>';
   }
 
   function render() {
@@ -1652,9 +1885,21 @@
       };
     });
     var cp = document.getElementById('close-pdf');
-    if (cp) cp.onclick = function () { state.pdf = null; render(); };
+    if (cp) cp.onclick = function () {
+      if (isPdfFullscreen()) {
+        var exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) try { exit.call(document); } catch (e) {}
+      }
+      var view = document.querySelector('.pdf-view');
+      if (view) view.classList.remove('is-fs-fallback');
+      state.pdf = null;
+      hideMsSelBar();
+      render();
+    };
+    bindPdfFullscreen();
+    bindManuscriptSelection();
     var si = document.getElementById('send-ia');
-    if (si) si.onclick = sendIa;
+    if (si) si.onclick = function () { sendIa(); };
     var iq = document.getElementById('ia-q');
     if (iq) iq.onkeydown = function (e) { if (e.key === 'Enter') sendIa(); };
 
@@ -1730,6 +1975,6 @@
     render();
   });
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js?v=35').catch(function () {});
+    navigator.serviceWorker.register('/sw.js?v=36').catch(function () {});
   }
 })();
