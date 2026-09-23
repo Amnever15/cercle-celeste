@@ -64,7 +64,7 @@ const LOG = resolveLogPath();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/natal-file'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/natal-file'];
 const LAST_WEBHOOKS_MAX = 20;
 
 function ensureParentDir(filePath) {
@@ -100,6 +100,7 @@ function warnProduction() {
     console.warn('ATTENTION : store sur disque éphémère (' + STORE + '). Sur Railway : Volume monté sur /data + STORE_PATH=/data/store.json — sinon redeploy = abonnés perdus.');
   }
   console.log('Store     → ' + STORE + (storeWritable() ? ' (writable)' : ' (NON writable)'));
+  console.log('Natal out → ' + natalGen.OUT_DIR);
 }
 
 function readStore() {
@@ -460,6 +461,14 @@ function publicContact(c) {
   return plans.entitlements(c);
 }
 
+/** Si natalReady sans fichier sur disque → flags à zéro (évite « Lire » cassé). */
+function ensureNatalFileOrReset(c, store) {
+  if (!c || !natalGen.reconcileNatalReady(c)) return false;
+  if (store) writeStore(store);
+  logLine('NATAL reconcile missing-file → reset flags ' + (c.email || ''));
+  return true;
+}
+
 function corsHeaders(req) {
   const origin = req.headers.origin;
   return {
@@ -669,7 +678,8 @@ async function handle(req, res) {
         hasClaudeKey: !!natalGen.claudeKey(),
         webhookAuth: WEBHOOK_AUTH_VERSION,
         storePath: STORE,
-        storeWritable: storeWritable()
+        storeWritable: storeWritable(),
+        natalOutDir: natalGen.OUT_DIR
       }, req);
     }
 
@@ -686,6 +696,7 @@ async function handle(req, res) {
         refreshUltime(demo);
         return send(res, 200, Object.assign({ demo: true }, publicContact(demo)));
       }
+      if (c) ensureNatalFileOrReset(c, store);
       return send(res, 200, publicContact(c));
     }
 
@@ -718,6 +729,7 @@ async function handle(req, res) {
         return send(res, 200, Object.assign({ created: 'gratuit' }, publicContact(c)));
       }
       if (prenom && !c.prenom) { c.prenom = prenom; writeStore(store); }
+      ensureNatalFileOrReset(c, store);
       return send(res, 200, publicContact(c));
     }
 
@@ -728,7 +740,8 @@ async function handle(req, res) {
         contacts: Object.values(store.contacts).map(publicContact),
         lastWebhooks: store.lastWebhooks || [],
         storePath: STORE,
-        storeWritable: storeWritable()
+        storeWritable: storeWritable(),
+        natalOutDir: natalGen.OUT_DIR
       });
     }
 
@@ -758,6 +771,30 @@ async function handle(req, res) {
       writeStore(store);
       logLine('ADMIN_GRANT ' + email + ' plan=' + c.plan + ' months=' + c.monthsPaid + ' active=' + c.active);
       return send(res, 200, { ok: true, action: 'ADMIN_GRANT', contact: publicContact(c) }, req);
+    }
+
+    /* POST /admin/natal-reset?secret=… — efface fichier + flags natal (retest « Demander les 28 pages »). */
+    if (route === '/admin/natal-reset' && req.method === 'POST') {
+      if (!SECRET || url.searchParams.get('secret') !== SECRET) {
+        return send(res, 401, { error: 'secret' }, req);
+      }
+      const body = (await readBody(req)).body;
+      const email = normEmail(body.email);
+      if (!email) return send(res, 400, { error: 'email requis' }, req);
+      const store = readStore();
+      const c = store.contacts[email];
+      if (!c) return send(res, 404, { error: 'compte inconnu' }, req);
+      if (natalGen.runningJobs[email]) {
+        return send(res, 409, { error: 'génération en cours — réessaie dans un moment' }, req);
+      }
+      natalGen.clearNatal(c);
+      writeStore(store);
+      logLine('ADMIN_NATAL_RESET ' + email);
+      return send(res, 200, {
+        ok: true,
+        action: 'ADMIN_NATAL_RESET',
+        contact: publicContact(c)
+      }, req);
     }
 
     if (route === '/webhook-debug' && req.method === 'GET') {
@@ -930,7 +967,12 @@ async function handle(req, res) {
         return send(res, 403, { error: 'Manuscrit natal réservé au plan Céleste / Divin.' }, req);
       }
       const file = natalGen.resolveNatalFile(c, url.searchParams.get('format'));
-      if (!file) return send(res, 404, { error: 'aucun fichier natal' }, req);
+      if (!file) {
+        if (c.natalReady || c.natalStatus === 'ready') {
+          ensureNatalFileOrReset(c, store);
+        }
+        return send(res, 404, { error: 'aucun fichier natal' }, req);
+      }
       try {
         const buf = fs.readFileSync(file.path);
         const name = path.basename(file.path);
@@ -967,8 +1009,13 @@ async function handle(req, res) {
         });
       }
 
-      /* Natal déjà prêt : ne pas recompter / regénérer sauf regenerate=true */
-      if (kind === 'natal' && c.natalReady && !body.regenerate) {
+      /* Fichier perdu (redeploy) : ne pas bloquer sur « already » — autoriser une nouvelle génération. */
+      if (kind === 'natal') {
+        ensureNatalFileOrReset(c, store);
+      }
+
+      /* Natal déjà prêt avec fichier : ne pas recompter / regénérer sauf regenerate=true */
+      if (kind === 'natal' && c.natalReady && natalGen.hasNatalFile(c) && !body.regenerate) {
         return send(res, 200, {
           ok: true,
           kind: kind,

@@ -53,6 +53,8 @@
     label: ''
   };
 
+  var THEME_KEY = 'cercle.theme';
+
   var state = {
     screen: 'login',
     tab: 'natal',
@@ -65,10 +67,50 @@
     iaBusy: false,
     pendingAsk: null,
     natalPreview: null,
-    natalGenError: null
+    natalGenError: null,
+    theme: 'dark'
   };
 
+  function getStoredTheme() {
+    try {
+      var t = localStorage.getItem(THEME_KEY);
+      return (t === 'light' || t === 'dark') ? t : 'dark';
+    } catch (e) {
+      return 'dark';
+    }
+  }
+
+  function applyTheme(theme, persist) {
+    var t = (theme === 'light') ? 'light' : 'dark';
+    state.theme = t;
+    document.documentElement.setAttribute('data-theme', t);
+    var meta = document.getElementById('theme-color-meta');
+    if (meta) meta.setAttribute('content', t === 'light' ? '#F4EFE4' : '#05020F');
+    if (persist !== false) {
+      try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
+    }
+  }
+
+  function setTheme(theme) {
+    applyTheme(theme, true);
+    render();
+  }
+
+  function themeToggleHtml(compact) {
+    var isLight = state.theme === 'light';
+    if (compact) {
+      return '<button type="button" class="theme-chip" id="theme-chip" aria-label="Changer le thème">' +
+        (isLight ? 'BRIGHT' : 'SOMBRE') + '</button>';
+    }
+    return '<div class="theme-toggle" role="group" aria-label="Apparence">' +
+      '<button type="button" data-theme-set="dark" class="' + (!isLight ? 'active' : '') + '">SOMBRE</button>' +
+      '<button type="button" data-theme-set="light" class="' + (isLight ? 'active' : '') + '">BRIGHT</button>' +
+      '</div>';
+  }
+
   function load() {
+    state.theme = getStoredTheme();
+    applyTheme(state.theme, false);
     try { state.user = JSON.parse(localStorage.getItem('cercle.user') || 'null'); } catch (e) { state.user = null; }
     if (state.user) state.screen = localStorage.getItem('cercle.installedHint') ? 'app' : 'install';
   }
@@ -800,7 +842,10 @@
   function topbar() {
     var u = state.user || {};
     return '<div class="topbar"><span class="kicker">Les Manuscrits Célestes</span>' +
-      '<button class="avatar" id="open-account" aria-label="Compte">' + initial(u.prenom) + '</button></div>';
+      '<div class="topbar-actions">' +
+        themeToggleHtml(true) +
+        '<button class="avatar" id="open-account" aria-label="Compte">' + initial(u.prenom) + '</button>' +
+      '</div></div>';
   }
 
   function nav() {
@@ -834,8 +879,14 @@
         '<button class="btn" type="button" id="edit-profile-natal">Renseigner mon ciel de naissance</button>';
     }
     if (state.natalGenError || u.natalStatus === 'error') {
+      var errRaw = state.natalGenError || u.natalError || 'La génération n’a pas pu aboutir. Réessaie dans un moment.';
+      var errSafe = String(errRaw).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      /* Message technique serveur → formulation douce pour le client */
+      if (/HD_API_TOKEN|CLAUDE_KEY|ANTHROPIC|manquant/i.test(errRaw)) {
+        errSafe = 'La génération n’a pas pu aboutir pour le moment. Réessaie dans un instant — ton bouton « Demander les 28 pages » reste disponible.';
+      }
       return '<div class="natal-wait natal-wait-error" role="alert">' +
-        '<p>' + (state.natalGenError || 'La génération n’a pas pu aboutir. Réessaie dans un moment.') + '</p>' +
+        '<p>' + errSafe + '</p>' +
         '</div>';
     }
     if (u.natalStatus === 'generating' || state.busy === 'natal') {
@@ -876,9 +927,9 @@
     } else if (plan() === 'gratuit' && months === 0) {
       ultime = '<div class="card lock stack"><div class="label">Céleste ou Divin</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">140 pages</p><p>Après 6 mois Céleste, ou immédiatement en Divin.</p></div>';
     } else if (ultimeOn() && isPausedPaid()) {
-      ultime = '<div class="card lock stack"><div class="label">En pause</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + ULTIME.pages + ' pages · déjà débloqué</p><p>L’Ultime se rouvre dès que tu reprends l’abonnement. Tes <b>' + months + ' mois</b> restent comptés.</p><p class="lock-banner">✦ Les mois payés ne s’effacent pas.</p></div>';
+      ultime = '<div class="card lock stack"><div class="label">En pause</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + ULTIME.pages + ' pages · déjà débloqué</p><p>L’Ultime se rouvre dès que tu reprends l’abonnement. Tes <b>' + months + ' mois</b> restent comptés.</p></div>';
     } else {
-      ultime = '<div class="card lock stack"><div class="label">Verrouillé</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + ULTIME.pages + ' pages · 6 mois payés, cumulés</p><p>Tu as <b>' + months + ' mois</b> déjà réglés. Encore <b>' + left + '</b> — une pause ne casse pas la série.</p><p class="lock-banner">✦ Les mois payés ne s’effacent pas.</p></div>';
+      ultime = '<div class="card lock stack"><div class="label">Verrouillé</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + ULTIME.pages + ' pages · 6 mois payés, cumulés</p><p>Tu as <b>' + months + ' mois</b> déjà réglés. Encore <b>' + left + '</b> — une pause ne casse pas la série.</p></div>';
     }
     return '<div class="hero-month"><div class="label">Plan ' + ((state.user && state.user.planLabel) || 'Gratuit') + (isPausedPaid() ? ' · pause' : '') + '</div>' +
       '<div class="month">' + natalTitleHtml() + '</div>' +
@@ -1010,6 +1061,11 @@
       '</div>' +
       profileBlock +
       '<div class="acct-block">' +
+        '<div class="label">Apparence</div>' +
+        '<p class="muted acct-hint">Choisis le ciel qui t’accompagne : sombre ou clair.</p>' +
+        themeToggleHtml(false) +
+      '</div>' +
+      '<div class="acct-block">' +
         '<div class="label">Gérer mon abonnement</div>' +
         '<p class="muted acct-hint">Pour changer de plan, arrête d’abord ton abonnement actuel, puis souscris à nouveau à celui de ton choix.</p>' +
         '<div class="stack">' + actions + '</div>' +
@@ -1058,7 +1114,7 @@
     var ia = canIa()
       ? '<div class="ia-dock"><button class="btn ghost" id="open-ia">Question à l’IA Céleste · ' + iaLeft() + ' restantes</button></div>'
       : '<div class="ia-dock"><p class="muted">L’IA Céleste t’accompagne ici, dans le plan Divin (jusqu’à 500 questions / mois).</p></div>';
-    return '<div class="pdf-view"><header><button id="close-pdf" aria-label="Retour">←</button><span class="kicker">' + titlePlain + '</span></header>' +
+    return '<div class="pdf-view"><header><button type="button" class="pdf-back" id="close-pdf">← Retour</button><span class="kicker">' + titlePlain + '</span></header>' +
       '<div class="pdf-body">' + body + ia + '</div></div>';
   }
 
@@ -1202,6 +1258,13 @@
     if (oa) oa.onclick = function () { state.account = true; render(); };
     var ca = document.getElementById('close-account');
     if (ca) ca.onclick = function () { state.account = false; render(); };
+    var themeChip = document.getElementById('theme-chip');
+    if (themeChip) themeChip.onclick = function () {
+      setTheme(state.theme === 'light' ? 'dark' : 'light');
+    };
+    document.querySelectorAll('[data-theme-set]').forEach(function (b) {
+      b.onclick = function () { setTheme(b.getAttribute('data-theme-set')); };
+    });
     var ep = document.getElementById('edit-profile');
     if (ep) ep.onclick = function () {
       state.account = false;
@@ -1262,6 +1325,6 @@
     render();
   });
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js?v=16').catch(function () {});
+    navigator.serviceWorker.register('/sw.js?v=17').catch(function () {});
   }
 })();

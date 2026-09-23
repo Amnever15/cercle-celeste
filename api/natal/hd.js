@@ -1,13 +1,23 @@
 /**
- * Human Design — API Render (même endpoint que GENERATIONS).
- * Auth via process.env.HD_API_TOKEN (jamais exposée au client APP).
+ * Human Design — appelle TON serveur HD (Render / custom).
+ * Même contrat que GENERATIONS : GET {HD_API_URL}{HD_DATA_PATH}?year=…
+ *
+ * HD_API_TOKEN n’est PAS une clé « produit HD » tierce :
+ * c’est le Bearer (ou X-API-Key) que TON serveur exige, si auth activée.
+ * Si ton serveur est ouvert → laisse HD_API_TOKEN vide + HD_AUTH_STYLE=none.
+ * Jamais exposé au client APP.
  */
 const { requestJson, sleep, fetchWithTimeout } = require('./http');
 
 function cfg() {
   return {
     url: String(process.env.HD_API_URL || 'https://humandesign-api-jeqv.onrender.com').replace(/\/$/, ''),
-    token: String(process.env.HD_API_TOKEN || '').trim(),
+    /* Même défaut que GENERATIONS si la var Railway n’est pas posée. */
+    token: String(
+      process.env.HD_API_TOKEN ||
+      process.env.HD_BEARER_TOKEN ||
+      'rSecuremdp15*'
+    ).trim(),
     path: String(process.env.HD_DATA_PATH || '/calculate'),
     authStyle: String(process.env.HD_AUTH_STYLE || 'bearer').toLowerCase(),
     timeoutMs: parseInt(process.env.HD_API_TIMEOUT_MS || '90000', 10) || 90000,
@@ -18,7 +28,7 @@ function cfg() {
 function hdAuthHeaders() {
   const c = cfg();
   const h = { Accept: 'application/json' };
-  if (!c.token) return h;
+  if (!c.token || c.authStyle === 'none') return h;
   if (c.authStyle === 'x-api-key') h['X-API-Key'] = c.token;
   else if (c.authStyle === 'bearer') h.Authorization = 'Bearer ' + c.token;
   return h;
@@ -129,9 +139,7 @@ function parseHD(raw) {
 
 async function getHDData(dateStr, place, gender, lat, lon) {
   const c = cfg();
-  if (!c.token) {
-    throw new Error('HD_API_TOKEN manquant (variable d’environnement serveur).');
-  }
+  /* Token optionnel : serveur ouvert → pas d’Authorization. */
   var path = c.path;
   if (path.charAt(0) !== '/') path = '/' + path;
   var m = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);

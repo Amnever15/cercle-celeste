@@ -6,8 +6,10 @@
  * - Document HTML multi-sections servi via /natal-file
  * - Job asynchrone (Railway ne coupe pas la requête HTTP longue)
  *
- * ENV requis : CLAUDE_KEY (ou ANTHROPIC_API_KEY), HD_API_TOKEN
- * Optionnel : CLAUDE_MODEL, HD_API_URL, ASTRO_API_URL, …
+ * ENV requis : CLAUDE_KEY (ou ANTHROPIC_API_KEY)
+ * Optionnel : HD_API_URL, ASTRO_API_URL (tes serveurs HD / Astro),
+ *             HD_API_TOKEN (Bearer de TON serveur HD — omis si serveur ouvert),
+ *             HD_AUTH_STYLE (bearer | x-api-key | none), CLAUDE_MODEL, …
  */
 const fs = require('fs');
 const path = require('path');
@@ -17,7 +19,22 @@ const astroMod = require('./natal/astro');
 const claudeNatal = require('./natal/claude-natal');
 const htmlDoc = require('./natal/html-doc');
 
-const OUT_DIR = path.join(__dirname, 'generated');
+/**
+ * Fichiers HTML/JSON/TXT : sur le volume (à côté de store.json) si STORE_PATH / DATA_DIR,
+ * sinon api/generated/ (éphémère sur Railway → perdus au redeploy).
+ */
+function resolveOutDir() {
+  if (process.env.NATAL_OUT_DIR) return path.resolve(process.env.NATAL_OUT_DIR);
+  if (process.env.STORE_PATH) {
+    return path.join(path.dirname(path.resolve(process.env.STORE_PATH)), 'generated');
+  }
+  if (process.env.DATA_DIR) {
+    return path.join(path.resolve(process.env.DATA_DIR), 'generated');
+  }
+  return path.join(__dirname, 'generated');
+}
+
+var OUT_DIR = resolveOutDir();
 
 /** Jobs en cours (évite double génération pour le même email). */
 const runningJobs = Object.create(null);
@@ -41,6 +58,71 @@ function outPaths(email) {
     json: path.join(OUT_DIR, base + '.json'),
     txt: path.join(OUT_DIR, base + '.txt')
   };
+}
+
+function fileExists(p) {
+  try {
+    return !!(p && fs.existsSync(p) && fs.statSync(p).isFile());
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Fichier natal réellement lisible sur disque (pas seulement natalReady en store). */
+function hasNatalFile(contact) {
+  return !!resolveNatalFile(contact);
+}
+
+/**
+ * Remet les flags génération à zéro et tente de supprimer les fichiers.
+ * Utilisé après perte de volume / admin reset.
+ */
+function clearNatal(contact) {
+  if (!contact) return;
+  var paths = [];
+  [contact.natalHtmlPath, contact.natalJsonPath, contact.natalTxtPath, contact.natalPdfPath].forEach(function (p) {
+    if (p && paths.indexOf(p) < 0) paths.push(p);
+  });
+  if (contact.email) {
+    var op = outPaths(contact.email);
+    [op.html, op.json, op.txt].forEach(function (p) {
+      if (paths.indexOf(p) < 0) paths.push(p);
+    });
+    try {
+      var oldPdf = path.join(OUT_DIR, 'natal-' + safeEmailFile(contact.email) + '.pdf');
+      if (paths.indexOf(oldPdf) < 0) paths.push(oldPdf);
+    } catch (_) {}
+  }
+  paths.forEach(function (p) {
+    try {
+      if (fileExists(p)) fs.unlinkSync(p);
+    } catch (_) {}
+  });
+  contact.natalReady = false;
+  contact.natalStatus = 'none';
+  contact.natalHtmlPath = null;
+  contact.natalJsonPath = null;
+  contact.natalTxtPath = null;
+  contact.natalPdfPath = null;
+  contact.natalGeneratedAt = null;
+  contact.natalSource = null;
+  contact.natalPagesEst = null;
+  contact.natalProgress = null;
+  contact.natalProgressPct = null;
+  contact.natalError = null;
+}
+
+/**
+ * Si store dit « prêt » mais le fichier a disparu (redeploy sans volume) → flags à zéro.
+ * @returns {boolean} true si le contact a été modifié
+ */
+function reconcileNatalReady(contact) {
+  if (!contact) return false;
+  var claimed = !!(contact.natalReady || contact.natalStatus === 'ready');
+  if (!claimed) return false;
+  if (hasNatalFile(contact)) return false;
+  clearNatal(contact);
+  return true;
 }
 
 function loadStoreMutators() {
@@ -312,21 +394,37 @@ function startNatalJob(email) {
 
 function resolveNatalFile(contact, prefer) {
   if (!contact) return null;
-  if (prefer === 'json' && contact.natalJsonPath && fs.existsSync(contact.natalJsonPath)) {
+  if (prefer === 'json' && fileExists(contact.natalJsonPath)) {
     return { path: contact.natalJsonPath, type: 'application/json; charset=utf-8' };
   }
-  if (prefer === 'txt' && contact.natalTxtPath && fs.existsSync(contact.natalTxtPath)) {
+  if (prefer === 'txt' && fileExists(contact.natalTxtPath)) {
     return { path: contact.natalTxtPath, type: 'text/plain; charset=utf-8' };
   }
   var htmlPath = contact.natalHtmlPath || contact.natalPdfPath;
-  if (htmlPath && fs.existsSync(htmlPath) && /\.html?$/i.test(htmlPath)) {
+  if (fileExists(htmlPath) && /\.html?$/i.test(htmlPath)) {
     return { path: htmlPath, type: 'text/html; charset=utf-8' };
   }
-  if (contact.natalPdfPath && fs.existsSync(contact.natalPdfPath) && /\.pdf$/i.test(contact.natalPdfPath)) {
+  if (fileExists(contact.natalPdfPath) && /\.pdf$/i.test(contact.natalPdfPath)) {
     return { path: contact.natalPdfPath, type: 'application/pdf' };
   }
-  if (contact.natalTxtPath && fs.existsSync(contact.natalTxtPath)) {
+  if (fileExists(contact.natalTxtPath)) {
     return { path: contact.natalTxtPath, type: 'text/plain; charset=utf-8' };
+  }
+  /* Chemins stockés obsolètes (ancien container) : chercher par email dans OUT_DIR actuel. */
+  if (contact.email) {
+    var op = outPaths(contact.email);
+    if (prefer === 'json' && fileExists(op.json)) {
+      return { path: op.json, type: 'application/json; charset=utf-8' };
+    }
+    if (prefer === 'txt' && fileExists(op.txt)) {
+      return { path: op.txt, type: 'text/plain; charset=utf-8' };
+    }
+    if (fileExists(op.html)) {
+      return { path: op.html, type: 'text/html; charset=utf-8' };
+    }
+    if (fileExists(op.txt)) {
+      return { path: op.txt, type: 'text/plain; charset=utf-8' };
+    }
   }
   return null;
 }
@@ -411,7 +509,11 @@ module.exports = {
   startNatalJob,
   injectStoreHooks,
   resolveNatalFile,
+  hasNatalFile,
+  clearNatal,
+  reconcileNatalReady,
   dryRunStructureCheck,
-  OUT_DIR,
+  get OUT_DIR() { return OUT_DIR; },
+  resolveOutDir,
   runningJobs
 };

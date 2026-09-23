@@ -1,5 +1,7 @@
 /**
- * Astrologie — Astrologer API Render (même endpoint que GENERATIONS).
+ * Astrologie — appelle TON serveur Astro (Render / custom).
+ * Même contrat que GENERATIONS : POST {ASTRO_API_URL}/api/v5/context/birth-chart
+ * Pas d’auth Bearer côté Astro dans le code actuel (serveur ouvert).
  */
 const { requestJson, sleep, fetchWithTimeout } = require('./http');
 
