@@ -479,7 +479,7 @@ html[data-theme="light"] .hd-block {
 }
 .ch-sub {
   text-align: center; font-style: italic; font-size: 1.02rem;
-  color: rgba(243,221,158,.78); margin: 0 0 6px; line-height: 1.4;
+  color: var(--gold-soft); margin: 0 0 6px; line-height: 1.4;
 }
 .ch-num {
   font-family: 'Inter', sans-serif; font-size: .68rem; letter-spacing: .16em;
@@ -748,4 +748,143 @@ function buildPeriodHtml(kind, contact, period, hd, astro) {
   });
 }
 
-module.exports = { buildNatalHtml, buildPeriodHtml, estimatePages, extractPlainText, esc };
+/**
+ * HTML manuscrit couple — même style que natal, couverture « Couple »
+ * + bonus_valeur (radar / plan 30-60-90) si présent.
+ */
+function buildCoupleHtml(contact, partner, manuscrit, hdA, astroA, hdB, astroB) {
+  partner = partner || {};
+  manuscrit = manuscrit || {};
+  var pa = (contact && contact.prenom) || 'toi';
+  var pb = partner.prenom || 'partenaire';
+  var names = pa + ' & ' + pb;
+
+  var syn = manuscrit.synthese || null;
+  if (syn) {
+    syn = {
+      essence: syn.essence,
+      forces: syn.forces || syn.forces_maitresses || [],
+      chemin_croissance: syn.chemin_croissance,
+      strategie_hd: syn.strategie_relationnelle || syn.strategie_hd,
+      mantra: syn.mantra || syn.mantra_du_couple
+    };
+  }
+
+  var fakeContact = {
+    prenom: names,
+    birthDate: '',
+    birthTime: '',
+    birthPlace: ''
+  };
+
+  var pl = manuscrit.placements_confirmes || {};
+  if (!pl.soleil && astroA && astroB) {
+    pl = {
+      soleil: (astroA.Sun || '—') + ' / ' + (astroB.Sun || '—'),
+      lune: (astroA.Moon || '—') + ' / ' + (astroB.Moon || '—'),
+      ascendant: (astroA.Ascendant || '—') + ' / ' + (astroB.Ascendant || '—'),
+      type_hd: ((hdA && hdA.type) || '—') + ' / ' + ((hdB && hdB.type) || '—'),
+      profil_hd: ((hdA && hdA.profile) || '—') + ' / ' + ((hdB && hdB.profile) || '—')
+    };
+  }
+
+  var mergedHd = {
+    type: ((hdA && hdA.type) || '—') + ' · ' + ((hdB && hdB.type) || '—'),
+    profile: ((hdA && hdA.profile) || '—') + ' · ' + ((hdB && hdB.profile) || '—'),
+    authority: ((hdA && hdA.authority) || '—') + ' · ' + ((hdB && hdB.authority) || '—'),
+    strategy: ((hdA && hdA.strategy) || '—') + ' · ' + ((hdB && hdB.strategy) || '—'),
+    channels: [],
+    cross: ((hdA && hdA.cross) || '') + (hdB && hdB.cross ? ' · ' + hdB.cross : '')
+  };
+
+  var mergedAstro = {
+    Sun: pl.soleil || ((astroA && astroA.Sun) || '—') + ' / ' + ((astroB && astroB.Sun) || '—'),
+    Moon: pl.lune || ((astroA && astroA.Moon) || '—') + ' / ' + ((astroB && astroB.Moon) || '—'),
+    Ascendant: pl.ascendant || ((astroA && astroA.Ascendant) || '—') + ' / ' + ((astroB && astroB.Ascendant) || '—'),
+    Mercury: ((astroA && astroA.Mercury) || '—') + ' / ' + ((astroB && astroB.Mercury) || '—'),
+    Venus: ((astroA && astroA.Venus) || '—') + ' / ' + ((astroB && astroB.Venus) || '—'),
+    Mars: ((astroA && astroA.Mars) || '—') + ' / ' + ((astroB && astroB.Mars) || '—'),
+    Jupiter: ((astroA && astroA.Jupiter) || '—') + ' / ' + ((astroB && astroB.Jupiter) || '—'),
+    Saturn: ((astroA && astroA.Saturn) || '—') + ' / ' + ((astroB && astroB.Saturn) || '—'),
+    MC: ((astroA && astroA.MC) || '—') + ' / ' + ((astroB && astroB.MC) || '—'),
+    NorthNode: ((astroA && astroA.NorthNode) || '—') + ' / ' + ((astroB && astroB.NorthNode) || '—')
+  };
+
+  var ms = {
+    intro: manuscrit.intro,
+    sections: manuscrit.sections || [],
+    affirmations: manuscrit.affirmations || [],
+    rituels: manuscrit.rituels || [],
+    conclusion: manuscrit.conclusion,
+    synthese: syn,
+    placements_confirmes: pl
+  };
+
+  var html = buildNatalHtml(fakeContact, ms, mergedHd, mergedAstro, {
+    coverMain: 'Manuscrit Céleste',
+    coverGold: 'Couple',
+    coverFor: names,
+    footerLabel: 'Manuscrit Céleste · Couple'
+  });
+
+  var bonus = manuscrit.bonus_valeur;
+  if (!bonus || typeof bonus !== 'object') return html;
+
+  var bonusBlocks = [];
+  if (bonus.radar_resume) {
+    bonusBlocks.push(
+      '<div class="syn-block"><div class="syn-k">RADAR DE COMPATIBILITÉ</div><p>' +
+      esc(bonus.radar_resume) + '</p></div>'
+    );
+  }
+  if (bonus.scores_compatibilite && typeof bonus.scores_compatibilite === 'object') {
+    var scores = bonus.scores_compatibilite;
+    var scoreLines = Object.keys(scores).map(function (k) {
+      return '<li><b>' + esc(k.replace(/_/g, ' ')) + '</b> — ' + esc(String(scores[k])) + ' / 100</li>';
+    }).join('');
+    if (scoreLines) {
+      bonusBlocks.push(
+        '<div class="syn-block"><div class="syn-k">SCORES</div><ul class="forces">' + scoreLines + '</ul></div>'
+      );
+    }
+  }
+  if (bonus.plan_30_60_90) {
+    var p = bonus.plan_30_60_90;
+    ['j30', 'j60', 'j90'].forEach(function (key) {
+      var label = key === 'j30' ? '30 jours' : (key === 'j60' ? '60 jours' : '90 jours');
+      var items = Array.isArray(p[key]) ? p[key] : [];
+      if (!items.length) return;
+      bonusBlocks.push(
+        '<div class="syn-block"><div class="syn-k">PLAN ' + label.toUpperCase() + '</div><ul class="forces">' +
+        items.map(function (it) { return '<li>' + esc(it) + '</li>'; }).join('') +
+        '</ul></div>'
+      );
+    });
+  }
+  if (Array.isArray(bonus.protocole_anti_conflit) && bonus.protocole_anti_conflit.length) {
+    bonusBlocks.push(
+      '<div class="syn-block"><div class="syn-k">PROTOCOLE ANTI-CONFLIT</div><ul class="forces">' +
+      bonus.protocole_anti_conflit.map(function (it) { return '<li>' + esc(it) + '</li>'; }).join('') +
+      '</ul></div>'
+    );
+  }
+  if (!bonusBlocks.length) return html;
+
+  var bonusHtml =
+    '<section class="sheet synthese neb-1">' +
+    '<div class="page-frame"></div>' +
+    '<header class="page-hdr"><span>✦</span><span class="hdr-name">' + esc(names) + '</span><span>✦</span></header>' +
+    '<div class="chapter-inner">' +
+    '<p class="eyebrow">— VALEUR AJOUTÉE —</p>' +
+    '<h2 class="ch-title">Outils pour votre couple</h2>' +
+    '<p class="ch-sub">Scores, plan d’action et protocole de réparation</p>' +
+    '<div class="orn">✦ ········· ✦ ········· ✦</div>' +
+    bonusBlocks.join('\n') +
+    '</div>' +
+    '<footer class="page-ftr">Manuscrit Céleste · Couple</footer>' +
+    '</section>';
+
+  return html.replace('</body>', bonusHtml + '\n</body>');
+}
+
+module.exports = { buildNatalHtml, buildPeriodHtml, buildCoupleHtml, estimatePages, extractPlainText, esc };

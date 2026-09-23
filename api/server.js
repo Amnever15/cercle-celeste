@@ -13,6 +13,7 @@ const plans = require('./plans');
 const profile = require('./profile');
 const natalGen = require('./natal-generate');
 const periodGen = require('./period-generate');
+const coupleGen = require('./couple-generate');
 const chartCache = require('./natal/chart-cache');
 
 const ROOT = __dirname;
@@ -26,6 +27,13 @@ natalGen.injectStoreHooks({
 });
 
 periodGen.injectStoreHooks({
+  readStore: function () { return readStore(); },
+  writeStore: function (data) { writeStore(data); },
+  consume: function (c, kind) { plans.consumeGenerate(c, kind); },
+  log: function (msg) { logLine(msg); }
+});
+
+coupleGen.injectStoreHooks({
   readStore: function () { return readStore(); },
   writeStore: function (data) { writeStore(data); },
   consume: function (c, kind) { plans.consumeGenerate(c, kind); },
@@ -73,7 +81,7 @@ const LOG = resolveLogPath();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/natal-file', '/mois-file', '/jour-file'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file'];
 const LAST_WEBHOOKS_MAX = 20;
 const IA_MESSAGES_MAX = 1000;
 
@@ -209,11 +217,35 @@ function emptyContact(email) {
     natalTxtPath: null,
     natalGeneratedAt: null,
     iaMessages: [],
-    iaChats: { natal: [], mois: [], jour: [] },
+    iaChats: { natal: [], mois: [], jour: [], couple: [] },
     chartHd: null,
     chartAstro: null,
     chartFingerprint: null,
     chartCachedAt: null,
+    partnerPrenom: '',
+    partnerNom: '',
+    partnerBirthDate: '',
+    partnerBirthTime: '',
+    partnerBirthPlace: '',
+    partnerBirthLat: null,
+    partnerBirthLon: null,
+    partnerBirthTimezone: '',
+    partnerGender: '',
+    partnerEditCount: 0,
+    partnerChartHd: null,
+    partnerChartAstro: null,
+    partnerChartFingerprint: null,
+    partnerChartCachedAt: null,
+    coupleUsed: 0,
+    coupleUsedMonth: null,
+    coupleReady: false,
+    coupleStatus: 'none',
+    coupleKey: null,
+    coupleHtmlPath: null,
+    coupleJsonPath: null,
+    coupleProgress: null,
+    coupleProgressPct: null,
+    coupleError: null,
     moisReady: false,
     moisStatus: 'none',
     moisKey: null,
@@ -232,8 +264,8 @@ function emptyContact(email) {
 }
 
 function ensureIaChats(c) {
-  if (!c.iaChats || typeof c.iaChats !== 'object') c.iaChats = { natal: [], mois: [], jour: [] };
-  ['natal', 'mois', 'jour'].forEach(function (k) {
+  if (!c.iaChats || typeof c.iaChats !== 'object') c.iaChats = { natal: [], mois: [], jour: [], couple: [] };
+  ['natal', 'mois', 'jour', 'couple'].forEach(function (k) {
     if (!Array.isArray(c.iaChats[k])) c.iaChats[k] = [];
   });
   /* Migration ancienne liste unique → fil natal */
@@ -245,7 +277,7 @@ function ensureIaChats(c) {
 
 function normalizeIaContext(ctx) {
   var c = String(ctx || 'natal').toLowerCase().trim();
-  if (c === 'mois' || c === 'jour' || c === 'natal') return c;
+  if (c === 'mois' || c === 'jour' || c === 'natal' || c === 'couple') return c;
   return 'natal';
 }
 
@@ -583,6 +615,18 @@ function publicContact(c) {
   out.jourKey = (c && c.jourKey) || null;
   out.moisPdfUrl = out.moisReady ? ('/mois-file?email=' + encodeURIComponent(c.email || '')) : null;
   out.jourPdfUrl = out.jourReady ? ('/jour-file?email=' + encodeURIComponent(c.email || '')) : null;
+
+  coupleGen.reconcileCouple(c);
+  const coupleOk = !!(c && coupleGen.hasCoupleFile(c));
+  out.coupleFileExists = coupleOk;
+  out.coupleReady = !!(c && c.coupleReady && coupleOk);
+  out.coupleStatus = (c && c.coupleStatus) || 'none';
+  out.coupleProgress = (c && c.coupleProgress) || null;
+  out.coupleProgressPct = (c && c.coupleProgressPct != null) ? c.coupleProgressPct : null;
+  out.coupleError = (c && c.coupleError) || null;
+  out.coupleKey = (c && c.coupleKey) || null;
+  out.couplePdfUrl = out.coupleReady ? ('/couple-file?email=' + encodeURIComponent(c.email || '')) : null;
+  out.hasPartnerChartCache = !!(c && chartCache.hasValidPartnerCache(c));
   return out;
 }
 
@@ -1224,6 +1268,46 @@ async function handle(req, res) {
       return send(res, 200, { ok: true, contact: publicContact(c) }, req);
     }
 
+    if (route === '/profile-partner' && req.method === 'POST') {
+      const body = (await readBody(req)).body;
+      const auth = requireSession(req, url, body);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const store = auth.store;
+      const c = auth.c;
+      const saved = profile.savePartnerProfile(c, body);
+      if (!saved.ok) {
+        const code = saved.code === 'PARTNER_EDIT_LIMIT' ? 403 : 400;
+        return send(res, code, {
+          error: saved.error,
+          code: saved.code || null,
+          contact: publicContact(c)
+        }, req);
+      }
+      writeStore(store);
+      logLine(
+        'PARTNER saved ' + auth.email +
+        (saved.isEdit ? ' (edit #' + (c.partnerEditCount || 0) + ')' : ' (first)')
+      );
+      if (profile.isPartnerComplete(c) && !chartCache.hasValidPartnerCache(c)) {
+        const warmEmail = auth.email;
+        setImmediate(function () {
+          (async function () {
+            try {
+              const st = readStore();
+              const cc = st.contacts[String(warmEmail || '').toLowerCase().trim()];
+              if (!cc || !profile.isPartnerComplete(cc) || chartCache.hasValidPartnerCache(cc)) return;
+              await chartCache.ensurePartnerChart(cc);
+              writeStore(st);
+              logLine('PARTNER CHART cached ' + warmEmail);
+            } catch (err) {
+              logLine('PARTNER CHART fail ' + warmEmail + ' ' + ((err && err.message) || err));
+            }
+          })();
+        });
+      }
+      return send(res, 200, { ok: true, contact: publicContact(c) }, req);
+    }
+
     if ((route === '/mois-file' || route === '/jour-file') && req.method === 'GET') {
       const auth = requireSession(req, url, null);
       if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
@@ -1234,6 +1318,34 @@ async function handle(req, res) {
         periodGen.reconcilePeriod(c, kind);
         writeStore(auth.store);
         return send(res, 404, { error: 'aucun fichier ' + kind }, req);
+      }
+      try {
+        const buf = fs.readFileSync(file.path);
+        const name = path.basename(file.path);
+        res.writeHead(200, Object.assign({
+          'Content-Type': file.type,
+          'Content-Length': buf.length,
+          'Content-Disposition': 'inline; filename="' + name + '"'
+        }, corsHeaders(req)));
+        return res.end(buf);
+      } catch (e) {
+        return send(res, 500, { error: 'lecture fichier' }, req);
+      }
+    }
+
+    if (route === '/couple-file' && req.method === 'GET') {
+      const auth = requireSession(req, url, null);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const c = auth.c;
+      const ent = plans.entitlements(c);
+      if (!ent.canCouple && !c.coupleReady) {
+        return send(res, 403, { error: 'Manuscrit de couple réservé au plan Divin.' }, req);
+      }
+      const file = coupleGen.resolveCoupleFile(c);
+      if (!file) {
+        coupleGen.reconcileCouple(c);
+        writeStore(auth.store);
+        return send(res, 404, { error: 'aucun fichier couple' }, req);
       }
       try {
         const buf = fs.readFileSync(file.path);
@@ -1285,7 +1397,7 @@ async function handle(req, res) {
       if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
       const email = auth.email;
       const kind = String(body.kind || '');
-      if (['natal', 'mois', 'jour', 'ultime'].indexOf(kind) < 0) {
+      if (['natal', 'mois', 'jour', 'ultime', 'couple'].indexOf(kind) < 0) {
         return send(res, 400, { error: 'kind requis' }, req);
       }
       const store = auth.store;
@@ -1306,6 +1418,20 @@ async function handle(req, res) {
         }
       }
 
+      /* Couple déjà prêt ce mois → relecture sans consommer le quota. */
+      if (kind === 'couple' && !body.regenerate) {
+        coupleGen.reconcileCouple(c);
+        if (coupleGen.hasCoupleFile(c)) {
+          return send(res, 200, {
+            ok: true,
+            kind: 'couple',
+            already: true,
+            pdfUrl: '/couple-file?email=' + encodeURIComponent(email),
+            contact: publicContact(c)
+          }, req);
+        }
+      }
+
       const check = plans.canGenerate(c, kind);
       if (!check.ok) return send(res, 403, { error: check.error, contact: publicContact(c) }, req);
 
@@ -1313,7 +1439,8 @@ async function handle(req, res) {
       if (!needProf.ok) {
         return send(res, 403, {
           error: needProf.error,
-          needProfile: true,
+          needProfile: !!needProf.needProfile,
+          needPartner: !!needProf.needPartner,
           contact: publicContact(c)
         }, req);
       }
@@ -1433,6 +1560,56 @@ async function handle(req, res) {
           async: true,
           message: kind === 'jour' ? c.jourProgress : c.moisProgress,
           pdfUrl: fileRoute + '?email=' + encodeURIComponent(email),
+          contact: publicContact(c)
+        }, req);
+      }
+
+      if (kind === 'couple') {
+        coupleGen.reconcileCouple(c);
+        if (c.coupleReady && coupleGen.hasCoupleFile(c) && !body.regenerate) {
+          return send(res, 200, {
+            ok: true,
+            kind: 'couple',
+            already: true,
+            pdfUrl: '/couple-file?email=' + encodeURIComponent(email),
+            contact: publicContact(c)
+          }, req);
+        }
+        const coupleJobKey = 'couple:' + String(email).toLowerCase().trim();
+        if (c.coupleStatus === 'generating' && coupleGen.runningJobs[coupleJobKey]) {
+          return send(res, 202, {
+            ok: true,
+            kind: 'couple',
+            status: 'generating',
+            message: c.coupleProgress || 'Génération en cours…',
+            contact: publicContact(c)
+          }, req);
+        }
+        c.coupleStatus = 'generating';
+        c.coupleReady = false;
+        c.coupleError = null;
+        c.coupleProgress = 'Le ciel compose votre Manuscrit Céleste Couple… Quelques minutes.';
+        c.coupleProgressPct = 2;
+        writeStore(store);
+        try {
+          coupleGen.startCoupleJob(email);
+        } catch (err) {
+          c.coupleStatus = 'error';
+          c.coupleError = (err && err.message) || 'Démarrage impossible';
+          writeStore(store);
+          return send(res, 500, {
+            error: c.coupleError,
+            contact: publicContact(c)
+          }, req);
+        }
+        logLine('COUPLE job started ' + email);
+        return send(res, 202, {
+          ok: true,
+          kind: 'couple',
+          status: 'generating',
+          async: true,
+          message: c.coupleProgress,
+          pdfUrl: '/couple-file?email=' + encodeURIComponent(email),
           contact: publicContact(c)
         }, req);
       }

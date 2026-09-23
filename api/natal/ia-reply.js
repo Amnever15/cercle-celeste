@@ -4,6 +4,7 @@
  */
 const natalGen = require('../natal-generate');
 const periodGen = require('../period-generate');
+const coupleGen = require('../couple-generate');
 const chartCache = require('./chart-cache');
 const htmlDoc = require('./html-doc');
 const { requestJson } = require('./http');
@@ -79,6 +80,30 @@ function loadManuscriptContext(contact, context) {
         ? 'Manuscrit du jour :\n' + jour
         : 'Manuscrit du jour : pas encore généré pour aujourd’hui.') +
       (natalJ ? '\n\nRepères du manuscrit de ta vie (extrait) :\n' + natalJ : '')
+    ).trim();
+  }
+  if (context === 'couple') {
+    var couple = coupleGen.loadCouplePlain(contact, 14000);
+    var partnerHints = '';
+    if (contact && chartCache.hasValidPartnerCache(contact)) {
+      var phd = contact.partnerChartHd || {};
+      var pastro = contact.partnerChartAstro || {};
+      partnerHints = [
+        'Partenaire (' + (contact.partnerPrenom || '—') + ') —',
+        'HD Type: ' + (phd.type || '—') +
+          ' | Profil: ' + (phd.profile || '—') +
+          ' | Autorité: ' + (phd.authority || '—'),
+        'Astro Soleil: ' + (pastro.Sun || '—') +
+          ' | Lune: ' + (pastro.Moon || '—') +
+          ' | Asc: ' + (pastro.Ascendant || '—')
+      ].join('\n');
+    }
+    return (
+      (hints ? hints + '\n\n' : '') +
+      (partnerHints ? partnerHints + '\n\n' : '') +
+      (couple
+        ? 'Manuscrit de couple :\n' + couple
+        : 'Manuscrit de couple : pas encore généré pour ce mois.')
     ).trim();
   }
   return loadNatalPlain(contact, 14000);
@@ -176,15 +201,20 @@ async function answerFromManuscript(contact, question, context, opts) {
   if (selected.length > 4000) selected = selected.slice(0, 4000) + '…';
   var rawMs = loadManuscriptContext(contact, ctx);
   var manuscript = smartContext(rawMs, selected, 12000);
-  var label = ctx === 'mois' ? 'du mois' : (ctx === 'jour' ? 'du jour' : 'de ta vie');
+  var label = ctx === 'mois'
+    ? 'du mois'
+    : (ctx === 'jour' ? 'du jour' : (ctx === 'couple' ? 'de couple' : 'de ta vie'));
   var prenom = (contact && contact.prenom) || 'toi';
+  var partnerName = (contact && contact.partnerPrenom) || '';
 
   var system =
     'Tu es l’IA Céleste, présence douce, claire et précise. Tu accompagnes ' + prenom +
+    (ctx === 'couple' && partnerName ? (' et ' + partnerName) : '') +
     ' pendant qu’elle ou il lit son Manuscrit Céleste ' + label + '. ' +
-    'Réponds en français, tutoiement, 2 à 5 courts paragraphes. ' +
+    'Réponds en français, ' + (ctx === 'couple' ? 'vouvoiement du couple ou tutoiement selon la question, ' : 'tutoiement, ') +
+    '2 à 5 courts paragraphes. ' +
     'Ancre CHAQUE réponse dans le contenu concret du manuscrit fourni : cite ou paraphrases des éléments réels ' +
-    '(type / autorité / stratégie HD, planètes, maisons, canaux, chapitres, insights) quand ils apparaissent. ' +
+    '(type / autorité / stratégie HD, planètes, synastrie, chapitres, insights) quand ils apparaissent. ' +
     'Interdits : phrases toutes faites génériques du type « écoute ton autorité intérieure » / « si la vague n’est pas claire » ' +
     'sans les relier à CE manuscrit ; ne mentionne jamais Claude, OpenAI, ni « intelligence artificielle ». ' +
     'Ton : céleste, chaleureux, concret — comme une lecture qui continue le manuscrit, pas un template.';
