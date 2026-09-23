@@ -32,10 +32,11 @@ function profileFields(c) {
     };
   }
   const birthDate = trim(c.birthDate);
-  const birthTime = trim(c.birthTime);
+  let birthTime = trim(c.birthTime);
+  if (/^\d{1,2}:\d{2}:\d{2}$/.test(birthTime)) birthTime = birthTime.slice(0, 5);
   const birthPlace = trim(c.birthPlace);
-  const gender = normalizeGender(c.gender) || trim(c.gender);
-  const complete = !!(birthDate && birthTime && birthPlace && gender);
+  const gender = normalizeGender(c.gender);
+  const complete = !!(birthDate && birthTime && birthPlace && gender && GENDERS.indexOf(gender) >= 0);
   const ready = !!c.natalReady;
   let status = trim(c.natalStatus) || 'none';
   if (ready && status === 'none') status = 'ready';
@@ -71,7 +72,7 @@ function toneLabel(gender) {
 function saveProfile(c, body) {
   if (!c) return { ok: false, error: 'compte inconnu' };
   const birthDate = trim(body && body.birthDate);
-  const birthTime = trim(body && body.birthTime);
+  let birthTime = trim(body && body.birthTime);
   const birthPlace = trim(body && body.birthPlace);
   const gender = normalizeGender(body && body.gender);
 
@@ -80,9 +81,14 @@ function saveProfile(c, body) {
     return { ok: false, error: 'Date au format AAAA-MM-JJ' };
   }
   if (!birthTime) return { ok: false, error: 'Heure de naissance requise' };
-  if (!/^\d{1,2}:\d{2}$/.test(birthTime)) {
+  /* HH:MM ou HH:MM:SS (certains navigateurs) → stocker HH:MM */
+  const timeMatch = birthTime.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!timeMatch) {
     return { ok: false, error: 'Heure au format HH:MM' };
   }
+  const hh = String(Math.min(23, parseInt(timeMatch[1], 10))).padStart(2, '0');
+  const mm = String(Math.min(59, parseInt(timeMatch[2], 10))).padStart(2, '0');
+  birthTime = hh + ':' + mm;
   if (!birthPlace || birthPlace.length < 2) {
     return { ok: false, error: 'Lieu de naissance requis' };
   }
