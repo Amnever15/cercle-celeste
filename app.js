@@ -20,7 +20,7 @@
   };
 
   var MONTHLY = {
-    pages: '8–12 pages',
+    pages: '~10 pages',
     intro: 'Disponible tout le mois. Ton Manuscrit Céleste relatif au mois en cours. Comment tes étoiles parlent ce mois',
     body: [
       'Ce mois-ci, le ciel te demande de ne plus avancer dans le brouillard : attends le signal, puis réponds avec tout ton être.',
@@ -31,7 +31,7 @@
   };
 
   var TODAY = {
-    pages: '2–4 pages',
+    pages: '1–4 pages',
     intro: 'Ton Manuscrit Céleste relatif à cette journée en cours. Comment tes étoiles parlent AUJOURD\'HUI',
     body: [
       'Aujourd’hui, n’ouvre qu’une porte. Une conversation, un message, un pas visible — pas dix.',
@@ -71,6 +71,9 @@
     pendingAsk: null,
     natalPreview: null,
     natalGenError: null,
+    periodPreview: null,
+    periodPreviewKind: null,
+    periodGenError: null,
     theme: 'dark',
     editingBirth: false
   };
@@ -155,6 +158,8 @@
     syncProfileFlag();
     /* Ne pas garder un « Relire » local si le serveur n’a pas le fichier. */
     if (!natalCanRead()) clearNatalLocalBook();
+    if (!periodCanRead('mois')) clearPeriodLocalBook('mois');
+    if (!periodCanRead('jour')) clearPeriodLocalBook('jour');
     saveUser();
   }
   /** Recalcule profileComplete à partir des champs (évite un flag localStorage obsolète). */
@@ -738,9 +743,9 @@
     localStorage.setItem(booksKey(), JSON.stringify(b));
   }
   function bookReady(kind) {
+    if (kind === 'jour') return periodCanRead('jour');
+    if (kind === 'mois') return periodCanRead('mois');
     var b = loadBooks();
-    if (kind === 'jour') return b.jour === dayKey();
-    if (kind === 'mois') return b.mois === monthKey();
     return !!b[kind];
   }
   function markBook(kind) {
@@ -750,11 +755,102 @@
     else b[kind] = dayKey();
     saveBooks(b);
   }
+  function periodCanRead(kind) {
+    var u = state.user || {};
+    if (kind === 'jour') {
+      return !!(u.jourReady && u.jourFileExists && u.jourKey === dayKey());
+    }
+    if (kind === 'mois') {
+      return !!(u.moisReady && u.moisFileExists && u.moisKey === monthKey());
+    }
+    return false;
+  }
+  function periodPdfUrl(kind) {
+    var u = state.user || {};
+    var base = '';
+    if (kind === 'jour') {
+      base = u.jourPdfUrl || (u.email ? '/jour-file?email=' + encodeURIComponent(u.email) : '');
+    } else {
+      base = u.moisPdfUrl || (u.email ? '/mois-file?email=' + encodeURIComponent(u.email) : '');
+    }
+    return base ? withAuthQuery(base) : '';
+  }
+  function clearPeriodLocalBook(kind) {
+    try {
+      var b = loadBooks();
+      if (kind === 'jour' && b.jour) { delete b.jour; saveBooks(b); }
+      if (kind === 'mois' && b.mois) { delete b.mois; saveBooks(b); }
+    } catch (e) {}
+  }
+  function openPeriodReader(kind) {
+    kind = kind === 'jour' ? 'jour' : 'mois';
+    if (!periodCanRead(kind)) {
+      clearPeriodLocalBook(kind);
+      state.pdf = null;
+      state.periodGenError = kind === 'jour'
+        ? 'Ton manuscrit du jour n’est pas encore disponible.'
+        : 'Ton manuscrit du mois n’est pas encore disponible.';
+      render();
+      return;
+    }
+    var u = withAuthQuery(periodPdfUrl(kind));
+    if (!u) {
+      state.periodGenError = 'Lien manuscrit manquant. Reconnecte-toi puis réessaie.';
+      render();
+      return;
+    }
+    fetch(u, { headers: authHeaders(false) })
+      .then(function (r) {
+        if (r.ok) {
+          var ct = (r.headers.get('content-type') || '').toLowerCase();
+          if (ct.indexOf('json') >= 0) {
+            return r.json().then(function (j) {
+              throw new Error((j && j.error) || ('aucun fichier ' + kind));
+            });
+          }
+          state.periodPreview = u;
+          state.periodPreviewKind = kind;
+          state.pdf = kind;
+          state.periodGenError = null;
+          markBook(kind);
+          render();
+          return null;
+        }
+        return r.json().then(function (j) {
+          throw new Error((j && j.error) || ('HTTP ' + r.status));
+        }).catch(function (e) {
+          if (e && e.message && e.message.indexOf('HTTP') < 0) throw e;
+          throw new Error((e && e.message) || ('aucun fichier ' + kind));
+        });
+      })
+      .catch(function () {
+        clearPeriodLocalBook(kind);
+        if (state.user) {
+          if (kind === 'jour') {
+            state.user.jourReady = false;
+            state.user.jourFileExists = false;
+            state.user.jourStatus = 'none';
+            state.user.jourPdfUrl = null;
+          } else {
+            state.user.moisReady = false;
+            state.user.moisFileExists = false;
+            state.user.moisStatus = 'none';
+            state.user.moisPdfUrl = null;
+          }
+          saveUser();
+        }
+        state.pdf = null;
+        state.periodGenError = kind === 'jour'
+          ? 'Fichier du jour introuvable. Relance « OBTENIR LE MANUSCRIT DU JOUR ».'
+          : 'Fichier du mois introuvable. Relance « Demander le manuscrit du mois ».';
+        render();
+      });
+  }
   function askManuscript(kind) {
     if (kind === 'natal' && !canNatal()) return;
     if (kind === 'ultime' && !canUltime()) return;
-    if (kind === 'jour' && dailyLeft() === 0) return;
-    if (kind === 'mois' && monthlyLeft() === 0) return;
+    if (kind === 'jour' && dailyLeft() === 0 && !periodCanRead('jour')) return;
+    if (kind === 'mois' && monthlyLeft() === 0 && !periodCanRead('mois')) return;
     if ((kind === 'natal' || kind === 'jour' || kind === 'mois') && !profileComplete()) {
       showBirthForm(kind);
       return;
@@ -763,14 +859,14 @@
       openNatalReader();
       return;
     }
-    if (bookReady(kind) && kind !== 'natal') {
-      state.pdf = kind;
-      render();
+    if ((kind === 'mois' || kind === 'jour') && periodCanRead(kind)) {
+      openPeriodReader(kind);
       return;
     }
     var email = state.user && state.user.email;
     if (!email) return;
     if (kind === 'natal') state.natalGenError = null;
+    if (kind === 'mois' || kind === 'jour') state.periodGenError = null;
     state.busy = kind;
     render();
     fetch(API + '/generate', {
@@ -796,12 +892,16 @@
             render();
             return;
           }
+          if (kind === 'mois' || kind === 'jour') {
+            state.periodGenError = (res.data && res.data.error) || 'Impossible d’écrire ce manuscrit.';
+            render();
+            return;
+          }
           alert((res.data && res.data.error) || 'Impossible d’écrire ce manuscrit.');
           render();
           return;
         }
         if (kind === 'natal') {
-          /* 202 async job OU déjà prêt */
           if (res.data && (res.data.status === 'generating' || res.status === 202)) {
             pollNatalUntilReady();
             return;
@@ -812,6 +912,21 @@
             openNatalReader();
           } else {
             state.natalGenError = 'Le manuscrit n’est pas encore prêt. Réessaie — la génération peut prendre plusieurs minutes.';
+            render();
+          }
+          return;
+        }
+        if (kind === 'mois' || kind === 'jour') {
+          if (res.data && (res.data.status === 'generating' || res.status === 202)) {
+            pollPeriodUntilReady(kind);
+            return;
+          }
+          state.busy = null;
+          state.periodGenError = null;
+          if (periodCanRead(kind)) {
+            openPeriodReader(kind);
+          } else {
+            state.periodGenError = 'Le manuscrit n’est pas encore prêt. Réessaie dans un moment.';
             render();
           }
           return;
@@ -831,9 +946,76 @@
           render();
           return;
         }
+        if (kind === 'mois' || kind === 'jour') {
+          state.periodGenError = 'Le serveur d’accès n’est pas joignable.';
+          render();
+          return;
+        }
         alert('Le serveur d’accès n’est pas joignable.');
         render();
       });
+  }
+
+  function pollPeriodUntilReady(kind) {
+    kind = kind === 'jour' ? 'jour' : 'mois';
+    state.busy = kind;
+    render();
+    var email = state.user && state.user.email;
+    if (!email) {
+      state.busy = null;
+      render();
+      return;
+    }
+    var tries = 0;
+    var maxTries = kind === 'jour' ? 60 : 90;
+    function tick() {
+      tries++;
+      fetch(API + '/access?email=' + encodeURIComponent(email), {
+        headers: authHeaders(false)
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
+        .then(function (res) {
+          if (res.status === 401) {
+            state.busy = null;
+            forceReLogin((res.data && res.data.error) || 'Session expirée.');
+            return;
+          }
+          if (res.data) applyAccess(res.data);
+          var u = state.user || {};
+          if (periodCanRead(kind)) {
+            state.busy = null;
+            state.periodGenError = null;
+            openPeriodReader(kind);
+            return;
+          }
+          var st = kind === 'jour' ? u.jourStatus : u.moisStatus;
+          var err = kind === 'jour' ? u.jourError : u.moisError;
+          if (st === 'error') {
+            state.busy = null;
+            state.periodGenError = err || 'La génération n’a pas pu aboutir. Réessaie.';
+            render();
+            return;
+          }
+          if (tries >= maxTries) {
+            state.busy = null;
+            state.periodGenError = 'La génération prend plus longtemps que prévu. Reviens dans quelques minutes.';
+            render();
+            return;
+          }
+          render();
+          setTimeout(tick, 4000);
+        })
+        .catch(function () {
+          if (tries >= maxTries) {
+            state.busy = null;
+            state.periodGenError = 'Connexion interrompue. Réessaie.';
+            render();
+            return;
+          }
+          setTimeout(tick, 4000);
+        });
+    }
+    setTimeout(tick, 3000);
   }
 
   function pollNatalUntilReady() {
@@ -1426,11 +1608,15 @@
   function pauseBanner() {
     if (!isPausedPaid()) return '';
     var u = state.user || {};
+    /* Compteur 6 mois : pertinent pour Céleste, pas pour Divin (Ultime déjà inclus). */
+    var ultimePauseNote = plan() === 'divin'
+      ? ''
+      : '<p class="muted">Mois Ultime conservés : ' + monthsPaid() + ' / 6.</p>';
     return '<div class="card pause-banner stack">' +
       '<div class="label">Abonnement en pause</div>' +
       '<h2>Espace en pause</h2>' +
       '<p>Ton abo ' + ((u.planLabel) || '') + ' est en pause. Tu gardes l’accès Gratuit : 1 manuscrit du mois + 5 manuscrits du jour. Natal, Ultime et IA Céleste se rouvrent dès que tu reprends.</p>' +
-      '<p class="muted">Mois Ultime conservés : ' + monthsPaid() + ' / 6.</p>' +
+      ultimePauseNote +
       '<button class="btn" type="button" data-plan-link="manage">Reprendre mon abonnement</button>' +
       '<button class="btn ghost" type="button" id="retry-access">J’ai repris, actualiser</button>' +
       '</div>';
@@ -1508,7 +1694,9 @@
     } else if (plan() === 'gratuit' && months === 0) {
       ultime = '<div class="card lock stack"><div class="label">Céleste ou Divin</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">140 pages</p><p>Après 6 mois Céleste, ou immédiatement en Divin.</p></div>';
     } else if (ultimeOn() && isPausedPaid()) {
-      ultime = '<div class="card lock stack"><div class="label">En pause</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + ULTIME.pages + ' pages · déjà débloqué</p><p>L’Ultime se rouvre dès que tu reprends l’abonnement. Tes <b>' + months + ' mois</b> restent comptés.</p></div>';
+      ultime = '<div class="card lock stack"><div class="label">En pause</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + ULTIME.pages + ' pages · déjà débloqué</p><p>L’Ultime se rouvre dès que tu reprends l’abonnement.' +
+        (plan() === 'divin' ? '' : ' Tes <b>' + months + ' mois</b> restent comptés.') +
+        '</p></div>';
     } else {
       ultime = '<div class="card lock stack"><div class="label">Verrouillé</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + ULTIME.pages + ' pages · 6 mois payés, cumulés</p><p>Tu as <b>' + months + ' mois</b> déjà réglés. Encore <b>' + left + '</b> — une pause ne casse pas la série.</p></div>';
     }
@@ -1520,9 +1708,11 @@
 
   function askBtn(kind, askLabel, readLabel) {
     if (state.busy === kind) {
-      return '<button class="btn" disabled>' +
-        (kind === 'natal' ? 'Écriture en cours… quelques minutes' : 'Le ciel s’écrit…') +
-        '</button>';
+      var busyMsg = 'Le ciel s’écrit…';
+      if (kind === 'natal') busyMsg = 'Écriture en cours… quelques minutes';
+      else if (kind === 'mois') busyMsg = 'Écriture du mois… quelques minutes';
+      else if (kind === 'jour') busyMsg = 'Écriture du jour…';
+      return '<button class="btn" disabled>' + busyMsg + '</button>';
     }
     /* Natal : jamais data-pdf / cache local books — uniquement fichier confirmé serveur. */
     if (kind === 'natal') {
@@ -1530,6 +1720,12 @@
         return '<button class="btn" data-ask="natal">' + readLabel + '</button>';
       }
       return '<button class="btn" data-ask="natal">' + askLabel + '</button>';
+    }
+    if (kind === 'mois' || kind === 'jour') {
+      if (periodCanRead(kind)) {
+        return '<button class="btn" data-ask="' + kind + '">' + readLabel + '</button>';
+      }
+      return '<button class="btn" data-ask="' + kind + '">' + askLabel + '</button>';
     }
     if (bookReady(kind)) return '<button class="btn" data-pdf="' + kind + '">' + readLabel + '</button>';
     return '<button class="btn" data-ask="' + kind + '">' + askLabel + '</button>';
@@ -1568,8 +1764,28 @@
       '</div></div>';
   }
 
+  function periodStatusLine(kind) {
+    var u = state.user || {};
+    if (state.periodGenError && (state.busy === kind || !periodCanRead(kind))) {
+      var eSafe = String(state.periodGenError).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return '<div class="natal-wait natal-wait-error" role="alert"><p>' + eSafe + '</p></div>';
+    }
+    var st = kind === 'jour' ? u.jourStatus : u.moisStatus;
+    var prog = kind === 'jour' ? u.jourProgress : u.moisProgress;
+    if (st === 'generating' || state.busy === kind) {
+      var pSafe = String(prog || 'Le ciel s’écrit…').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return '<p class="muted">' + pSafe + '</p>';
+    }
+    if (st === 'error') {
+      var err = kind === 'jour' ? u.jourError : u.moisError;
+      var errSafe = String(err || 'Génération interrompue. Réessaie.').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return '<div class="natal-wait natal-wait-error" role="alert"><p>' + errSafe + '</p></div>';
+    }
+    return '';
+  }
+
   function moisTab() {
-    var ready = bookReady('mois');
+    var ready = periodCanRead('mois');
     var left = monthlyLeft();
     var blocked = left === 0 && !ready;
     var title = moisTitleHtml();
@@ -1577,11 +1793,12 @@
       '<div class="month">' + title + '</div><p class="lede">' + monthLabel() + '</p></div>' +
       '<div class="stack"><div class="card stack"><div class="label">Ce mois</div>' +
       '<h2>' + title + '</h2><p class="muted">' + MONTHLY.pages + (left != null ? ' · ' + (ready ? 1 : left) + ' / 1 cette année (Gratuit)' : '') + '</p><p>' + MONTHLY.intro + '</p>' +
+      periodStatusLine('mois') +
       (blocked ? '' : askBtn('mois', 'Demander le manuscrit du mois', 'Relire le manuscrit du mois')) + '</div>' + iaCard() + '</div>';
   }
 
   function jourTab() {
-    var ready = bookReady('jour');
+    var ready = periodCanRead('jour');
     var left = dailyLeft();
     var blocked = left === 0 && !ready;
     var title = jourTitlePlain();
@@ -1589,6 +1806,7 @@
       '<div class="month">' + title + '</div><p class="lede">' + todayLabel() + '</p></div>' +
       '<div class="stack"><div class="card stack"><div class="label">Aujourd’hui</div>' +
       '<h2>' + title + '</h2><p class="muted">' + TODAY.pages + (left != null ? ' · ' + (state.user.dailyUsed || 0) + ' / 5 ce mois (Gratuit)' : '') + '</p><p>' + TODAY.intro + '</p>' +
+      periodStatusLine('jour') +
       (blocked ? '' : askBtn('jour', 'OBTENIR LE MANUSCRIT DU JOUR', 'Relire le manuscrit du jour')) + '</div>' + iaCard() + '</div>';
   }
 
@@ -1635,7 +1853,8 @@
       iaLine = 'Réservée au plan Divin';
     }
 
-    var showUltime = (p === 'celeste' || p === 'divin' || monthsPaid() > 0);
+    /* Progression Ultime : Céleste / mois cumulés — pas pour Divin (déjà inclus). */
+    var showUltime = (p === 'celeste' || monthsPaid() > 0) && p !== 'divin';
     var ultimeLine = monthsPaid() + ' / 6 mois payés' + (isPausedPaid() ? ' (conservés)' : '');
 
     var birthTimeDisp = '';
@@ -1692,6 +1911,7 @@
       '<div class="acct-block">' +
         '<div class="label">Gérer mon abonnement</div>' +
         '<p class="muted acct-hint">Pour changer de plan, arrête d’abord ton abonnement actuel, puis souscris à nouveau à celui de ton choix.</p>' +
+        '<p class="muted acct-hint">Pour toute assistance : contact@formations-spiritualite-energetique.com</p>' +
         '<div class="stack">' + actions + '</div>' +
       '</div>' +
       '<button class="btn ghost" id="close-account">Fermer</button>' +
@@ -1708,13 +1928,17 @@
       titleHtml = moisTitleHtml();
       titlePlain = moisTitlePlain();
       kicker = monthLabel();
-      paras = MONTHLY.body;
+      paras = [
+        'Voici ton Manuscrit Céleste de ce mois, ancré dans ton thème natal (Human Design + astral).'
+      ];
     }
     if (id === 'jour') {
       titleHtml = jourTitlePlain();
       titlePlain = jourTitlePlain();
       kicker = todayLabel();
-      paras = TODAY.body;
+      paras = [
+        'Voici ton Manuscrit Céleste du jour, ancré dans ton thème natal (Human Design + astral).'
+      ];
     }
     if (id === 'ultime') {
       titleHtml = ultimeTitleHtml();
@@ -1732,6 +1956,16 @@
         extra = '<iframe class="natal-frame" title="Manuscrit natal" src="' + url + '"></iframe>';
       } else {
         extra = '<p class="muted">Manuscrit indisponible pour le moment. Reviens à l’accueil et appuie sur OBTENIR LE MANUSCRIT DE MA VIE.</p>';
+      }
+    }
+    if (id === 'mois' || id === 'jour') {
+      var purl = (state.periodPreviewKind === id && typeof state.periodPreview === 'string' && state.periodPreview)
+        ? state.periodPreview
+        : periodPdfUrl(id);
+      if (purl && periodCanRead(id)) {
+        extra = '<iframe class="natal-frame" title="Manuscrit ' + id + '" src="' + purl + '"></iframe>';
+      } else {
+        extra = '<p class="muted">Manuscrit indisponible. Relance la demande depuis l’onglet.</p>';
       }
     }
     var body = '<p class="kicker">' + kicker + '</p><h2>' + titleHtml + '</h2>' +
@@ -1939,6 +2173,8 @@
       state.user = null; state.screen = 'login'; state.account = false; state.tab = 'natal';
       state.iaBusy = false; state.iaLoaded = false; state.iaMessages = [];
       state.pdf = null; state.pendingAsk = null; state.natalPreview = null;
+      state.periodPreview = null; state.periodPreviewKind = null;
+      state.natalGenError = null; state.periodGenError = null;
       render();
     };
   }

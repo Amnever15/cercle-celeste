@@ -18,6 +18,7 @@ const hdMod = require('./natal/hd');
 const astroMod = require('./natal/astro');
 const claudeNatal = require('./natal/claude-natal');
 const htmlDoc = require('./natal/html-doc');
+const chartCache = require('./natal/chart-cache');
 
 /**
  * Fichiers HTML/JSON/TXT : sur le volume (à côté de store.json) si STORE_PATH / DATA_DIR,
@@ -206,6 +207,9 @@ function markReady(email, paths, meta, snapshot) {
     if (snapshot.birthTimezone) c.birthTimezone = snapshot.birthTimezone;
     if (snapshot.birthLat != null) c.birthLat = snapshot.birthLat;
     if (snapshot.birthLon != null) c.birthLon = snapshot.birthLon;
+    if (snapshot.chartHd && snapshot.chartAstro) {
+      chartCache.storeChart(c, snapshot.chartHd, snapshot.chartAstro);
+    }
   }
   if (hooks.consumeNatal) hooks.consumeNatal(c);
   hooks.writeStore(store);
@@ -273,6 +277,7 @@ async function generateNatal(contact, opts) {
     dateRaw, lat, lon, timezone, contact.birthPlace,
     function (m) { onProgress(m, 38); }
   );
+  chartCache.storeChart(contact, hd, astro);
 
   onProgress('Le langage de l’univers s’écrit dans ton manuscrit…', 45);
   var manuscrit = await claudeNatal.generateManuscrit(contact, hd, astro, onProgress);
@@ -346,7 +351,9 @@ async function generateNatal(contact, opts) {
     jsonPath: paths.json,
     pagesEst: pagesEst,
     sections: sectionCount,
-    claudeOk: true
+    claudeOk: true,
+    hd: hd,
+    astro: astro
   };
 }
 
@@ -381,7 +388,9 @@ function startNatalJob(email) {
         }, { source: gen.source, pagesEst: gen.pagesEst }, {
           birthTimezone: c.birthTimezone,
           birthLat: c.birthLat,
-          birthLon: c.birthLon
+          birthLon: c.birthLon,
+          chartHd: gen.hd || c.chartHd,
+          chartAstro: gen.astro || c.chartAstro
         });
         hooks.log('NATAL ready ' + key + ' pages~' + gen.pagesEst + ' sections=' + gen.sections);
       } catch (err) {

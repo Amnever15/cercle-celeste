@@ -38,7 +38,15 @@ function planetLabel(key) {
   return PLANET_LABELS[k] || String(key || '').replace(/_/g, ' ');
 }
 
-function buildNatalHtml(contact, manuscrit, hd, astro) {
+function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
+  opts = opts || {};
+  var coverMain = opts.coverMain || 'Ton Manuscrit';
+  var coverGold = opts.coverGold != null ? opts.coverGold : 'Céleste';
+  var coverFor = opts.coverFor || null;
+  var footerLabel = opts.footerLabel || 'Ton Manuscrit Céleste';
+  var skipAffirmations = !!opts.skipAffirmations;
+  var skipRituelsBlock = !!opts.skipRituelsBlock;
+  var skipSynthese = !!opts.skipSynthese;
   var prenom = esc(contact.prenom || 'toi');
   var lieu = esc(contact.birthPlace || '');
   var date = esc(contact.birthDate || '');
@@ -134,7 +142,7 @@ function buildNatalHtml(contact, manuscrit, hd, astro) {
         ? '<div class="insight-wrap"><span class="insight-dot">✦</span><blockquote class="insight">' + esc(sec.insight) + '</blockquote></div>'
         : '') +
       '</div>' +
-      '<footer class="page-ftr">Ton Manuscrit Céleste</footer>' +
+      '<footer class="page-ftr">' + footerLabel + '</footer>' +
       '</section>'
     );
   }).join('\n');
@@ -194,19 +202,19 @@ function buildNatalHtml(contact, manuscrit, hd, astro) {
         ? '<blockquote class="mantra">' + esc(syn.mantra) + '</blockquote>'
         : '') +
       '</div>' +
-      '<footer class="page-ftr">Ton Manuscrit Céleste</footer>' +
+      '<footer class="page-ftr">' + footerLabel + '</footer>' +
       '</section>';
   }
 
   return `<!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Manuscrit Céleste — ${prenom}</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Cinzel:wght@400;600&family=Inter:wght@300;400&display=swap" rel="stylesheet">
 <style>
-:root {
+:root, html[data-theme="dark"] {
   --deep: #04010D;
   --deep-2: #0a0620;
   --gold: #C9A84C;
@@ -215,6 +223,64 @@ function buildNatalHtml(contact, manuscrit, hd, astro) {
   --cream-soft: #f3ead6;
   --violet: #2D1870;
   --muted: #9C90B4;
+  --sheet-bg:
+    radial-gradient(ellipse at 18% 78%, rgba(61,26,122,.22), transparent 55%),
+    radial-gradient(ellipse at 84% 28%, rgba(26,48,122,.18), transparent 50%),
+    linear-gradient(165deg, rgba(12,7,35,.96), rgba(4,1,13,.99));
+  --sheet-bg-2:
+    radial-gradient(ellipse at 85% 80%, rgba(61,26,122,.2), transparent 55%),
+    radial-gradient(ellipse at 15% 25%, rgba(26,48,122,.16), transparent 50%),
+    linear-gradient(165deg, rgba(12,7,35,.96), rgba(4,1,13,.99));
+  --sheet-bg-3:
+    radial-gradient(ellipse at 50% 90%, rgba(38,18,100,.22), transparent 50%),
+    radial-gradient(ellipse at 90% 20%, rgba(52,20,90,.16), transparent 48%),
+    linear-gradient(165deg, rgba(12,7,35,.96), rgba(4,1,13,.99));
+  --card-bg: rgba(45,24,96,.35);
+  --hd-bg: rgba(35,18,85,.55);
+  --insight-bg: rgba(45,24,112,.32);
+  --rituel-bg: rgba(45,24,96,.22);
+  --frame-border: rgba(201,168,76,.22);
+  --gold-soft: rgba(201,168,76,.55);
+  --ink-soft: rgba(247,240,220,.55);
+  --ink-mid: rgba(247,240,220,.85);
+  --body-glow:
+    radial-gradient(1200px 550px at 10% -10%, rgba(103,78,184,.22), transparent 60%),
+    radial-gradient(1000px 700px at 100% 10%, rgba(38,102,160,.16), transparent 60%),
+    var(--deep);
+}
+html[data-theme="light"] {
+  --deep: #F4EFE4;
+  --deep-2: #EBE3D4;
+  --gold: #A8842E;
+  --gold-light: #8F6F22;
+  --cream: #1C1724;
+  --cream-soft: #2A2433;
+  --violet: #D9CFBE;
+  --muted: #6A6174;
+  --sheet-bg:
+    radial-gradient(ellipse at 18% 78%, rgba(201,168,76,.08), transparent 55%),
+    radial-gradient(ellipse at 84% 28%, rgba(180,150,80,.06), transparent 50%),
+    linear-gradient(165deg, rgba(255,252,246,.98), rgba(244,239,228,.99));
+  --sheet-bg-2:
+    radial-gradient(ellipse at 85% 80%, rgba(201,168,76,.07), transparent 55%),
+    radial-gradient(ellipse at 15% 25%, rgba(160,130,60,.05), transparent 50%),
+    linear-gradient(165deg, rgba(255,252,246,.98), rgba(244,239,228,.99));
+  --sheet-bg-3:
+    radial-gradient(ellipse at 50% 90%, rgba(201,168,76,.08), transparent 50%),
+    radial-gradient(ellipse at 90% 20%, rgba(180,140,70,.06), transparent 48%),
+    linear-gradient(165deg, rgba(255,252,246,.98), rgba(244,239,228,.99));
+  --card-bg: rgba(255,252,246,.85);
+  --hd-bg: rgba(255,250,240,.9);
+  --insight-bg: rgba(248,240,220,.75);
+  --rituel-bg: rgba(255,252,246,.72);
+  --frame-border: rgba(168,132,46,.28);
+  --gold-soft: rgba(168,132,46,.65);
+  --ink-soft: rgba(28,23,36,.55);
+  --ink-mid: rgba(28,23,36,.82);
+  --body-glow:
+    radial-gradient(1200px 550px at 10% -10%, rgba(201,168,76,.12), transparent 60%),
+    radial-gradient(1000px 700px at 100% 10%, rgba(180,150,90,.08), transparent 60%),
+    var(--deep);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
@@ -225,10 +291,7 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 body {
-  background:
-    radial-gradient(1200px 550px at 10% -10%, rgba(103,78,184,.22), transparent 60%),
-    radial-gradient(1000px 700px at 100% 10%, rgba(38,102,160,.16), transparent 60%),
-    var(--deep);
+  background: var(--body-glow);
 }
 .sheet {
   position: relative;
@@ -236,10 +299,7 @@ body {
   margin: 0 auto 28px;
   min-height: 92vh;
   padding: 52px 44px 56px;
-  background:
-    radial-gradient(ellipse at 18% 78%, rgba(61,26,122,.22), transparent 55%),
-    radial-gradient(ellipse at 84% 28%, rgba(26,48,122,.18), transparent 50%),
-    linear-gradient(165deg, rgba(12,7,35,.96), rgba(4,1,13,.99));
+  background: var(--sheet-bg);
   overflow: hidden;
   page-break-after: always;
   break-after: page;
@@ -258,8 +318,11 @@ body {
 }
 .page-frame {
   position: absolute; inset: 22px; pointer-events: none;
-  border: .45pt solid rgba(201,168,76,.22);
+  border: .45pt solid var(--frame-border);
   box-shadow: inset 0 0 0 .3pt rgba(243,221,158,.1);
+}
+html[data-theme="light"] .page-frame {
+  box-shadow: inset 0 0 0 .3pt rgba(168,132,46,.08);
 }
 .page-frame::before, .page-frame::after,
 .sheet::after {
@@ -276,13 +339,13 @@ body {
   display: flex; justify-content: center; align-items: center; gap: 14px;
   font-family: 'Inter', sans-serif;
   font-size: .62rem; letter-spacing: .18em; text-transform: uppercase;
-  color: rgba(201,168,76,.55);
+  color: var(--gold-soft);
 }
 .page-hdr { margin-bottom: 28px; }
 .page-ftr { margin-top: 36px; opacity: .7; }
-.hdr-name { color: rgba(247,240,220,.55); letter-spacing: .14em; }
+.hdr-name { color: var(--ink-soft); letter-spacing: .14em; }
 .orn {
-  text-align: center; color: rgba(201,168,76,.55);
+  text-align: center; color: var(--gold-soft);
   font-size: .72rem; letter-spacing: .08em; margin: 10px 0 22px;
 }
 /* COUVERTURE */
@@ -340,7 +403,7 @@ body {
   color: var(--gold-light); margin-top: .15em;
 }
 .cover-for {
-  font-style: italic; font-size: 1.15rem; color: rgba(247,240,220,.85);
+  font-style: italic; font-size: 1.15rem; color: var(--ink-mid);
   margin: 1.1rem 0 0;
 }
 /* PLACEMENTS */
@@ -363,9 +426,13 @@ body {
   .pl-grid { grid-template-columns: repeat(4, 1fr); }
 }
 .pl-card {
-  background: rgba(45,24,96,.35);
+  background: var(--card-bg);
   border: .35pt solid rgba(201,168,76,.28);
   border-radius: 8px; padding: 12px 8px 14px; text-align: center; min-height: 72px;
+}
+html[data-theme="light"] .pl-card {
+  border-color: rgba(168,132,46,.28);
+  box-shadow: 0 1px 8px rgba(28,23,36,.06);
 }
 .pl-label {
   font-family: 'Inter', sans-serif; font-size: .58rem; letter-spacing: .14em;
@@ -375,10 +442,13 @@ body {
 .pl-sub { font-size: .72rem; color: var(--gold-light); opacity: .8; margin-top: 4px; }
 .hd-block {
   margin: 8px 0 18px; padding: 14px 12px 16px;
-  background: rgba(35,18,85,.55);
+  background: var(--hd-bg);
   border: .5pt solid rgba(201,168,76,.3);
   border-radius: 10px;
   border-left: 3px solid var(--gold);
+}
+html[data-theme="light"] .hd-block {
+  border-color: rgba(168,132,46,.3);
 }
 .hd-head {
   font-family: 'Inter', sans-serif; font-size: .62rem; letter-spacing: .16em;
@@ -420,10 +490,14 @@ body {
 .insight, .mantra {
   margin: 0 auto; max-width: 92%;
   border: .45pt solid rgba(201,168,76,.35);
-  background: rgba(45,24,112,.32);
+  background: var(--insight-bg);
   border-radius: 10px; padding: 14px 18px;
   color: var(--gold-light); font-style: italic; font-size: 1.02rem; line-height: 1.55;
   text-align: left;
+}
+html[data-theme="light"] .insight,
+html[data-theme="light"] .mantra {
+  border-color: rgba(168,132,46,.35);
 }
 .mantra { text-align: center; margin-top: 22px; }
 /* AFFIRMATIONS / RITUELS */
@@ -442,7 +516,10 @@ body {
 .rituel {
   margin: 18px 0; padding: 16px 18px;
   border: .45pt solid rgba(201,168,76,.28);
-  border-radius: 12px; background: rgba(45,24,96,.22);
+  border-radius: 12px; background: var(--rituel-bg);
+}
+html[data-theme="light"] .rituel {
+  border-color: rgba(168,132,46,.28);
 }
 .rit-num {
   font-family: 'Inter', sans-serif; font-size: .58rem; letter-spacing: .14em;
@@ -461,18 +538,8 @@ body {
 .essence { font-size: 1.15rem; font-style: italic; color: var(--gold-light); line-height: 1.55; }
 .forces { padding-left: 1.2em; color: var(--cream-soft); }
 .forces li { margin: 0 0 .55em; }
-.neb-2 {
-  background:
-    radial-gradient(ellipse at 85% 80%, rgba(61,26,122,.2), transparent 55%),
-    radial-gradient(ellipse at 15% 25%, rgba(26,48,122,.16), transparent 50%),
-    linear-gradient(165deg, rgba(12,7,35,.96), rgba(4,1,13,.99));
-}
-.neb-3 {
-  background:
-    radial-gradient(ellipse at 50% 90%, rgba(38,18,100,.22), transparent 50%),
-    radial-gradient(ellipse at 90% 20%, rgba(52,20,90,.16), transparent 48%),
-    linear-gradient(165deg, rgba(12,7,35,.96), rgba(4,1,13,.99));
-}
+.neb-2 { background: var(--sheet-bg-2); }
+.neb-3 { background: var(--sheet-bg-3); }
 @media print {
   body { background: #fff; }
   .sheet {
@@ -506,9 +573,9 @@ body {
     <div class="orn">✦ ········· ✦ ········· ✦</div>
   </div>
   <div class="cover-titles">
-    <h1>Ton Manuscrit<span class="gold">Céleste</span></h1>
+    <h1>${esc(coverMain)}<span class="gold">${esc(coverGold)}</span></h1>
     <div class="orn">✦ ········· ✦ ········· ✦</div>
-    <p class="cover-for">Révélations pour ${prenom}</p>
+    <p class="cover-for">${coverFor ? esc(coverFor) : ('Révélations pour ' + prenom)}</p>
   </div>
 </section>
 
@@ -516,7 +583,7 @@ body {
   <div class="page-frame"></div>
   <header class="page-hdr"><span>✦</span><span class="hdr-name">${prenom}</span><span>✦</span></header>
   <p class="sec-title">Tes Placements Réels</p>
-  <p class="sec-sub">— TA CARTE COSMIQUE COMPLÈTE —</p>
+  <p class="sec-sub">— TA CARTE COSMIQUE —</p>
   <div class="orn">✦ ········· ✦ ········· ✦</div>
   <div class="pl-grid">${placementsHtml}</div>
   <div class="hd-block">
@@ -527,30 +594,30 @@ body {
   ${crossHtml}
   <div class="orn">✦ ········· ✦ ········· ✦</div>
   <div class="intro-body body">${paras(manuscrit && manuscrit.intro)}</div>
-  <footer class="page-ftr">Ton Manuscrit Céleste</footer>
+  <footer class="page-ftr">${footerLabel}</footer>
 </section>
 
 ${sectionsHtml}
 
-<section class="sheet neb-1">
+${skipAffirmations || !affirmations.length ? '' : `<section class="sheet neb-1">
   <div class="page-frame"></div>
   <header class="page-hdr"><span>✦</span><span class="hdr-name">${prenom}</span><span>✦</span></header>
   <p class="sec-title">Tes Affirmations Cosmiques</p>
   <p class="sec-sub">10 vérités pour ancrer ton âme</p>
   <div class="orn">✦ ········· ✦ ········· ✦</div>
   <ul class="aff-list">${affHtml}</ul>
-  <footer class="page-ftr">Ton Manuscrit Céleste</footer>
-</section>
+  <footer class="page-ftr">${footerLabel}</footer>
+</section>`}
 
-<section class="sheet neb-3">
+${skipRituelsBlock || !rituels.length ? '' : `<section class="sheet neb-3">
   <div class="page-frame"></div>
   <header class="page-hdr"><span>✦</span><span class="hdr-name">${prenom}</span><span>✦</span></header>
   <p class="sec-title">Tes Rituels Sacrés</p>
-  <p class="sec-sub">Pratiques pour ton alignement quotidien</p>
+  <p class="sec-sub">Pratiques pour ton alignement</p>
   <div class="orn">✦ ········· ✦ ········· ✦</div>
   ${ritHtml}
-  <footer class="page-ftr">Ton Manuscrit Céleste</footer>
-</section>
+  <footer class="page-ftr">${footerLabel}</footer>
+</section>`}
 
 <section class="sheet neb-2">
   <div class="page-frame"></div>
@@ -559,14 +626,34 @@ ${sectionsHtml}
   <p class="sec-sub">Tu es exactement qui tu dois être</p>
   <div class="orn">✦ ········· ✦ ········· ✦</div>
   <div class="body">${paras((manuscrit && manuscrit.conclusion) || 'L’Univers t’a écrit ce manuscrit pour te rappeler que tu es exactement là où tu dois être, avec les outils qu’il te faut.')}</div>
-  <footer class="page-ftr">Ton Manuscrit Céleste</footer>
+  <footer class="page-ftr">${footerLabel}</footer>
 </section>
 
-${synHtml}
+${skipSynthese ? '' : synHtml}
 
 </body>
 <script>
 (function () {
+  function applyDocTheme(t) {
+    t = (t === 'light') ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  }
+  function themeFromQuery() {
+    try {
+      var q = new URLSearchParams(location.search || '');
+      var t = q.get('theme');
+      if (t === 'light' || t === 'dark') return t;
+    } catch (e) {}
+    return null;
+  }
+  var initial = themeFromQuery();
+  applyDocTheme(initial || 'dark');
+  window.addEventListener('message', function (ev) {
+    var d = ev && ev.data;
+    if (!d || d.type !== 'ms-celeste-theme') return;
+    applyDocTheme(d.theme);
+  });
+
   function stop(e) { e.preventDefault(); }
   document.addEventListener('copy', stop);
   document.addEventListener('cut', stop);
@@ -621,10 +708,44 @@ function extractPlainText(manuscrit, maxChars) {
     if (s.insight) parts.push(s.insight);
   });
   if (manuscrit.conclusion) parts.push(manuscrit.conclusion);
+  if (manuscrit.rituel && manuscrit.rituel.description) parts.push(manuscrit.rituel.description);
   if (manuscrit.synthese && manuscrit.synthese.essence) parts.push(manuscrit.synthese.essence);
   var t = parts.join('\n\n').replace(/\s+/g, ' ').trim();
   if (t.length > maxChars) t = t.slice(0, maxChars) + '…';
   return t;
 }
 
-module.exports = { buildNatalHtml, estimatePages, extractPlainText, esc };
+/**
+ * HTML mois/jour — même habillage que le natal, titres adaptés.
+ */
+function buildPeriodHtml(kind, contact, period, hd, astro) {
+  kind = kind === 'jour' ? 'jour' : 'mois';
+  var titre = (period && period.titre) || (kind === 'jour' ? 'Manuscrit du jour' : 'Manuscrit du mois');
+  var rituels = [];
+  if (period && period.rituel && period.rituel.description) {
+    rituels.push({
+      nom: period.rituel.titre || 'Rituel',
+      description: period.rituel.description
+    });
+  }
+  var manuscrit = {
+    intro: period && period.intro,
+    sections: (period && period.sections) || [],
+    affirmations: [],
+    rituels: rituels,
+    conclusion: period && period.conclusion,
+    synthese: null,
+    placements_confirmes: {}
+  };
+  return buildNatalHtml(contact, manuscrit, hd, astro, {
+    coverMain: kind === 'jour' ? 'Manuscrit' : 'Manuscrit',
+    coverGold: kind === 'jour' ? 'du jour' : 'du mois',
+    coverFor: titre + ' — pour ' + (contact.prenom || 'toi'),
+    footerLabel: kind === 'jour' ? 'Manuscrit Céleste du jour' : 'Manuscrit Céleste du mois',
+    skipAffirmations: true,
+    skipRituelsBlock: rituels.length === 0,
+    skipSynthese: true
+  });
+}
+
+module.exports = { buildNatalHtml, buildPeriodHtml, estimatePages, extractPlainText, esc };

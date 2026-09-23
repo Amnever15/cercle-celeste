@@ -3,23 +3,11 @@
  * Appel Claude réel — jamais de stub générique « autorité intérieure ».
  */
 const natalGen = require('../natal-generate');
+const periodGen = require('../period-generate');
+const chartCache = require('./chart-cache');
 const htmlDoc = require('./html-doc');
 const { requestJson } = require('./http');
 const claudeNatal = require('./claude-natal');
-
-/** Contenu mois / jour aligné sur l’app (pas encore généré serveur). */
-var MOIS_BODY = [
-  'Ce mois-ci, le ciel te demande de ne plus avancer dans le brouillard : attends le signal, puis réponds avec tout ton être.',
-  'Saturne touche ta Maison X : ta vocation veut un cadre, pas une fuite en avant. Un seul engagement public suffit.',
-  'Fenêtre de puissance : du 8 au 14 — pose une demande claire (projet, lieu, relation) sans forcer le rythme.',
-  'La frustration est ton panneau stop. Si tu pousses sans invitation, tu t’épuises.'
-].join('\n\n');
-
-var JOUR_BODY = [
-  'Aujourd’hui, n’ouvre qu’une porte. Une conversation, un message, un pas visible — pas dix.',
-  'Ton autorité émotionnelle te dit d’attendre la vague : si c’est agité à 10 h, ce n’est pas encore un oui.',
-  'Ce soir, une phrase à écrire : « Qu’est-ce qui s’est ouvert sans que je force ? »'
-].join('\n\n');
 
 function loadNatalPlain(contact, maxChars) {
   maxChars = maxChars || 14000;
@@ -48,20 +36,48 @@ function loadNatalPlain(contact, maxChars) {
   return '';
 }
 
+function chartHints(contact) {
+  if (!contact || !chartCache.hasValidCache(contact)) return '';
+  var hd = contact.chartHd || {};
+  var astro = contact.chartAstro || {};
+  return [
+    'Thème natal (cache) —',
+    'HD Type: ' + (hd.type || '—') +
+      ' | Profil: ' + (hd.profile || '—') +
+      ' | Autorité: ' + (hd.authority || '—') +
+      ' | Stratégie: ' + (hd.strategy || '—'),
+    'Astro Soleil: ' + (astro.Sun || '—') +
+      ' | Lune: ' + (astro.Moon || '—') +
+      ' | Asc: ' + (astro.Ascendant || '—')
+  ].join('\n');
+}
+
 function loadManuscriptContext(contact, context) {
   context = String(context || 'natal');
-  if (context === 'natal') return loadNatalPlain(contact, 14000);
+  var hints = chartHints(contact);
+  if (context === 'natal') {
+    var natal = loadNatalPlain(contact, 14000);
+    return (hints ? hints + '\n\n' : '') + natal;
+  }
   if (context === 'mois') {
-    var natalM = loadNatalPlain(contact, 8000);
+    var mois = periodGen.loadPeriodPlain(contact, 'mois', 12000);
+    var natalM = loadNatalPlain(contact, 6000);
     return (
-      'Manuscrit du mois (texte lu dans l’app) :\n' + MOIS_BODY +
+      (hints ? hints + '\n\n' : '') +
+      (mois
+        ? 'Manuscrit du mois :\n' + mois
+        : 'Manuscrit du mois : pas encore généré pour ce mois.') +
       (natalM ? '\n\nRepères du manuscrit de ta vie (extrait) :\n' + natalM : '')
     ).trim();
   }
   if (context === 'jour') {
-    var natalJ = loadNatalPlain(contact, 8000);
+    var jour = periodGen.loadPeriodPlain(contact, 'jour', 8000);
+    var natalJ = loadNatalPlain(contact, 6000);
     return (
-      'Manuscrit du jour (texte lu dans l’app) :\n' + JOUR_BODY +
+      (hints ? hints + '\n\n' : '') +
+      (jour
+        ? 'Manuscrit du jour :\n' + jour
+        : 'Manuscrit du jour : pas encore généré pour aujourd’hui.') +
       (natalJ ? '\n\nRepères du manuscrit de ta vie (extrait) :\n' + natalJ : '')
     ).trim();
   }

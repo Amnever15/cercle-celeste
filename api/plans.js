@@ -18,6 +18,7 @@ const PLANS = {
     label: 'Gratuit',
     price: 0,
     natal: false,
+    couple: false,
     ultime: 'never',
     dailyLimit: 5,
     monthlyLimitYear: 1,
@@ -29,6 +30,7 @@ const PLANS = {
     label: 'Céleste',
     price: 59,
     natal: true,
+    couple: false,
     ultime: 'after6',
     dailyLimit: null,
     monthlyLimitYear: null,
@@ -40,6 +42,7 @@ const PLANS = {
     label: 'Divin',
     price: 137,
     natal: true,
+    couple: true,
     ultime: 'now',
     dailyLimit: null,
     monthlyLimitYear: null,
@@ -314,6 +317,10 @@ function rollUsage(c) {
     c.usageYear = y;
     c.monthlyUsed = 0;
   }
+  /* Quota couple : 1 / mois civil (coupleUsedMonth). */
+  if (c.coupleUsedMonth && c.coupleUsedMonth !== m) {
+    c.coupleUsed = 0;
+  }
 }
 
 function isPaidPlanId(id) {
@@ -373,6 +380,7 @@ function entitlements(c) {
       need: ULTIME_MONTHS,
       monthsLeft: ULTIME_MONTHS,
       canNatal: false,
+      canCouple: false,
       canUltime: false,
       canIa: false,
       dailyLimit: 5,
@@ -381,6 +389,10 @@ function entitlements(c) {
       monthlyLimitYear: 1,
       monthlyUsed: 0,
       monthlyLeft: 1,
+      coupleLimit: 1,
+      coupleUsed: 0,
+      coupleLeft: 0,
+      coupleUsedMonth: null,
       iaQuota: 0,
       iaUsed: 0,
       iaLeft: 0,
@@ -400,10 +412,15 @@ function entitlements(c) {
   const monthlyLimitYear = pausedPaid ? free.monthlyLimitYear : p.monthlyLimitYear;
   const iaQuota = pausedPaid ? 0 : p.iaQuota;
   const canNatal = pausedPaid ? false : !!(p.natal && active);
+  const canCouple = pausedPaid ? false : !!(p.couple && active);
   const canUltime = pausedPaid ? false : !!(c.ultimeUnlocked && active);
   const canIa = pausedPaid ? false : !!(p.ia && active);
   const dailyLeft = dailyLimit == null ? null : Math.max(0, dailyLimit - (c.dailyUsed || 0));
   const monthlyLeft = monthlyLimitYear == null ? null : Math.max(0, monthlyLimitYear - (c.monthlyUsed || 0));
+  const m = monthStamp();
+  const coupleLimit = canCouple ? 1 : 0;
+  const coupleUsedThisMonth = (c.coupleUsedMonth === m) ? (c.coupleUsed || 0) : 0;
+  const coupleLeft = canCouple ? Math.max(0, coupleLimit - coupleUsedThisMonth) : 0;
   const iaLeft = canIa ? Math.max(0, iaQuota - (c.iaUsed || 0)) : 0;
   return Object.assign({
     exists: true,
@@ -420,6 +437,7 @@ function entitlements(c) {
     need: ULTIME_MONTHS,
     monthsLeft: Math.max(0, ULTIME_MONTHS - (c.monthsPaid || 0)),
     canNatal: canNatal,
+    canCouple: canCouple,
     canUltime: canUltime,
     canIa: canIa,
     dailyLimit: dailyLimit,
@@ -428,6 +446,10 @@ function entitlements(c) {
     monthlyLimitYear: monthlyLimitYear,
     monthlyUsed: c.monthlyUsed || 0,
     monthlyLeft: monthlyLeft,
+    coupleLimit: coupleLimit,
+    coupleUsed: coupleUsedThisMonth,
+    coupleLeft: coupleLeft,
+    coupleUsedMonth: c.coupleUsedMonth || null,
     iaQuota: iaQuota,
     iaUsed: c.iaUsed || 0,
     iaLeft: iaLeft,
@@ -445,6 +467,22 @@ function canGenerate(c, kind) {
         ? 'Abonnement en pause : le manuscrit natal se rouvre dès que tu reprends. En attendant, utilise les quotas Gratuit (jour / mois).'
         : 'Le manuscrit de 28 pages est dans le plan Céleste.'
     };
+  }
+  if (kind === 'couple') {
+    if (!e.canCouple) {
+      return {
+        ok: false,
+        error: paused
+          ? 'Abonnement en pause : le manuscrit de couple se rouvre dès que tu reprends le Divin.'
+          : 'Le manuscrit de couple est réservé au plan Divin.'
+      };
+    }
+    if (e.coupleLeft === 0) {
+      return {
+        ok: false,
+        error: 'Ton manuscrit de couple de ce mois est déjà écrit. Relis-le, ou reviens le mois prochain.'
+      };
+    }
   }
   if (kind === 'ultime' && !e.canUltime) {
     return {
@@ -464,6 +502,10 @@ function consumeGenerate(c, kind) {
   const e = entitlements(c);
   if (kind === 'jour' && e.dailyLimit != null) c.dailyUsed = (c.dailyUsed || 0) + 1;
   if (kind === 'mois' && e.monthlyLimitYear != null) c.monthlyUsed = (c.monthlyUsed || 0) + 1;
+  if (kind === 'couple') {
+    c.coupleUsed = 1;
+    c.coupleUsedMonth = monthStamp();
+  }
 }
 
 function consumeIa(c) {

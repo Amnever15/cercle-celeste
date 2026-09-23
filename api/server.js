@@ -12,6 +12,8 @@ const crypto = require('crypto');
 const plans = require('./plans');
 const profile = require('./profile');
 const natalGen = require('./natal-generate');
+const periodGen = require('./period-generate');
+const chartCache = require('./natal/chart-cache');
 
 const ROOT = __dirname;
 const ULTIME_MONTHS = plans.ULTIME_MONTHS;
@@ -20,6 +22,13 @@ natalGen.injectStoreHooks({
   readStore: function () { return readStore(); },
   writeStore: function (data) { writeStore(data); },
   consumeNatal: function (c) { plans.consumeGenerate(c, 'natal'); },
+  log: function (msg) { logLine(msg); }
+});
+
+periodGen.injectStoreHooks({
+  readStore: function () { return readStore(); },
+  writeStore: function (data) { writeStore(data); },
+  consume: function (c, kind) { plans.consumeGenerate(c, kind); },
   log: function (msg) { logLine(msg); }
 });
 
@@ -64,7 +73,7 @@ const LOG = resolveLogPath();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/natal-file'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/natal-file', '/mois-file', '/jour-file'];
 const LAST_WEBHOOKS_MAX = 20;
 const IA_MESSAGES_MAX = 1000;
 
@@ -200,7 +209,25 @@ function emptyContact(email) {
     natalTxtPath: null,
     natalGeneratedAt: null,
     iaMessages: [],
-    iaChats: { natal: [], mois: [], jour: [] }
+    iaChats: { natal: [], mois: [], jour: [] },
+    chartHd: null,
+    chartAstro: null,
+    chartFingerprint: null,
+    chartCachedAt: null,
+    moisReady: false,
+    moisStatus: 'none',
+    moisKey: null,
+    moisHtmlPath: null,
+    moisJsonPath: null,
+    moisProgress: null,
+    moisError: null,
+    jourReady: false,
+    jourStatus: 'none',
+    jourKey: null,
+    jourHtmlPath: null,
+    jourJsonPath: null,
+    jourProgress: null,
+    jourError: null
   };
 }
 
@@ -528,6 +555,7 @@ function publicContact(c) {
   const fileOk = !!(c && natalGen.hasNatalFile(c));
   out.natalFileExists = fileOk;
   out.hasPassword = !!(c && c.passwordHash);
+  out.hasChartCache = !!(c && chartCache.hasValidCache(c));
   /* UI ne doit jamais afficher « Lire » si le HTML n’est pas sur le volume. */
   if (out.natalReady && !fileOk) {
     out.natalReady = false;
@@ -536,6 +564,25 @@ function publicContact(c) {
   } else if (out.natalReady && fileOk) {
     out.natalPdfUrl = '/natal-file?email=' + encodeURIComponent(c.email || '');
   }
+
+  periodGen.reconcilePeriod(c, 'mois');
+  periodGen.reconcilePeriod(c, 'jour');
+  const moisOk = !!(c && periodGen.hasPeriodFile(c, 'mois'));
+  const jourOk = !!(c && periodGen.hasPeriodFile(c, 'jour'));
+  out.moisFileExists = moisOk;
+  out.jourFileExists = jourOk;
+  out.moisReady = !!(c && c.moisReady && moisOk);
+  out.jourReady = !!(c && c.jourReady && jourOk);
+  out.moisStatus = (c && c.moisStatus) || 'none';
+  out.jourStatus = (c && c.jourStatus) || 'none';
+  out.moisProgress = (c && c.moisProgress) || null;
+  out.jourProgress = (c && c.jourProgress) || null;
+  out.moisError = (c && c.moisError) || null;
+  out.jourError = (c && c.jourError) || null;
+  out.moisKey = (c && c.moisKey) || null;
+  out.jourKey = (c && c.jourKey) || null;
+  out.moisPdfUrl = out.moisReady ? ('/mois-file?email=' + encodeURIComponent(c.email || '')) : null;
+  out.jourPdfUrl = out.jourReady ? ('/jour-file?email=' + encodeURIComponent(c.email || '')) : null;
   return out;
 }
 
@@ -1156,7 +1203,50 @@ async function handle(req, res) {
         'PROFILE saved ' + auth.email +
         (saved.isEdit ? ' (edit #' + (c.profileEditCount || 0) + ')' : ' (first)')
       );
+      /* Warm HD+Astro en arrière-plan (cache pour mois/jour/IA). */
+      if (profile.isComplete(c) && !chartCache.hasValidCache(c)) {
+        const warmEmail = auth.email;
+        setImmediate(function () {
+          (async function () {
+            try {
+              const st = readStore();
+              const cc = st.contacts[String(warmEmail || '').toLowerCase().trim()];
+              if (!cc || !profile.isComplete(cc) || chartCache.hasValidCache(cc)) return;
+              await chartCache.ensureChart(cc);
+              writeStore(st);
+              logLine('CHART cached ' + warmEmail);
+            } catch (err) {
+              logLine('CHART cache fail ' + warmEmail + ' ' + ((err && err.message) || err));
+            }
+          })();
+        });
+      }
       return send(res, 200, { ok: true, contact: publicContact(c) }, req);
+    }
+
+    if ((route === '/mois-file' || route === '/jour-file') && req.method === 'GET') {
+      const auth = requireSession(req, url, null);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const kind = route === '/jour-file' ? 'jour' : 'mois';
+      const c = auth.c;
+      const file = periodGen.resolvePeriodFile(c, kind);
+      if (!file) {
+        periodGen.reconcilePeriod(c, kind);
+        writeStore(auth.store);
+        return send(res, 404, { error: 'aucun fichier ' + kind }, req);
+      }
+      try {
+        const buf = fs.readFileSync(file.path);
+        const name = path.basename(file.path);
+        res.writeHead(200, Object.assign({
+          'Content-Type': file.type,
+          'Content-Length': buf.length,
+          'Content-Disposition': 'inline; filename="' + name + '"'
+        }, corsHeaders(req)));
+        return res.end(buf);
+      } catch (e) {
+        return send(res, 500, { error: 'lecture fichier' }, req);
+      }
     }
 
     if (route === '/natal-file' && req.method === 'GET') {
@@ -1200,6 +1290,22 @@ async function handle(req, res) {
       }
       const store = auth.store;
       const c = auth.c;
+
+      /* Mois / jour déjà prêts pour la période courante → relecture sans quota. */
+      if ((kind === 'mois' || kind === 'jour') && !body.regenerate) {
+        periodGen.reconcilePeriod(c, kind);
+        if (periodGen.hasPeriodFile(c, kind)) {
+          const fileRoute = kind === 'jour' ? '/jour-file' : '/mois-file';
+          return send(res, 200, {
+            ok: true,
+            kind: kind,
+            already: true,
+            pdfUrl: fileRoute + '?email=' + encodeURIComponent(email),
+            contact: publicContact(c)
+          }, req);
+        }
+      }
+
       const check = plans.canGenerate(c, kind);
       if (!check.ok) return send(res, 403, { error: check.error, contact: publicContact(c) }, req);
 
@@ -1261,6 +1367,72 @@ async function handle(req, res) {
           async: true,
           message: c.natalProgress,
           pdfUrl: '/natal-file?email=' + encodeURIComponent(email),
+          contact: publicContact(c)
+        }, req);
+      }
+
+      if (kind === 'mois' || kind === 'jour') {
+        periodGen.reconcilePeriod(c, kind);
+        const periodReady = kind === 'jour' ? c.jourReady : c.moisReady;
+        const periodStatus = kind === 'jour' ? c.jourStatus : c.moisStatus;
+        const fileRoute = kind === 'jour' ? '/jour-file' : '/mois-file';
+        if (periodReady && periodGen.hasPeriodFile(c, kind) && !body.regenerate) {
+          return send(res, 200, {
+            ok: true,
+            kind: kind,
+            already: true,
+            pdfUrl: fileRoute + '?email=' + encodeURIComponent(email),
+            contact: publicContact(c)
+          }, req);
+        }
+        const jobKey = kind + ':' + String(email).toLowerCase().trim();
+        if (periodStatus === 'generating' && periodGen.runningJobs[jobKey]) {
+          return send(res, 202, {
+            ok: true,
+            kind: kind,
+            status: 'generating',
+            message: (kind === 'jour' ? c.jourProgress : c.moisProgress) || 'Génération en cours…',
+            contact: publicContact(c)
+          }, req);
+        }
+        if (kind === 'jour') {
+          c.jourStatus = 'generating';
+          c.jourReady = false;
+          c.jourError = null;
+          c.jourProgress = 'Le ciel compose ton Manuscrit du jour…';
+          c.jourProgressPct = 2;
+        } else {
+          c.moisStatus = 'generating';
+          c.moisReady = false;
+          c.moisError = null;
+          c.moisProgress = 'Le ciel compose ton Manuscrit du mois… Quelques minutes.';
+          c.moisProgressPct = 2;
+        }
+        writeStore(store);
+        try {
+          periodGen.startPeriodJob(email, kind);
+        } catch (err) {
+          if (kind === 'jour') {
+            c.jourStatus = 'error';
+            c.jourError = (err && err.message) || 'Démarrage impossible';
+          } else {
+            c.moisStatus = 'error';
+            c.moisError = (err && err.message) || 'Démarrage impossible';
+          }
+          writeStore(store);
+          return send(res, 500, {
+            error: (err && err.message) || 'Démarrage impossible',
+            contact: publicContact(c)
+          }, req);
+        }
+        logLine('PERIOD job started ' + kind + ' ' + email);
+        return send(res, 202, {
+          ok: true,
+          kind: kind,
+          status: 'generating',
+          async: true,
+          message: kind === 'jour' ? c.jourProgress : c.moisProgress,
+          pdfUrl: fileRoute + '?email=' + encodeURIComponent(email),
           contact: publicContact(c)
         }, req);
       }
