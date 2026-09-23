@@ -590,10 +590,18 @@
     var maxTries = 120; /* ~10 min à 5 s */
     function tick() {
       tries++;
-      fetch(API + '/access?email=' + encodeURIComponent(email))
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (d) applyAccess(d);
+      fetch(API + '/access?email=' + encodeURIComponent(email), {
+        headers: authHeaders(false)
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
+        .then(function (res) {
+          if (res.status === 401) {
+            state.busy = null;
+            forceReLogin((res.data && res.data.error) || 'Session expirée.');
+            return;
+          }
+          if (res.data) applyAccess(res.data);
+          var d = res.data || {};
           var u = state.user || {};
           if (natalCanRead()) {
             state.busy = null;
@@ -687,9 +695,10 @@
     function postProfile(geo) {
       fetch(API + '/profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(true),
         body: JSON.stringify({
           email: email,
+          token: state.user && state.user.token,
           birthDate: birthDate,
           birthTime: birthTime,
           birthPlace: birthPlace,
@@ -698,8 +707,12 @@
           birthTimezone: geo.timezone || '',
           gender: gender
         })
-      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
         .then(function (res) {
+          if (res.status === 401) {
+            forceReLogin((res.data && res.data.error) || 'Session expirée.');
+            return;
+          }
           if (!res.ok) {
             if (res.data && res.data.contact) applyAccess(res.data.contact);
             alert((res.data && res.data.error) || 'Impossible d’enregistrer le profil.');
@@ -910,10 +923,15 @@
     render();
     fetch(API + '/ia', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email, question: q })
+      headers: authHeaders(true),
+      body: JSON.stringify({ email: email, question: q, token: state.user && state.user.token })
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
       .then(function (res) {
+        if (res.status === 401) {
+          state.iaBusy = false;
+          forceReLogin((res.data && res.data.error) || 'Session expirée.');
+          return;
+        }
         if (res.data && res.data.contact) applyAccess(res.data.contact);
         if (res.ok && res.data && Array.isArray(res.data.messages)) {
           setIaMessages(res.data.messages, true);
@@ -937,23 +955,29 @@
       });
   }
 
-  function apiLogin(prenom, email) {
+  function apiLogin(email, password) {
     return fetch(API + '/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prenom: prenom, email: email })
+      body: JSON.stringify({ email: email, password: password })
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); });
   }
 
   function refreshAccess() {
-    if (!state.user || !state.user.email) return Promise.resolve();
-    return fetch(API + '/access?email=' + encodeURIComponent(state.user.email))
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (!d || (!d.exists && !d.demo)) return;
-        state.user = Object.assign({}, state.user, d);
-        syncProfileFlag();
-        saveUser();
+    if (!state.user || !state.user.email || !state.user.token) return Promise.resolve();
+    return fetch(API + '/access?email=' + encodeURIComponent(state.user.email), {
+      headers: authHeaders(false)
+    })
+      .then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; });
+      })
+      .then(function (res) {
+        if (res.status === 401) {
+          forceReLogin((res.data && res.data.error) || 'Session expirée.');
+          return;
+        }
+        if (!res.ok || !res.data) return;
+        applyAccess(res.data);
       })
       .catch(function () {});
   }
@@ -969,12 +993,12 @@
         '<div class="brand"><span class="star">✦</span><h1>Les Manuscrits<br><span>Célestes</span></h1>' +
         '<p class="lede">Gratuit, Céleste (59 €) ou Divin (137 €).<br>L’IA Céleste t’accompagne dans le Divin.</p></div>' +
         '<div class="card stack">' +
-          '<div class="field"><label class="label" for="prenom">Prénom</label>' +
-          '<input class="input" id="prenom" placeholder="Sophie" autocomplete="given-name"></div>' +
           '<div class="field"><label class="label" for="email">Email</label>' +
-          '<input class="input" id="email" type="email" placeholder="toi@email.com" autocomplete="email"></div>' +
-          '<button class="btn" id="go-in">Entrer</button>' +
-          '<p class="lede" style="font-size:.85rem;text-align:center">Première visite ? Utilise l’email de ton abonnement.</p>' +
+          '<input class="input" id="email" type="email" placeholder="toi@email.com" autocomplete="username"></div>' +
+          '<div class="field"><label class="label" for="password">Mot de passe</label>' +
+          '<input class="input" id="password" type="password" placeholder="8 caractères minimum" autocomplete="current-password"></div>' +
+          '<button class="btn" id="go-in">Se connecter</button>' +
+          '<p class="lede" style="font-size:.85rem;text-align:center">Première connexion : choisis un mot de passe (8 caractères min). Même email que ton paiement.</p>' +
         '</div></div></div>';
   }
 
@@ -1416,32 +1440,33 @@
   function bind() {
     var q = new URLSearchParams(location.search);
     var em = document.getElementById('email');
-    var pn = document.getElementById('prenom');
     if (em && q.get('email') && !em.value) em.value = q.get('email');
-    if (pn && q.get('prenom') && !pn.value) pn.value = q.get('prenom');
 
     var go = document.getElementById('go-in');
     if (go) go.onclick = function () {
-      var prenom = (document.getElementById('prenom').value || '').trim();
       var email = (document.getElementById('email').value || '').trim();
-      if (!prenom) { alert('Ton prénom ✦'); return; }
-      if (!email) { alert('Un email ✦'); return; }
+      var password = (document.getElementById('password').value || '');
+      if (!email) { alert('Ton email ✦'); return; }
+      if (!password || password.length < 8) {
+        alert('Mot de passe : 8 caractères minimum ✦');
+        return;
+      }
       go.disabled = true;
       go.textContent = 'Connexion…';
-      apiLogin(prenom, email).then(function (res) {
+      apiLogin(email, password).then(function (res) {
         if (!res.ok) {
-          alert((res.data && res.data.error) || 'Aucun abonnement trouvé pour cet email. Souscris d’abord, puis reviens ici.');
+          alert((res.data && res.data.error) || 'Email ou mot de passe incorrect.');
           go.disabled = false;
-          go.textContent = 'Entrer';
+          go.textContent = 'Se connecter';
           return;
         }
-        applyAccess(Object.assign({ prenom: prenom, email: email }, res.data));
+        applyAccess(Object.assign({ email: email }, res.data));
         afterLogin();
         render();
       }).catch(function () {
         alert('Les Manuscrits Célestes ne sont pas joignables pour le moment. Réessaie dans un instant.');
         go.disabled = false;
-        go.textContent = 'Entrer';
+        go.textContent = 'Se connecter';
       });
     };
 
@@ -1601,6 +1626,6 @@
     render();
   });
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js?v=19').catch(function () {});
+    navigator.serviceWorker.register('/sw.js?v=21').catch(function () {});
   }
 })();
