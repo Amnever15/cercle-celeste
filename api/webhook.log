@@ -1,0 +1,56 @@
+2026-09-22T09:29:18.952Z WEBHOOK {"email":"marie.test@example.com","firstName":"Marie","event":"SALE_NEW","id":"sale-1"}
+2026-09-22T09:29:18.955Z SALE_NEW_MONTH_ADDED marie.test@example.com months=1 active=true
+2026-09-22T09:29:18.962Z WEBHOOK {"email":"marie.test@example.com","firstName":"Marie","event":"SALE_NEW","id":"sale-2"}
+2026-09-22T09:29:18.963Z SALE_NEW_MONTH_ADDED marie.test@example.com months=2 active=true
+2026-09-22T09:29:18.970Z WEBHOOK {"email":"marie.test@example.com","firstName":"Marie","event":"SALE_NEW","id":"sale-2"}
+2026-09-22T09:29:18.971Z SALE_NEW_ALREADY_COUNTED marie.test@example.com months=2 active=true
+2026-09-22T09:29:18.979Z WEBHOOK {"email":"marie.test@example.com","event":"SALE_CANCELED"}
+2026-09-22T09:29:18.980Z REVOKED marie.test@example.com months=2 active=false
+2026-09-22T09:29:18.988Z WEBHOOK {"email":"marie.test@example.com","firstName":"Marie","event":"SALE_NEW","id":"sale-3"}
+2026-09-22T09:29:18.989Z SALE_NEW_MONTH_ADDED marie.test@example.com months=3 active=true
+2026-09-22T09:29:18.996Z WEBHOOK {"email":"marie.test@example.com","id":"sale-4","event":"SALE_NEW"}
+2026-09-22T09:29:18.997Z SALE_NEW_MONTH_ADDED marie.test@example.com months=4 active=true
+2026-09-22T09:29:19.003Z WEBHOOK {"email":"marie.test@example.com","id":"sale-5","event":"SALE_NEW"}
+2026-09-22T09:29:19.004Z SALE_NEW_MONTH_ADDED marie.test@example.com months=5 active=true
+2026-09-22T09:29:19.010Z WEBHOOK {"email":"marie.test@example.com","id":"sale-6","event":"SALE_NEW"}
+2026-09-22T09:29:19.011Z SALE_NEW_MONTH_ADDED marie.test@example.com months=6 active=true
+2026-09-22T09:29:27.280Z WEBHOOK {"email":"pause.test@example.com","firstName":"L�a","event":"SALE_NEW","id":"pause-1"}
+2026-09-22T09:29:27.281Z SALE_NEW_MONTH_ADDED pause.test@example.com months=1 active=true
+2026-09-22T09:29:27.292Z WEBHOOK {"email":"pause.test@example.com","firstName":"L�a","event":"SALE_NEW","id":"pause-2"}
+2026-09-22T09:29:27.293Z SALE_NEW_MONTH_ADDED pause.test@example.com months=2 active=true
+2026-09-22T09:29:27.298Z WEBHOOK {"email":"pause.test@example.com","firstName":"L�a","event":"SALE_NEW","id":"pause-3"}
+2026-09-22T09:29:27.299Z SALE_NEW_MONTH_ADDED pause.test@example.com months=3 active=true
+2026-09-22T09:29:27.305Z WEBHOOK {"event":"SALE_CANCELED","email":"pause.test@example.com"}
+2026-09-22T09:29:27.306Z REVOKED pause.test@example.com months=3 active=false
+2026-09-22T13:12:27.202Z WEBHOOK refusé : secret invalide
+2026-09-22T13:12:27.244Z WEBHOOK refusé : secret invalide
+2026-09-22T13:13:06.531Z WEBHOOK refusé : secret invalide
+2026-09-22T13:13:06.542Z WEBHOOK {"email":"paye@example.com","event":"SALE_NEW","firstName":"Lea"}
+2026-09-22T13:13:06.544Z SALE_NEW_MONTH_ADDED paye@example.com months=1 active=true
+2026-09-23T02:37:51.290Z WEBHOOK → 401 via=hmac-mismatch hasSig=true hasQuerySecret=true eventHdr=SALE_NEW bytes=131
+2026-09-23T02:37:51.309Z WEBHOOK → 401 via=hmac-mismatch hasSig=true hasQuerySecret=false eventHdr=SALE_NEW bytes=131
+2026-09-23T02:37:51.324Z WEBHOOK → 401 via=missing hasSig=false hasQuerySecret=true eventHdr=CONTACT_TAG_ADDED bytes=143
+2026-09-23T02:38:10.620Z WEBHOOK raw={"customer":{"email":"buyer@example.com","fields":{"first_name":"A"}},"order":{"id":99},"pricePlan":{"name":"Celeste","amount":59}}
+2026-09-23T02:38:10.624Z WEBHOOK auth=plaintext TAGS seen=[] divin=false celeste=false event=SALE_NEW email=buyer@example.com
+2026-09-23T02:38:10.626Z WEBHOOK → 200 SALE_NEW_MONTH_ADDED buyer@example.com months=1 active=true plan=celeste tags=[]
+2026-09-23T02:38:10.642Z WEBHOOK raw={"customer":{"email":"buyer@example.com","fields":{"first_name":"A"}},"order":{"id":99},"pricePlan":{"name":"Celeste","amount":59}}
+2026-09-23T02:38:10.643Z WEBHOOK auth=hmac TAGS seen=[] divin=false celeste=false event=SALE_NEW email=buyer@example.com
+2026-09-23T02:38:10.644Z WEBHOOK → 200 SALE_NEW_ALREADY_COUNTED buyer@example.com months=1 active=true plan=celeste tags=[]
+2026-09-23T02:38:10.655Z WEBHOOK raw={"customer":{"email":"buyer@example.com","fields":{"first_name":"A"}},"order":{"id":99},"pricePlan":{"name":"Celeste","amount":59}}
+2026-09-23T02:38:10.656Z WEBHOOK auth=hmac TAGS seen=[] divin=false celeste=false event=SALE_NEW email=buyer@example.com
+2026-09-23T02:38:10.658Z WEBHOOK → 200 SALE_NEW_ALREADY_COUNTED buyer@example.com months=1 active=true plan=celeste tags=[]
+2026-09-23T02:38:10.669Z WEBHOOK raw={"contact":{"contact":{"email":"tagged@example.com","tags":[{"id":1,"name":"App Plan Divin - en cours"}]}},"tag":{"id":1,"name":"App Plan Divin - en cours"}}
+2026-09-23T02:38:10.670Z WEBHOOK auth=plaintext TAGS seen=["App Plan Divin - en cours"] divin=true celeste=false event=TAG email=tagged@example.com
+2026-09-23T02:38:10.672Z WEBHOOK → 200 TAG_DIVIN_ACTIVE tagged@example.com months=0 active=true plan=divin tags=["App Plan Divin - en cours"]
+2026-09-23T02:38:10.693Z WEBHOOK raw={"customer":{"email":"buyer@example.com"},"order":{"id":99}}
+2026-09-23T02:38:10.693Z WEBHOOK auth=plaintext TAGS seen=[] divin=false celeste=false event=REVOKE email=buyer@example.com
+2026-09-23T02:38:10.694Z WEBHOOK → 200 REVOKED buyer@example.com months=1 active=false plan=celeste tags=[]
+2026-09-23T02:53:09.531Z WEBHOOK raw={"customer":{"email":"local-test@example.com"},"pricePlan":{"name":"App Plan Celeste - en cours","amount":5900},"event":"New sale"}
+2026-09-23T02:53:09.535Z WEBHOOK auth=plaintext TAGS seen=[] divin=false celeste=false event=SALE_NEW email=local-test@example.com
+2026-09-23T02:53:09.537Z WEBHOOK → 200 SALE_NEW_MONTH_ADDED local-test@example.com months=1 active=true plan=celeste tags=[]
+2026-09-23T02:53:09.552Z WEBHOOK raw={"customer":{"email":"local-test@example.com"},"pricePlan":{"name":"App Plan Celeste - en cours","amount":5900},"event":"New sale"}
+2026-09-23T02:53:09.553Z WEBHOOK auth=hmac TAGS seen=[] divin=false celeste=false event=SALE_NEW email=local-test@example.com
+2026-09-23T02:53:09.554Z WEBHOOK → 200 SALE_NEW_MONTH_ADDED local-test@example.com months=2 active=true plan=celeste tags=[]
+2026-09-23T02:53:09.566Z WEBHOOK → 401 via=plaintext-mismatch hasSig=true hasQuery=true queryMatch=false secretLen=32 eventHdr=SALE_NEW bytes=131 HINT=Railway_WEBHOOK_SECRET_doit_egaler_secret_URL_Systemeio
+2026-09-23T03:22:25.930Z PROFILE saved sophie.demo@example.com
+2026-09-23T03:22:25.947Z NATAL generated sophie.demo@example.com source=stub:no-key

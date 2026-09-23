@@ -14,8 +14,6 @@ const profile = require('./profile');
 const natalGen = require('./natal-generate');
 
 const ROOT = __dirname;
-const STORE = path.join(ROOT, 'store.json');
-const LOG = path.join(ROOT, 'webhook.log');
 const ULTIME_MONTHS = plans.ULTIME_MONTHS;
 
 function hosted() {
@@ -39,11 +37,44 @@ function loadEnv() {
 }
 loadEnv();
 
+/** Persist across Railway redeploys: Volume mount /data + STORE_PATH=/data/store.json */
+function resolveStorePath() {
+  if (process.env.STORE_PATH) return path.resolve(process.env.STORE_PATH);
+  if (process.env.DATA_DIR) return path.join(path.resolve(process.env.DATA_DIR), 'store.json');
+  return path.join(ROOT, 'store.json');
+}
+function resolveLogPath() {
+  if (process.env.LOG_PATH) return path.resolve(process.env.LOG_PATH);
+  if (process.env.DATA_DIR) return path.join(path.resolve(process.env.DATA_DIR), 'webhook.log');
+  if (process.env.STORE_PATH) {
+    return path.join(path.dirname(path.resolve(process.env.STORE_PATH)), 'webhook.log');
+  }
+  return path.join(ROOT, 'webhook.log');
+}
+
+const STORE = resolveStorePath();
+const LOG = resolveLogPath();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/natal-file'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/natal-file'];
 const LAST_WEBHOOKS_MAX = 20;
+
+function ensureParentDir(filePath) {
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  } catch (e) { /* ignore */ }
+}
+
+function storeWritable() {
+  try {
+    ensureParentDir(STORE);
+    fs.accessSync(path.dirname(STORE), fs.constants.W_OK);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
 
 function isWeakSecret(s) {
   const t = String(s || '');
@@ -58,6 +89,10 @@ function warnProduction() {
   if (!SECRET || isWeakSecret(SECRET)) {
     console.warn('ATTENTION : WEBHOOK_SECRET trop faible ou vide. Utilise au moins 20 caractères aléatoires (pas « dev-secret »).');
   }
+  if (hosted() && STORE.indexOf(ROOT) === 0 && !process.env.STORE_PATH && !process.env.DATA_DIR) {
+    console.warn('ATTENTION : store sur disque éphémère (' + STORE + '). Sur Railway : Volume monté sur /data + STORE_PATH=/data/store.json — sinon redeploy = abonnés perdus.');
+  }
+  console.log('Store     → ' + STORE + (storeWritable() ? ' (writable)' : ' (NON writable)'));
 }
 
 function readStore() {
@@ -72,11 +107,15 @@ function readStore() {
 }
 function writeStore(data) {
   if (!data.lastWebhooks) data.lastWebhooks = [];
+  ensureParentDir(STORE);
   fs.writeFileSync(STORE, JSON.stringify(data, null, 2));
 }
 function logLine(msg) {
   const line = new Date().toISOString() + ' ' + msg + '\n';
-  try { fs.appendFileSync(LOG, line); } catch (e) { /* ignore */ }
+  try {
+    ensureParentDir(LOG);
+    fs.appendFileSync(LOG, line);
+  } catch (e) { /* ignore */ }
   console.log(msg);
 }
 
@@ -618,7 +657,9 @@ async function handle(req, res) {
         dev: DEV,
         hasSecret: !!(SECRET && !isWeakSecret(SECRET)),
         hasClaudeKey: !!natalGen.claudeKey(),
-        webhookAuth: WEBHOOK_AUTH_VERSION
+        webhookAuth: WEBHOOK_AUTH_VERSION,
+        storePath: STORE,
+        storeWritable: storeWritable()
       }, req);
     }
 
@@ -675,8 +716,38 @@ async function handle(req, res) {
       const store = readStore();
       return send(res, 200, {
         contacts: Object.values(store.contacts).map(publicContact),
-        lastWebhooks: store.lastWebhooks || []
+        lastWebhooks: store.lastWebhooks || [],
+        storePath: STORE,
+        storeWritable: storeWritable()
       });
+    }
+
+    /* POST /admin/grant?secret=… — upsert Céleste/Divin (restauration manuelle après wipe). */
+    if (route === '/admin/grant' && req.method === 'POST') {
+      if (!SECRET || url.searchParams.get('secret') !== SECRET) {
+        return send(res, 401, { error: 'secret' }, req);
+      }
+      const body = (await readBody(req)).body;
+      const email = normEmail(body.email);
+      if (!email) return send(res, 400, { error: 'email requis' }, req);
+      const planId = String(body.plan || 'celeste').toLowerCase();
+      if (planId !== 'celeste' && planId !== 'divin') {
+        return send(res, 400, { error: 'plan doit être celeste ou divin' }, req);
+      }
+      const store = readStore();
+      const c = getContact(store, email);
+      if (body.prenom) c.prenom = String(body.prenom).trim();
+      if (body.nom) c.nom = String(body.nom).trim();
+      const months = parseInt(body.monthsPaid, 10);
+      const saleId = body.saleId ? String(body.saleId) : ('admin-grant-' + Date.now());
+      grantPayment(c, saleId, c.prenom || body.prenom, c.nom || body.nom, planId);
+      if (Number.isFinite(months) && months >= 0) {
+        c.monthsPaid = months;
+        refreshUltime(c);
+      }
+      writeStore(store);
+      logLine('ADMIN_GRANT ' + email + ' plan=' + c.plan + ' months=' + c.monthsPaid + ' active=' + c.active);
+      return send(res, 200, { ok: true, action: 'ADMIN_GRANT', contact: publicContact(c) }, req);
     }
 
     if (route === '/webhook-debug' && req.method === 'GET') {

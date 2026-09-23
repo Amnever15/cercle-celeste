@@ -10,6 +10,7 @@
  */
 const IA_COST_EUR = 0.036;
 const IA_BUDGET_SHARE = 0.5;
+const profile = require('./profile');
 
 const PLANS = {
   gratuit: {
@@ -360,7 +361,7 @@ function wasEverPaid(c) {
 
 function entitlements(c) {
   if (!c) {
-    return {
+    return Object.assign({
       exists: false,
       active: false,
       plan: 'gratuit',
@@ -384,7 +385,7 @@ function entitlements(c) {
       iaUsed: 0,
       iaLeft: 0,
       iaCostEur: IA_COST_EUR
-    };
+    }, profile.profileFields(null));
   }
   applyPlan(c);
   rollUsage(c);
@@ -404,7 +405,7 @@ function entitlements(c) {
   const dailyLeft = dailyLimit == null ? null : Math.max(0, dailyLimit - (c.dailyUsed || 0));
   const monthlyLeft = monthlyLimitYear == null ? null : Math.max(0, monthlyLimitYear - (c.monthlyUsed || 0));
   const iaLeft = canIa ? Math.max(0, iaQuota - (c.iaUsed || 0)) : 0;
-  return {
+  return Object.assign({
     exists: true,
     email: c.email,
     prenom: c.prenom,
@@ -431,7 +432,7 @@ function entitlements(c) {
     iaUsed: c.iaUsed || 0,
     iaLeft: iaLeft,
     iaCostEur: IA_COST_EUR
-  };
+  }, profile.profileFields(c));
 }
 
 function canGenerate(c, kind) {

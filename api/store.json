@@ -1,0 +1,122 @@
+{
+  "contacts": {
+    "marie.test@example.com": {
+      "email": "marie.test@example.com",
+      "prenom": "Marie",
+      "nom": "",
+      "active": true,
+      "monthsPaid": 6,
+      "saleIds": [
+        "sale-1",
+        "sale-2",
+        "sale-3",
+        "sale-4",
+        "sale-5",
+        "sale-6"
+      ],
+      "createdAt": "2026-09-22T09:29:18.954Z",
+      "lastPaymentAt": "2026-09-22T09:29:19.011Z",
+      "canceledAt": null,
+      "ultimeUnlocked": true
+    },
+    "sophie.demo@example.com": {
+      "email": "sophie.demo@example.com",
+      "prenom": "Sophie",
+      "nom": "",
+      "active": true,
+      "monthsPaid": 2,
+      "saleIds": [],
+      "createdAt": "2026-09-22T09:29:19.029Z",
+      "lastPaymentAt": null,
+      "canceledAt": null,
+      "ultimeUnlocked": false,
+      "birthDate": "1990-05-12",
+      "birthTime": "14:30",
+      "birthPlace": "Lyon, France",
+      "gender": "femme",
+      "profileUpdatedAt": "2026-09-23T03:22:25.929Z",
+      "plan": "celeste",
+      "usageMonth": "2026-09",
+      "dailyUsed": 0,
+      "iaUsed": 0,
+      "usageYear": 2026,
+      "monthlyUsed": 0,
+      "natalStatus": "ready",
+      "natalReady": true,
+      "natalPdfPath": "C:\\Users\\s-386\\Desktop\\CURSOR\\MANUSCRIT\\APP\\api\\generated\\natal-sophie.demo_example.com.pdf",
+      "natalTxtPath": "C:\\Users\\s-386\\Desktop\\CURSOR\\MANUSCRIT\\APP\\api\\generated\\natal-sophie.demo_example.com.txt",
+      "natalGeneratedAt": "2026-09-23T03:22:25.946Z",
+      "natalSource": "stub:no-key",
+      "lastPaidPlan": "celeste"
+    },
+    "pause.test@example.com": {
+      "email": "pause.test@example.com",
+      "prenom": "L�a",
+      "nom": "",
+      "active": false,
+      "monthsPaid": 3,
+      "saleIds": [
+        "pause-1",
+        "pause-2",
+        "pause-3"
+      ],
+      "createdAt": "2026-09-22T09:29:27.280Z",
+      "lastPaymentAt": "2026-09-22T09:29:27.299Z",
+      "canceledAt": "2026-09-22T09:29:27.305Z",
+      "ultimeUnlocked": false
+    },
+    "nina.gratuit@example.com": {
+      "email": "nina.gratuit@example.com",
+      "prenom": "Nina",
+      "nom": "",
+      "active": true,
+      "monthsPaid": 0,
+      "saleIds": [],
+      "createdAt": "2026-09-22T12:27:12.650Z",
+      "lastPaymentAt": null,
+      "canceledAt": null,
+      "ultimeUnlocked": false,
+      "plan": "gratuit",
+      "dailyUsed": 1,
+      "monthlyUsed": 0,
+      "iaUsed": 0,
+      "usageMonth": "2026-09",
+      "usageYear": 2026
+    },
+    "clara.divin@example.com": {
+      "email": "clara.divin@example.com",
+      "prenom": "Clara",
+      "nom": "",
+      "active": true,
+      "monthsPaid": 1,
+      "saleIds": [],
+      "createdAt": "2026-09-22T12:27:12.751Z",
+      "lastPaymentAt": null,
+      "canceledAt": null,
+      "ultimeUnlocked": true,
+      "plan": "divin",
+      "dailyUsed": 0,
+      "monthlyUsed": 0,
+      "iaUsed": 1,
+      "usageMonth": "2026-09",
+      "usageYear": 2026
+    }
+  },
+  "lastWebhooks": [
+    {
+      "at": "2026-09-23T02:53:09.565Z",
+      "authVia": "plaintext-mismatch",
+      "authOk": false,
+      "eventHeader": "SALE_NEW",
+      "hasSig": true,
+      "hasQuerySecret": true,
+      "queryMatch": false,
+      "plainMatch": false,
+      "secretLen": 32,
+      "bytes": 131,
+      "rawPreview": "{\"customer\":{\"email\":\"local-test@example.com\"},\"pricePlan\":{\"name\":\"App Plan Celeste - en cours\",\"amount\":5900},\"event\":\"New sale\"}",
+      "status": 401,
+      "reason": "secret-invalide"
+    }
+  ]
+}
