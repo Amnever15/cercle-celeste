@@ -38,30 +38,16 @@ function planetLabel(key) {
   return PLANET_LABELS[k] || String(key || '').replace(/_/g, ' ');
 }
 
-function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
-  opts = opts || {};
-  var coverMain = opts.coverMain || 'Ton Manuscrit';
-  var coverGold = opts.coverGold != null ? opts.coverGold : 'Céleste';
-  var coverFor = opts.coverFor || null;
-  var footerLabel = opts.footerLabel || 'Ton Manuscrit Céleste';
-  var documentTitle = opts.documentTitle || 'Manuscrit Céleste';
-  var skipAffirmations = !!opts.skipAffirmations;
-  var skipRituelsBlock = !!opts.skipRituelsBlock;
-  var skipSynthese = !!opts.skipSynthese;
-  var prenom = esc(contact.prenom || 'toi');
-  var lieu = esc(contact.birthPlace || '');
-  var date = esc(contact.birthDate || '');
-  var heure = esc(contact.birthTime || '');
-  var pl = (manuscrit && manuscrit.placements_confirmes) || {};
-  var sections = (manuscrit && manuscrit.sections) || [];
-  var affirmations = (manuscrit && manuscrit.affirmations) || [];
-  var rituels = (manuscrit && manuscrit.rituels) || [];
-  var syn = (manuscrit && manuscrit.synthese) || null;
+var PLANET_ORDER = [
+  'soleil', 'lune', 'ascendant', 'mc', 'mercure', 'venus',
+  'mars', 'jupiter', 'saturne', 'noeud_nord'
+];
 
-  var dateStr = [date + (heure ? ' · ' + heure : ''), lieu].filter(Boolean).join(' · ');
+var PL_SKIP_KEYS = { type_hd: 1, profil_hd: 1 };
 
-  var order = ['soleil', 'lune', 'ascendant', 'mc', 'mercure', 'venus', 'mars', 'jupiter', 'saturne', 'noeud_nord'];
-  var plItems = order.map(function (k) {
+function collectPlacementItems(astro, pl) {
+  pl = pl || {};
+  var plItems = PLANET_ORDER.map(function (k) {
     var fromAstro = null;
     if (astro) {
       var map = {
@@ -74,15 +60,16 @@ function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
     var val = fromAstro || pl[k] || pl[k.replace(/é/g, 'e')] || '—';
     return { label: planetLabel(k), value: String(val) };
   });
-
-  /* Ajoute placements extra éventuels */
   Object.keys(pl).forEach(function (k) {
     var kk = k.toLowerCase();
-    if (order.indexOf(kk) >= 0) return;
+    if (PLANET_ORDER.indexOf(kk) >= 0 || PL_SKIP_KEYS[kk]) return;
     plItems.push({ label: planetLabel(k), value: String(pl[k]) });
   });
+  return plItems;
+}
 
-  var placementsHtml = plItems.map(function (it) {
+function renderPlacementsGrid(plItems) {
+  return plItems.map(function (it) {
     var raw = String(it.value || '—');
     var pi = raw.indexOf('(');
     var l1 = pi > 0 ? raw.slice(0, pi).trim() : raw;
@@ -95,7 +82,9 @@ function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
       '</div>'
     );
   }).join('');
+}
 
+function renderHdParts(hd) {
   var hdItems = [
     ['Type', hd && hd.type],
     ['Profil', hd && hd.profile],
@@ -110,7 +99,6 @@ function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
       '</div>'
     );
   }).join('');
-
   var channelsHtml = '';
   if (hd && Array.isArray(hd.channels) && hd.channels.length) {
     channelsHtml = '<p class="channels">Canaux : ' + esc(hd.channels.join('  ·  ')) + '</p>';
@@ -118,13 +106,91 @@ function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
   var crossHtml = hd && hd.cross
     ? '<p class="cross">Croix d’Incarnation : ' + esc(hd.cross) + '</p>'
     : '';
+  return { hdCards: hdCards, channelsHtml: channelsHtml, crossHtml: crossHtml };
+}
 
-  var coverSig = [
-    pl.soleil && ('Soleil : ' + pl.soleil),
-    pl.lune && ('Lune : ' + pl.lune),
-    pl.ascendant && ('Asc : ' + pl.ascendant),
-    hd && hd.type && (hd.type + (hd.profile ? ' · ' + hd.profile : ''))
-  ].filter(Boolean).join('  ·  ');
+/**
+ * Une feuille placements + HD (style céleste). introHtml optionnel (déjà en HTML).
+ */
+function buildPlacementsSheetHtml(opts) {
+  opts = opts || {};
+  var hdrName = opts.hdrName || 'toi';
+  var title = opts.title || 'Tes Placements Réels';
+  var subtitle = opts.subtitle || '— TA CARTE COSMIQUE —';
+  var neb = opts.neb || 'neb-2';
+  var footerLabel = opts.footerLabel || 'Ton Manuscrit Céleste';
+  var placementsHtml = renderPlacementsGrid(collectPlacementItems(opts.astro, opts.pl));
+  var hdParts = renderHdParts(opts.hd);
+  var introBlock = opts.introHtml
+    ? '<div class="orn">✦ ········· ✦ ········· ✦</div>\n' +
+      '<div class="intro-body body">' + opts.introHtml + '</div>'
+    : '';
+  return (
+    '<section class="sheet ' + neb + '">' +
+    '<div class="page-frame"></div>' +
+    '<header class="page-hdr"><span>✦</span><span class="hdr-name">' + esc(hdrName) + '</span><span>✦</span></header>' +
+    '<p class="sec-title">' + esc(title) + '</p>' +
+    '<p class="sec-sub">' + esc(subtitle) + '</p>' +
+    '<div class="orn">✦ ········· ✦ ········· ✦</div>' +
+    '<div class="pl-grid">' + placementsHtml + '</div>' +
+    '<div class="hd-block">' +
+    '<div class="hd-head">Human Design</div>' +
+    '<div class="hd-row">' + hdParts.hdCards + '</div>' +
+    '</div>' +
+    hdParts.channelsHtml +
+    hdParts.crossHtml +
+    introBlock +
+    '<footer class="page-ftr">' + footerLabel + '</footer>' +
+    '</section>'
+  );
+}
+
+function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
+  opts = opts || {};
+  var coverMain = opts.coverMain || 'Ton Manuscrit';
+  var coverGold = opts.coverGold != null ? opts.coverGold : 'Céleste';
+  var coverFor = opts.coverFor || null;
+  var footerLabel = opts.footerLabel || 'Ton Manuscrit Céleste';
+  var documentTitle = opts.documentTitle || 'Manuscrit Céleste';
+  var skipAffirmations = !!opts.skipAffirmations;
+  var skipRituelsBlock = !!opts.skipRituelsBlock;
+  var skipSynthese = !!opts.skipSynthese;
+  var skipPlacementsSheet = !!opts.skipPlacementsSheet;
+  var sheetsAfterCover = opts.sheetsAfterCover || '';
+  var prenom = esc(contact.prenom || 'toi');
+  var lieu = esc(contact.birthPlace || '');
+  var date = esc(contact.birthDate || '');
+  var heure = esc(contact.birthTime || '');
+  var pl = (manuscrit && manuscrit.placements_confirmes) || {};
+  var sections = (manuscrit && manuscrit.sections) || [];
+  var affirmations = (manuscrit && manuscrit.affirmations) || [];
+  var rituels = (manuscrit && manuscrit.rituels) || [];
+  var syn = (manuscrit && manuscrit.synthese) || null;
+
+  var dateStr = [date + (heure ? ' · ' + heure : ''), lieu].filter(Boolean).join(' · ');
+
+  var coverSig = opts.coverSig != null
+    ? String(opts.coverSig || '')
+    : [
+      pl.soleil && ('Soleil : ' + pl.soleil),
+      pl.lune && ('Lune : ' + pl.lune),
+      pl.ascendant && ('Asc : ' + pl.ascendant),
+      hd && hd.type && (hd.type + (hd.profile ? ' · ' + hd.profile : ''))
+    ].filter(Boolean).join('  ·  ');
+
+  var placementsSheetHtml = skipPlacementsSheet
+    ? ''
+    : buildPlacementsSheetHtml({
+      hdrName: contact.prenom || 'toi',
+      title: opts.placementsTitle || 'Tes Placements Réels',
+      subtitle: opts.placementsSubtitle || '— TA CARTE COSMIQUE —',
+      astro: astro,
+      pl: pl,
+      hd: hd,
+      introHtml: paras(manuscrit && manuscrit.intro),
+      footerLabel: footerLabel,
+      neb: 'neb-2'
+    });
 
   var sectionsHtml = sections.map(function (sec, si) {
     if (!sec) return '';
@@ -580,23 +646,8 @@ html[data-theme="light"] .rituel {
   </div>
 </section>
 
-<section class="sheet neb-2">
-  <div class="page-frame"></div>
-  <header class="page-hdr"><span>✦</span><span class="hdr-name">${prenom}</span><span>✦</span></header>
-  <p class="sec-title">Tes Placements Réels</p>
-  <p class="sec-sub">— TA CARTE COSMIQUE —</p>
-  <div class="orn">✦ ········· ✦ ········· ✦</div>
-  <div class="pl-grid">${placementsHtml}</div>
-  <div class="hd-block">
-    <div class="hd-head">Human Design</div>
-    <div class="hd-row">${hdCards}</div>
-  </div>
-  ${channelsHtml}
-  ${crossHtml}
-  <div class="orn">✦ ········· ✦ ········· ✦</div>
-  <div class="intro-body body">${paras(manuscrit && manuscrit.intro)}</div>
-  <footer class="page-ftr">${footerLabel}</footer>
-</section>
+${sheetsAfterCover}
+${placementsSheetHtml}
 
 ${sectionsHtml}
 
@@ -762,7 +813,8 @@ function buildPeriodHtml(kind, contact, period, hd, astro) {
 }
 
 /**
- * HTML manuscrit couple — même style que natal, couverture « Couple »
+ * HTML manuscrit couple — même style que natal, couverture « Couple ».
+ * Placements : une feuille dédiée par personne (jamais mélangés A/B).
  * + bonus_valeur (radar / plan 30-60-90) si présent.
  */
 function buildCoupleHtml(contact, partner, manuscrit, hdA, astroA, hdB, astroB) {
@@ -771,6 +823,7 @@ function buildCoupleHtml(contact, partner, manuscrit, hdA, astroA, hdB, astroB) 
   var pa = (contact && contact.prenom) || 'toi';
   var pb = partner.prenom || 'partenaire';
   var names = pa + ' & ' + pb;
+  var footerCouple = 'Manuscrit Céleste · Couple';
 
   var syn = manuscrit.synthese || null;
   if (syn) {
@@ -790,54 +843,64 @@ function buildCoupleHtml(contact, partner, manuscrit, hdA, astroA, hdB, astroB) 
     birthPlace: ''
   };
 
-  var pl = manuscrit.placements_confirmes || {};
-  if (!pl.soleil && astroA && astroB) {
-    pl = {
-      soleil: (astroA.Sun || '—') + ' / ' + (astroB.Sun || '—'),
-      lune: (astroA.Moon || '—') + ' / ' + (astroB.Moon || '—'),
-      ascendant: (astroA.Ascendant || '—') + ' / ' + (astroB.Ascendant || '—'),
-      type_hd: ((hdA && hdA.type) || '—') + ' / ' + ((hdB && hdB.type) || '—'),
-      profil_hd: ((hdA && hdA.profile) || '—') + ' / ' + ((hdB && hdB.profile) || '—')
-    };
+  var sheetA = buildPlacementsSheetHtml({
+    hdrName: pa,
+    title: 'Placements de ' + pa,
+    subtitle: '— SA CARTE COSMIQUE —',
+    astro: astroA,
+    pl: {},
+    hd: hdA,
+    footerLabel: footerCouple,
+    neb: 'neb-2'
+  });
+  var sheetB = buildPlacementsSheetHtml({
+    hdrName: pb,
+    title: 'Placements de ' + pb,
+    subtitle: '— SA CARTE COSMIQUE —',
+    astro: astroB,
+    pl: {},
+    hd: hdB,
+    footerLabel: footerCouple,
+    neb: 'neb-3'
+  });
+
+  var introSheet = '';
+  if (manuscrit.intro) {
+    introSheet =
+      '<section class="sheet neb-1">' +
+      '<div class="page-frame"></div>' +
+      '<header class="page-hdr"><span>✦</span><span class="hdr-name">' + esc(names) + '</span><span>✦</span></header>' +
+      '<p class="sec-title">Votre ouverture</p>' +
+      '<p class="sec-sub">— LE CROISEMENT DE VOS CARTES —</p>' +
+      '<div class="orn">✦ ········· ✦ ········· ✦</div>' +
+      '<div class="intro-body body">' + paras(manuscrit.intro) + '</div>' +
+      '<footer class="page-ftr">' + footerCouple + '</footer>' +
+      '</section>';
   }
 
-  var mergedHd = {
-    type: ((hdA && hdA.type) || '—') + ' · ' + ((hdB && hdB.type) || '—'),
-    profile: ((hdA && hdA.profile) || '—') + ' · ' + ((hdB && hdB.profile) || '—'),
-    authority: ((hdA && hdA.authority) || '—') + ' · ' + ((hdB && hdB.authority) || '—'),
-    strategy: ((hdA && hdA.strategy) || '—') + ' · ' + ((hdB && hdB.strategy) || '—'),
-    channels: [],
-    cross: ((hdA && hdA.cross) || '') + (hdB && hdB.cross ? ' · ' + hdB.cross : '')
-  };
-
-  var mergedAstro = {
-    Sun: pl.soleil || ((astroA && astroA.Sun) || '—') + ' / ' + ((astroB && astroB.Sun) || '—'),
-    Moon: pl.lune || ((astroA && astroA.Moon) || '—') + ' / ' + ((astroB && astroB.Moon) || '—'),
-    Ascendant: pl.ascendant || ((astroA && astroA.Ascendant) || '—') + ' / ' + ((astroB && astroB.Ascendant) || '—'),
-    Mercury: ((astroA && astroA.Mercury) || '—') + ' / ' + ((astroB && astroB.Mercury) || '—'),
-    Venus: ((astroA && astroA.Venus) || '—') + ' / ' + ((astroB && astroB.Venus) || '—'),
-    Mars: ((astroA && astroA.Mars) || '—') + ' / ' + ((astroB && astroB.Mars) || '—'),
-    Jupiter: ((astroA && astroA.Jupiter) || '—') + ' / ' + ((astroB && astroB.Jupiter) || '—'),
-    Saturn: ((astroA && astroA.Saturn) || '—') + ' / ' + ((astroB && astroB.Saturn) || '—'),
-    MC: ((astroA && astroA.MC) || '—') + ' / ' + ((astroB && astroB.MC) || '—'),
-    NorthNode: ((astroA && astroA.NorthNode) || '—') + ' / ' + ((astroB && astroB.NorthNode) || '—')
-  };
+  var coverSig = [
+    astroA && astroA.Sun && (pa + ' · Soleil ' + astroA.Sun),
+    astroB && astroB.Sun && (pb + ' · Soleil ' + astroB.Sun)
+  ].filter(Boolean).join('  ·  ');
 
   var ms = {
-    intro: manuscrit.intro,
+    intro: '',
     sections: manuscrit.sections || [],
     affirmations: manuscrit.affirmations || [],
     rituels: manuscrit.rituels || [],
     conclusion: manuscrit.conclusion,
     synthese: syn,
-    placements_confirmes: pl
+    placements_confirmes: {}
   };
 
-  var html = buildNatalHtml(fakeContact, ms, mergedHd, mergedAstro, {
+  var html = buildNatalHtml(fakeContact, ms, null, null, {
     coverMain: 'Manuscrit Céleste',
     coverGold: 'Couple',
     coverFor: names,
-    footerLabel: 'Manuscrit Céleste · Couple'
+    footerLabel: footerCouple,
+    skipPlacementsSheet: true,
+    sheetsAfterCover: [sheetA, sheetB, introSheet].filter(Boolean).join('\n'),
+    coverSig: coverSig
   });
 
   var bonus = manuscrit.bonus_valeur;
@@ -894,7 +957,7 @@ function buildCoupleHtml(contact, partner, manuscrit, hdA, astroA, hdB, astroB) 
     '<div class="orn">✦ ········· ✦ ········· ✦</div>' +
     bonusBlocks.join('\n') +
     '</div>' +
-    '<footer class="page-ftr">Manuscrit Céleste · Couple</footer>' +
+    '<footer class="page-ftr">' + footerCouple + '</footer>' +
     '</section>';
 
   return html.replace('</body>', bonusHtml + '\n</body>');
