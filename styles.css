@@ -199,6 +199,11 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 .lock .lock-banner {
   margin-top: 12px; font-style: italic; color: var(--gold-light);
 }
+.pause-banner {
+  border-color: rgba(201,168,76,.45);
+  background: linear-gradient(160deg, rgba(45,24,112,.55), rgba(12,6,32,.7));
+}
+.pause-banner h2 { font-size: 1.15rem; }
 .nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
   display: grid; grid-template-columns: repeat(3, 1fr);

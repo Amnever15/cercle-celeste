@@ -1,14 +1,17 @@
 /**
  * Un seul process : PWA (fichiers statiques) + API Systeme.io.
  * En production (Railway / Render) : écoute process.env.PORT.
+ *
+ * L’API vit dans api/server.js (export handle). Si le dossier api/
+ * n’est pas sur GitHub, on affiche une erreur claire au boot.
  */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const api = require('./api/server');
 
 const ROOT = __dirname;
 const PORT = parseInt(process.env.PORT || '8788', 10);
+const DEFAULT_API_ROUTES = ['/health', '/access', '/login', '/admin', '/systeme-webhook', '/webhook-debug', '/generate', '/ia'];
 const types = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -18,16 +21,102 @@ const types = {
   '.json': 'application/json'
 };
 
+function listDir(dir) {
+  try {
+    return fs.readdirSync(dir).join(', ');
+  } catch (e) {
+    return '(absent ou illisible : ' + (e && e.code ? e.code : e) + ')';
+  }
+}
+
+function existsFile(file) {
+  try {
+    return fs.existsSync(file) && fs.statSync(file).isFile();
+  } catch (e) {
+    return false;
+  }
+}
+
+function logBootLayout() {
+  const apiDir = path.join(ROOT, 'api');
+  console.log('Boot Cercle Céleste');
+  console.log('Dossier app : ' + ROOT);
+  console.log('Contenu de ' + ROOT + ' : ' + listDir(ROOT));
+  console.log('Contenu de ' + apiDir + ' : ' + listDir(apiDir));
+  console.log('api/server.js : ' + (existsFile(path.join(apiDir, 'server.js')) ? 'OK' : 'MANQUANT'));
+  console.log('api/plans.js  : ' + (existsFile(path.join(apiDir, 'plans.js')) ? 'OK' : 'MANQUANT'));
+}
+
+function printMissingApi() {
+  console.error('');
+  console.error('════════════════════════════════════════════════════════');
+  console.error('ERREUR : module API introuvable (require ./api/server).');
+  console.error('Railway a lancé host.js, mais le dossier api/ n’est pas');
+  console.error('dans le dépôt GitHub (upload incomplet).');
+  console.error('');
+  console.error('Fichiers OBLIGATOIRES, au même niveau que host.js :');
+  console.error('  api/server.js');
+  console.error('  api/plans.js');
+  console.error('');
+  console.error('Sur ton PC, ouvre ce dossier puis envoie CES DEUX fichiers');
+  console.error('dans un dossier api/ du dépôt GitHub :');
+  console.error('  C:\\Users\\s-386\\Desktop\\CURSOR\\MANUSCRIT\\APP\\api\\server.js');
+  console.error('  C:\\Users\\s-386\\Desktop\\CURSOR\\MANUSCRIT\\APP\\api\\plans.js');
+  console.error('');
+  console.error('Ne pas envoyer : .env, store.json, webhook.log');
+  console.error('════════════════════════════════════════════════════════');
+}
+
+function tryLoad(rel) {
+  try {
+    const mod = require(rel);
+    if (!mod || typeof mod.handle !== 'function') {
+      console.error('ERREUR : ' + rel + ' n’exporte pas handle().');
+      return null;
+    }
+    return mod;
+  } catch (e) {
+    console.error('require(' + rel + ') a échoué : ' + (e && e.message));
+    return null;
+  }
+}
+
+function loadApi() {
+  logBootLayout();
+
+  const nestedServer = path.join(ROOT, 'api', 'server.js');
+  const nestedPlans = path.join(ROOT, 'api', 'plans.js');
+  const rootServer = path.join(ROOT, 'server.js');
+  const rootPlans = path.join(ROOT, 'plans.js');
+
+  if (existsFile(nestedServer) && existsFile(nestedPlans)) {
+    const nested = tryLoad('./api/server');
+    if (nested) return nested;
+  }
+
+  if (existsFile(rootServer) && existsFile(rootPlans)) {
+    console.warn('Dossier api/ incomplet : utilisation de server.js + plans.js à la racine.');
+    const root = tryLoad('./server');
+    if (root) return root;
+  }
+
+  printMissingApi();
+  process.exit(1);
+}
+
+const api = loadApi();
+const API_ROUTES = (api.API_ROUTES && api.API_ROUTES.length) ? api.API_ROUTES : DEFAULT_API_ROUTES;
+
 function isApi(pathname) {
   const route = pathname.replace(/\/+$/, '') || '/';
-  return api.API_ROUTES.indexOf(route) >= 0;
+  return API_ROUTES.indexOf(route) >= 0;
 }
 
 function blockedRel(rel) {
   const n = rel.replace(/\\/g, '/').replace(/^\/+/, '');
   if (!n || n.split('/').indexOf('..') >= 0) return true;
   if (n.charAt(0) === '.') return true;
-  if (/^(api|host\.js|serve\.js|package\.json|package-lock\.json)(\/|$)/i.test(n)) return true;
+  if (/^(api|host\.js|serve\.js|server\.js|plans\.js|package\.json|package-lock\.json)(\/|$)/i.test(n)) return true;
   if (path.basename(n).charAt(0) === '.') return true;
   return false;
 }
@@ -79,8 +168,9 @@ http.createServer((req, res) => {
     });
   });
 }).listen(PORT, '0.0.0.0', () => {
-  api.warnProduction();
+  if (typeof api.warnProduction === 'function') api.warnProduction();
   console.log('Cercle Céleste (app + API) → port ' + PORT);
   console.log('Santé  → GET /health');
   console.log('Webhook → POST /systeme-webhook?secret=…');
+  console.log('Debug   → GET  /webhook-debug?secret=…');
 });

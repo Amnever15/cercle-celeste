@@ -77,9 +77,8 @@
     saveUser();
   }
   function afterLogin() {
-    if (!isActive()) {
-      state.screen = 'paused';
-    } else if (localStorage.getItem('cercle.installedHint')) {
+    /* Même si abo en pause : accès app (quotas Gratuit), pas d’écran bloquant. */
+    if (localStorage.getItem('cercle.installedHint')) {
       state.screen = 'app';
     } else {
       state.screen = 'install';
@@ -94,6 +93,12 @@
   function isActive() {
     return !!(state.user && state.user.active !== false);
   }
+  function isPausedPaid() {
+    if (!state.user || isActive()) return false;
+    var p = plan();
+    var last = state.user.lastPaidPlan;
+    return p === 'celeste' || p === 'divin' || monthsPaid() > 0 || last === 'celeste' || last === 'divin';
+  }
   function plan() { return (state.user && state.user.plan) || 'gratuit'; }
   function planLinkReady(url) {
     return !!(url && String(url).indexOf('TON-') === -1);
@@ -105,18 +110,42 @@
     }
     window.open(url, '_blank', 'noopener');
   }
-  function canNatal() { return !!(state.user && state.user.canNatal); }
-  function canIa() { return !!(state.user && state.user.canIa); }
+  /* Droits manuscrits : si abo inactif, forcer Gratuit côté client (cache / vieux /access). */
+  function canNatal() {
+    if (!state.user) return false;
+    if (isPausedPaid()) return false;
+    return !!state.user.canNatal;
+  }
+  function canUltime() {
+    if (!state.user) return false;
+    if (isPausedPaid()) return false;
+    return !!(state.user.canUltime || (state.user.ultimeUnlocked && isActive()));
+  }
+  function canIa() {
+    if (!state.user) return false;
+    if (isPausedPaid()) return false;
+    return !!state.user.canIa;
+  }
   function iaLeft() {
-    if (!state.user) return 0;
+    if (!state.user || isPausedPaid()) return 0;
     return state.user.iaLeft == null ? 0 : state.user.iaLeft;
   }
   function dailyLeft() {
-    if (!state.user || state.user.dailyLeft == null) return null;
+    if (!state.user) return null;
+    if (isPausedPaid()) {
+      if (state.user.dailyLimit != null && state.user.dailyLeft != null) return state.user.dailyLeft;
+      return Math.max(0, 5 - (state.user.dailyUsed || 0));
+    }
+    if (state.user.dailyLeft == null) return null;
     return state.user.dailyLeft;
   }
   function monthlyLeft() {
-    if (!state.user || state.user.monthlyLeft == null) return null;
+    if (!state.user) return null;
+    if (isPausedPaid()) {
+      if (state.user.monthlyLimitYear != null && state.user.monthlyLeft != null) return state.user.monthlyLeft;
+      return Math.max(0, 1 - (state.user.monthlyUsed || 0));
+    }
+    if (state.user.monthlyLeft == null) return null;
     return state.user.monthlyLeft;
   }
 
@@ -166,7 +195,7 @@
   }
   function askManuscript(kind) {
     if (kind === 'natal' && !canNatal()) return;
-    if (kind === 'ultime' && !ultimeOn()) return;
+    if (kind === 'ultime' && !canUltime()) return;
     if (kind === 'jour' && dailyLeft() === 0) return;
     if (kind === 'mois' && monthlyLeft() === 0) return;
     if (bookReady(kind)) {
@@ -304,26 +333,41 @@
     }).join('') + '</nav>';
   }
 
+  function pauseBanner() {
+    if (!isPausedPaid()) return '';
+    var u = state.user || {};
+    return '<div class="card pause-banner stack">' +
+      '<div class="label">Abonnement en pause</div>' +
+      '<h2>Cercle en pause</h2>' +
+      '<p>Ton abo ' + ((u.planLabel) || '') + ' est inactif. Tu gardes l’accès Gratuit (5 manuscrits du jour / mois, 1 mensuel / an). Natal, Ultime et IA se rouvrent dès que tu reprends sur Systeme.io.</p>' +
+      '<p class="muted">Mois Ultime conservés : ' + monthsPaid() + ' / 6.</p>' +
+      '<button class="btn" type="button" data-plan-link="manage">Reprendre sur Systeme.io</button>' +
+      '<button class="btn ghost" type="button" id="retry-access">J’ai repris, actualiser</button>' +
+      '</div>';
+  }
+
   function natalTab() {
     var prenom = (state.user && state.user.prenom) || 'toi';
     var months = monthsPaid();
     var left = Math.max(0, ULTIME.need - months);
-    var unlocked = ultimeOn();
+    var unlocked = canUltime();
     var natalCard = canNatal()
       ? '<div class="card stack"><div class="label">' + NATAL.kicker + '</div><h2>' + NATAL.title + '</h2><p class="muted">' + NATAL.pages + ' pages · écrit une fois, à ta demande</p><p>' + NATAL.intro + '</p>' + askBtn('natal', 'Demander les 28 pages', 'Relire les 28 pages') + '</div>'
-      : '<div class="card lock stack"><div class="label">Plan Céleste</div><h2>' + NATAL.title + '</h2><p class="muted">28 pages · 59 € / mois</p><p>Le livre natal s’ouvre avec l’abonnement Céleste.</p></div>';
+      : '<div class="card lock stack"><div class="label">Plan Céleste</div><h2>' + NATAL.title + '</h2><p class="muted">28 pages · 59 € / mois</p><p>' + (isPausedPaid() ? 'Abonnement en pause : le natal se rouvre dès que tu reprends.' : 'Le livre natal s’ouvre avec l’abonnement Céleste.') + '</p></div>';
     var ultime;
     if (unlocked) {
       ultime = '<div class="card stack"><div class="label">Débloqué</div><h2>' + ULTIME.title + '</h2><p class="muted">' + ULTIME.pages + ' pages</p><p>' + (plan() === 'divin' ? 'Inclus tout de suite dans le Divin.' : 'Six mois payés, même avec des pauses.') + ' Écrit une seule fois, à ta demande.</p>' + askBtn('ultime', 'Demander l’Ultime', 'Relire l’Ultime') + '</div>';
-    } else if (plan() === 'gratuit') {
+    } else if (plan() === 'gratuit' && months === 0) {
       ultime = '<div class="card lock stack"><div class="label">Céleste ou Divin</div><h2>' + ULTIME.title + '</h2><p class="muted">140 pages</p><p>Après 6 mois Céleste, ou immédiatement en Divin.</p></div>';
+    } else if (ultimeOn() && isPausedPaid()) {
+      ultime = '<div class="card lock stack"><div class="label">En pause</div><h2>' + ULTIME.title + '</h2><p class="muted">' + ULTIME.pages + ' pages · déjà débloqué</p><p>L’Ultime se rouvre dès que tu reprends l’abonnement. Tes <b>' + months + ' mois</b> restent comptés.</p><p class="lock-banner">✦ Les mois payés ne s’effacent pas.</p></div>';
     } else {
       ultime = '<div class="card lock stack"><div class="label">Verrouillé</div><h2>' + ULTIME.title + '</h2><p class="muted">' + ULTIME.pages + ' pages · 6 mois payés, cumulés</p><p>Tu as <b>' + months + ' mois</b> déjà réglés. Encore <b>' + left + '</b> — une pause ne casse pas la série.</p><p class="lock-banner">✦ Les mois payés ne s’effacent pas.</p></div>';
     }
-    return '<div class="hero-month"><div class="label">Plan ' + ((state.user && state.user.planLabel) || 'Gratuit') + '</div>' +
+    return '<div class="hero-month"><div class="label">Plan ' + ((state.user && state.user.planLabel) || 'Gratuit') + (isPausedPaid() ? ' · pause' : '') + '</div>' +
       '<div class="month">Manuscrit Céleste</div>' +
       '<p class="lede">Bon retour, ' + prenom + '.</p></div>' +
-      '<div class="stack">' + natalCard + ultime + iaCard() + '</div>';
+      '<div class="stack">' + pauseBanner() + natalCard + ultime + iaCard() + '</div>';
   }
 
   function askBtn(kind, askLabel, readLabel) {
@@ -363,21 +407,16 @@
       (blocked ? '' : askBtn('jour', 'Demander le manuscrit du jour', 'Relire le manuscrit du jour')) + '</div>' + iaCard() + '</div>';
   }
 
-  function pausedView() {
-    var u = state.user || {};
-    return '<div class="screen"><div class="scroll noshift stack" style="justify-content:center;max-width:420px;margin:0 auto;width:100%">' +
-      '<div class="brand"><span class="star">✦</span><h1>Cercle<br><span>en pause</span></h1>' +
-      '<p class="lede">L’abonnement n’est plus actif. Tes mois déjà payés (' + monthsPaid() + '/6) sont conservés pour l’Ultime.</p></div>' +
-      '<div class="card stack"><p>Reprends sur Systeme.io avec le même email (' + (u.email || '') + ') : les manuscrits se rouvrent, le compteur continue.</p>' +
-      '<button class="btn" id="retry-access">J’ai repris, actualiser</button>' +
-      '<button class="link" id="logout">Se déconnecter</button></div></div></div>';
-  }
-
   function accountSheet() {
     var u = state.user || {};
     var p = plan();
     var actions = '';
-    if (p === 'divin') {
+    if (isPausedPaid()) {
+      actions =
+        '<button class="btn" type="button" data-plan-link="manage">Reprendre / gérer sur Systeme.io</button>' +
+        '<button class="btn ghost" type="button" data-plan-link="celeste">Repasser Céleste · 59 €</button>' +
+        '<button class="btn ghost" type="button" data-plan-link="divin">Passer Divin · 137 €</button>';
+    } else if (p === 'divin') {
       actions =
         '<button class="btn" type="button" data-plan-link="downgrade-celeste">Revenir à Céleste · 59 €</button>' +
         '<button class="btn ghost" type="button" data-plan-link="manage">Gérer / arrêter l’abonnement</button>';
@@ -390,11 +429,25 @@
         '<button class="btn" type="button" data-plan-link="celeste">Passer Céleste · 59 €</button>' +
         '<button class="btn ghost" type="button" data-plan-link="divin">Passer Divin · 137 €</button>';
     }
+    var statusLine;
+    if (isPausedPaid()) {
+      statusLine = 'Plan ' + ((u.planLabel) || '') + (u.price ? ' · ' + u.price + ' € / mois' : '') +
+        ' · inactif (pause). Accès Gratuit : 5 manuscrits du jour / mois, 1 mensuel / an.';
+    } else {
+      statusLine = 'Plan ' + ((u.planLabel) || 'Gratuit') + (u.price ? ' · ' + u.price + ' € / mois' : '') +
+        (isActive() ? ' · actif' : ' · inactif') + '.';
+    }
+    var extraLine = canIa()
+      ? ('IA Céleste : ' + iaLeft() + ' / ' + (u.iaQuota || 500) + ' ce mois.')
+      : (isPausedPaid() ? 'IA Céleste : verrouillée pendant la pause.' : 'IA Céleste : plan Divin.');
+    if (p === 'celeste' || p === 'divin' || monthsPaid() > 0) {
+      extraLine += ' Ultime : ' + monthsPaid() + ' / 6 mois payés' + (isPausedPaid() ? ' (conservés).' : '.');
+    }
     return '<div class="sheet" id="account-sheet"><div class="panel stack">' +
       '<h3>Ton compte</h3>' +
       '<p>' + (u.prenom || '') + '<br><span class="lede">' + (u.email || '') + '</span></p>' +
-      '<p class="lede">Plan ' + ((u.planLabel) || 'Gratuit') + (u.price ? ' · ' + u.price + ' € / mois' : '') + (isActive() ? ' · actif' : ' · inactif') + '.</p>' +
-      '<p class="lede">' + (canIa() ? ('IA Céleste : ' + iaLeft() + ' / ' + (u.iaQuota || 500) + ' ce mois.') : 'IA Céleste : plan Divin.') + (plan() === 'celeste' ? ' Ultime : ' + monthsPaid() + ' / 6 mois payés.' : '') + '</p>' +
+      '<p class="lede">' + statusLine + '</p>' +
+      '<p class="lede">' + extraLine + '</p>' +
       '<p class="muted">Monter de plan = nouvelle page de paiement Systeme.io. Rétrograder = arrêter l’offre actuelle puis reprendre l’autre (évite un double prélèvement).</p>' +
       actions +
       '<button class="btn ghost" id="close-account">Fermer</button>' +
@@ -435,9 +488,8 @@
     var html = '';
     if (state.screen === 'login') html = loginView();
     else if (state.screen === 'install') html = installView();
-    else if (state.screen === 'paused' || (state.user && !isActive() && state.screen === 'app')) {
-      html = pausedView();
-    } else {
+    else {
+      if (state.screen === 'paused') state.screen = 'app';
       var tab = state.tab === 'mois' ? moisTab() : state.tab === 'jour' ? jourTab() : natalTab();
       html = '<div class="screen">' + topbar() + '<div class="scroll">' + tab + '</div>' + nav() + '</div>';
       if (state.account) html += accountSheet();
@@ -519,7 +571,8 @@
     document.querySelectorAll('[data-pdf]').forEach(function (b) {
       b.onclick = function () {
         var id = b.getAttribute('data-pdf');
-        if (id === 'ultime' && !ultimeOn()) return;
+        if (id === 'ultime' && !canUltime()) return;
+        if (id === 'natal' && !canNatal() && !bookReady('natal')) return;
         state.pdf = id;
         render();
       };
