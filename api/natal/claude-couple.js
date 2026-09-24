@@ -5,6 +5,7 @@
  */
 const { claudeJsonApi, claudeKey } = require('./claude-natal');
 const profile = require('../profile');
+const language = require('../language');
 
 const COUPLE_SECTION_SPECS = [
   { numero: 'I', titre: 'Vos Codes Cosmiques', sous_titre: 'Types, profils, stratégies et autorités à deux' },
@@ -53,13 +54,14 @@ function packPerson(label, contactLike, hd, astro) {
   };
 }
 
-function sharedContext(pA, pB) {
+function sharedContext(pA, pB, langCode) {
   var a = pA.astro || {};
   var b = pB.astro || {};
+  var langRule = language.promptInstruction(langCode || 'fr', { couple: true });
   return (
     'Tu es à la fois astrologue de synastrie de niveau international, analyste Human Design certifié et thérapeute de couple. ' +
-    'Tu écris pour ' + pA.prenom + ' et ' + pB.prenom + ' un document premium, du calibre d\'un accompagnement payant haut de gamme, en français.\n' +
-    'IMPORTANT LANGUE: Rédige tout en français naturel. Utilise « vous/votre » pour le couple.\n\n' +
+    'Tu écris pour ' + pA.prenom + ' et ' + pB.prenom + ' un document premium, du calibre d\'un accompagnement payant haut de gamme.\n' +
+    langRule + '\n\n' +
     '=== ' + pA.prenom + ' (Personne A) ===\n' +
     '- Genre: ' + pA.genre + ' | Naissance: ' + pA.naissance + ' à ' + pA.heure + ' | Lieu: ' + pA.lieu + '\n' +
     '- Human Design: Type=' + (pA.hd.type || '—') + ', Profil=' + (pA.hd.profile || '—') +
@@ -91,9 +93,9 @@ function sharedContext(pA, pB) {
   );
 }
 
-function technicalBrief(pA, pB) {
+function technicalBrief(pA, pB, langCode) {
   return 'DONNEES_ASTRO_HD_COUPLE (obligatoire: ancrer tout le texte dedans)\n' +
-    JSON.stringify({ personne_a: pA, personne_b: pB, langue: 'fr' }, null, 0);
+    JSON.stringify({ personne_a: pA, personne_b: pB, langue: language.normalize(langCode) }, null, 0);
 }
 
 function normalizeRituel(raw, idx) {
@@ -264,8 +266,9 @@ async function generateCouple(contact, partner, chartA, chartB, onProgress) {
   if (!claudeKey()) throw new Error('CLAUDE_KEY manquant');
   var pA = packPerson('A', contact, chartA && chartA.hd, chartA && chartA.astro);
   var pB = packPerson('B', partner, chartB && chartB.hd, chartB && chartB.astro);
-  var ctx = sharedContext(pA, pB);
-  var brief = technicalBrief(pA, pB);
+  var langCode = language.ofContact(contact);
+  var ctx = sharedContext(pA, pB, langCode);
+  var brief = technicalBrief(pA, pB, langCode);
   var progress = typeof onProgress === 'function' ? onProgress : function () {};
 
   function ask(label, schema, maxTok, pct) {

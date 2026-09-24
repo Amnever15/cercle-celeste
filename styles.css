@@ -232,6 +232,29 @@ h1 span { color: var(--gold-light); }
 
 .stack { display: flex; flex-direction: column; gap: 12px; }
 .field { display: flex; flex-direction: column; gap: .35rem; }
+.lang-field { margin-bottom: .15rem; }
+.lang-select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%),
+    linear-gradient(135deg, var(--gold) 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 2.2rem;
+}
+[dir="rtl"] .lang-select {
+  background-position: 18px calc(50% - 3px), 12px calc(50% - 3px);
+  padding-right: 1rem;
+  padding-left: 2.2rem;
+}
+.lang-warn {
+  margin: .15rem 0 0;
+  font-size: .88rem;
+  line-height: 1.45;
+  color: var(--gold-light, #F3DD9E);
+  font-style: italic;
+}
+[data-theme="light"] .lang-warn { color: var(--gold, #A8842E); }
 .input {
   background: var(--input-bg); border: 1px solid var(--input-border);
   border-radius: 1px; padding: .85rem 1rem; color: var(--cream);
@@ -515,7 +538,6 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   position: relative;
   z-index: 2;
 }
-.pdf-view header button,
 .pdf-view header .pdf-back {
   background: transparent;
   border: 1px solid var(--stroke);
@@ -534,6 +556,10 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 .pdf-view header .pdf-back:focus-visible {
   border-color: rgba(201,168,76,.7);
   background: rgba(201,168,76,.22);
+}
+.pdf-view header .theme-chip {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 /* Plein écran = uniquement le cadre du manuscrit (pas toute la page lecteur). */
@@ -622,6 +648,7 @@ html[data-theme="light"] .ms-fs-btn {
   z-index: 95;
 }
 .pdf-view header .kicker {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

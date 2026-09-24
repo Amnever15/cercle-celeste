@@ -3,6 +3,7 @@
  * Réutilise le thème HD/Astro en cache (pas de re-fetch si déjà stocké).
  */
 const { claudeJsonApi, claudeKey } = require('./claude-natal');
+const language = require('../language');
 
 function frMonthYear(d) {
   d = d || new Date();
@@ -65,10 +66,12 @@ async function generateMois(contact, hd, astro, onProgress) {
   if (!claudeKey()) throw new Error('CLAUDE_KEY manquant');
   var label = frMonthYear(new Date());
   var ctx = chartCtx(contact, hd, astro);
+  var langRule = language.promptInstruction(language.ofContact(contact));
   if (onProgress) onProgress('Le ciel de ' + label + ' s’écrit…', 40);
 
   var data = await claudeJsonApi(
-    'Tu es l’auteur des Manuscrits Célestes (français, ton intime, précis, jamais marketing).\n' +
+    'Tu es l’auteur des Manuscrits Célestes (ton intime, précis, jamais marketing).\n' +
+    langRule + '\n' +
     'Écris le MANUSCRIT DU MOIS pour ' + label + ' — environ 8 à 12 pages de lecture (~2200 à 3200 mots au total).\n' +
     'Ancre TOUT dans le thème natal HD + astral fourni. Parle du mois en cours (transits symboliques, rythme, fenêtres) sans inventer de dates astronomiques fausses précises : reste symbolique et incarné.\n' +
     'Interdits : mention d’IA, d’API, de modèle, de prompt.\n\n' +
@@ -108,10 +111,12 @@ async function generateJour(contact, hd, astro, onProgress) {
   if (!claudeKey()) throw new Error('CLAUDE_KEY manquant');
   var label = frLongDate(new Date());
   var ctx = chartCtx(contact, hd, astro);
+  var langRule = language.promptInstruction(language.ofContact(contact));
   if (onProgress) onProgress('Le ciel du ' + label + ' s’écrit…', 40);
 
   var data = await claudeJsonApi(
-    'Tu es l’auteur des Manuscrits Célestes (français, ton intime, précis).\n' +
+    'Tu es l’auteur des Manuscrits Célestes (ton intime, précis).\n' +
+    langRule + '\n' +
     'Écris le MANUSCRIT DU JOUR pour le ' + label + ' — environ 2 à 6 pages de lecture, JAMAIS plus de 6 (~600 à 1600 mots au total).\n' +
     'Concentre-toi sur AUJOURD’HUI pour CE thème HD + astral : énergie, autorité, une porte à ouvrir, une vigilance.\n' +
     'Interdits : mention d’IA, d’API, de modèle.\n\n' +

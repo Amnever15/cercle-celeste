@@ -10,6 +10,7 @@ const chartCache = require('./chart-cache');
 const htmlDoc = require('./html-doc');
 const { requestJson } = require('./http');
 const claudeNatal = require('./claude-natal');
+const language = require('../language');
 
 function loadNatalPlain(contact, maxChars) {
   maxChars = maxChars || 14000;
@@ -217,11 +218,13 @@ async function answerFromManuscript(contact, question, context, opts) {
   var prenom = (contact && contact.prenom) || 'toi';
   var partnerName = (contact && contact.partnerPrenom) || '';
 
+  var langCode = language.ofContact(contact);
+  var langRule = language.promptInstruction(langCode, { couple: ctx === 'couple' });
   var system =
     'Tu es l’IA Céleste, présence douce, claire et précise. Tu accompagnes ' + prenom +
     (ctx === 'couple' && partnerName ? (' et ' + partnerName) : '') +
     ' pendant qu’elle ou il lit son Manuscrit Céleste ' + label + '. ' +
-    'Réponds en français, ' + (ctx === 'couple' ? 'vouvoiement du couple ou tutoiement selon la question, ' : 'tutoiement, ') +
+    langRule + ' ' +
     '2 à 5 courts paragraphes. ' +
     'Ancre CHAQUE réponse dans le contenu concret du manuscrit fourni : cite ou paraphrases des éléments réels ' +
     '(type / autorité / stratégie HD, planètes, synastrie, chapitres, insights) quand ils apparaissent. ' +

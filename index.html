@@ -16,6 +16,11 @@
         document.documentElement.setAttribute('data-theme', t);
         var m = document.getElementById('theme-color-meta');
         if (m) m.setAttribute('content', t === 'light' ? '#F4EFE4' : '#05020F');
+        var lang = String(localStorage.getItem('cercle.lang') || 'fr').toLowerCase().split('-')[0];
+        var ok = { fr:1,en:1,es:1,he:1,pt:1,de:1,it:1,ar:1,zh:1,ja:1,ru:1,hi:1,nl:1,pl:1,tr:1,ko:1 };
+        if (!ok[lang]) lang = 'fr';
+        document.documentElement.setAttribute('lang', lang);
+        document.documentElement.setAttribute('dir', (lang === 'he' || lang === 'ar') ? 'rtl' : 'ltr');
       } catch (e) {}
     })();
   </script>
@@ -23,7 +28,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=37">
+  <link rel="stylesheet" href="styles.css?v=38">
 </head>
 <body>
   <div class="sky" aria-hidden="true">
@@ -32,6 +37,6 @@
     <div class="sky-dust"></div>
   </div>
   <div id="app"></div>
-  <script src="app.js?v=37"></script>
+  <script src="app.js?v=38"></script>
 </body>
 </html>

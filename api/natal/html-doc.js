@@ -3,6 +3,8 @@
  * GENERATIONS/manuscrit-celeste-generation.html (buildPDF : couverture,
  * placements, HD, chapitres, affirmations, rituels, message, synthèse).
  */
+const language = require('../language');
+
 function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;')
@@ -169,6 +171,10 @@ function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
 
   var dateStr = [date + (heure ? ' · ' + heure : ''), lieu].filter(Boolean).join(' · ');
 
+  var langCode = language.ofContact(contact);
+  var htmlLang = langCode;
+  var htmlDir = language.isRtl(langCode) ? 'rtl' : 'ltr';
+
   var coverSig = opts.coverSig != null
     ? String(opts.coverSig || '')
     : [
@@ -274,7 +280,7 @@ function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
   }
 
   return `<!DOCTYPE html>
-<html lang="fr" data-theme="dark">
+<html lang="${esc(htmlLang)}" dir="${esc(htmlDir)}" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -623,7 +629,7 @@ html[data-theme="light"] .rituel {
 }
 </style>
 </head>
-<body>
+<body dir="${esc(htmlDir)}">
 
 <section class="sheet cover">
   <div class="page-frame"></div>
@@ -840,7 +846,9 @@ function buildCoupleHtml(contact, partner, manuscrit, hdA, astroA, hdB, astroB) 
     prenom: names,
     birthDate: '',
     birthTime: '',
-    birthPlace: ''
+    birthPlace: '',
+    language: language.ofContact(contact),
+    locale: language.ofContact(contact)
   };
 
   var sheetA = buildPlacementsSheetHtml({

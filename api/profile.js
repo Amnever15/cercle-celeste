@@ -9,6 +9,8 @@
  * Partenaire (manuscrit couple) : mêmes règles, champs partner*.
  */
 
+const language = require('./language');
+
 const GENDERS = ['femme', 'homme', 'autre'];
 /** Corrections après la 1re complétion (la création ne compte pas). */
 const MAX_PROFILE_EDITS = 3;
@@ -111,6 +113,8 @@ function partnerFields(c) {
 function profileFields(c) {
   if (!c) {
     return Object.assign({
+      language: language.DEFAULT,
+      locale: language.DEFAULT,
       birthDate: '',
       birthTime: '',
       birthPlace: '',
@@ -133,6 +137,7 @@ function profileFields(c) {
       natalPagesEst: null
     }, partnerFields(null));
   }
+  const lang = language.ofContact(c);
   const birthDate = trim(c.birthDate);
   let birthTime = trim(c.birthTime);
   if (/^\d{1,2}:\d{2}:\d{2}$/.test(birthTime)) birthTime = birthTime.slice(0, 5);
@@ -151,6 +156,8 @@ function profileFields(c) {
   if (ready && status === 'none') status = 'ready';
   if (!ready && status === 'ready') status = 'none';
   return Object.assign({
+    language: lang,
+    locale: lang,
     birthDate: birthDate,
     birthTime: birthTime,
     birthPlace: birthPlace,
@@ -173,6 +180,20 @@ function profileFields(c) {
     natalError: c.natalError || null,
     natalPagesEst: c.natalPagesEst || null
   }, partnerFields(c));
+}
+
+/** Persiste language/locale (ISO) — indépendant des edits naissance. */
+function saveLanguage(c, body) {
+  if (!c) return { ok: false, error: 'compte inconnu' };
+  const raw = body && (body.language != null ? body.language : body.locale);
+  if (raw == null || String(raw).trim() === '') {
+    return { ok: false, error: 'language requis' };
+  }
+  const code = language.normalize(raw);
+  c.language = code;
+  c.locale = code;
+  c.languageUpdatedAt = new Date().toISOString();
+  return { ok: true, language: code };
 }
 
 function isComplete(c) {
@@ -379,6 +400,7 @@ module.exports = {
   toneLabel,
   saveProfile,
   savePartnerProfile,
+  saveLanguage,
   kindsNeedingProfile,
   requireForGenerate
 };

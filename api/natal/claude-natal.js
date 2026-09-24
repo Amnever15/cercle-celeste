@@ -1,10 +1,11 @@
 /**
  * Rédaction Manuscrit Céleste 28 pages — port des prompts GENERATIONS
- * (manuscrit-celeste-generation.html → callClaude, FR uniquement côté APP).
+ * (manuscrit-celeste-generation.html → callClaude ; langue via contact.language).
  * Clé : process.env.CLAUDE_KEY || ANTHROPIC_API_KEY — jamais exposée au client.
  */
 const { requestJson, sleep } = require('./http');
 const { parseClaudeJsonRaw } = require('./json-fix');
+const language = require('../language');
 
 function claudeKey() {
   return String(process.env.CLAUDE_KEY || process.env.ANTHROPIC_API_KEY || '').trim();
@@ -180,6 +181,8 @@ async function generateManuscrit(contact, hd, astro, onProgress) {
   var ne = isFemme ? 'née' : 'né';
   var fait = isFemme ? 'faite' : 'fait';
   var venu = isFemme ? 'venue' : 'venu';
+  var langCode = language.ofContact(contact);
+  var langRule = language.promptInstruction(langCode);
 
   var ctx =
     'Tu es un expert en Astrologie et Human Design. Tu rédiges une partie du Manuscrit Céleste de ' +
@@ -196,7 +199,7 @@ async function generateManuscrit(contact, hd, astro, onProgress) {
       ? 'une femme — "elle","née","faite","venue", accords féminin partout'
       : 'un homme — "il","né","fait","venu", accords masculin partout') +
     '. JSON BRUT STRICT (aucun markdown, aucun backtick).\n' +
-    'IMPORTANT LANGUE: Rédige en français. Tutoiement, ton chaleureux et poétique.';
+    langRule;
 
   function api(prompt, maxTok, label) {
     return claudeJsonApi(prompt, maxTok || 5500, label);

@@ -11,6 +11,7 @@ const path = require('path');
 const crypto = require('crypto');
 const plans = require('./plans');
 const profile = require('./profile');
+const language = require('./language');
 const natalGen = require('./natal-generate');
 const periodGen = require('./period-generate');
 const coupleGen = require('./couple-generate');
@@ -196,6 +197,8 @@ function emptyContact(email) {
     email: email,
     prenom: '',
     nom: '',
+    language: language.DEFAULT,
+    locale: language.DEFAULT,
     passwordHash: null,
     sessionToken: null,
     active: false,
@@ -948,6 +951,7 @@ async function handle(req, res) {
       const email = normEmail(body.email);
       const password = String(body.password || '');
       const prenom = String(body.prenom || '').trim();
+      const langCode = language.normalize(body.language || body.locale || language.DEFAULT);
       if (!email) return send(res, 400, { error: 'Email requis.' }, req);
       if (!password || password.length < 8) {
         return send(res, 400, { error: 'Mot de passe : 8 caractères minimum.' }, req);
@@ -959,6 +963,8 @@ async function handle(req, res) {
       if (!c && DEV) {
         c = emptyContact(email);
         c.prenom = prenom || 'Sophie';
+        c.language = langCode;
+        c.locale = langCode;
         c.plan = plans.demoPlanFromEmail(email);
         c.active = true;
         c.monthsPaid = c.plan === 'gratuit' ? 0 : (c.plan === 'divin' ? 1 : 2);
@@ -979,6 +985,8 @@ async function handle(req, res) {
       if (!c) {
         c = emptyContact(email);
         c.prenom = prenom;
+        c.language = langCode;
+        c.locale = langCode;
         c.plan = 'gratuit';
         c.active = true;
         refreshUltime(c);
@@ -1003,6 +1011,8 @@ async function handle(req, res) {
       }
 
       if (prenom && !c.prenom) c.prenom = prenom;
+      c.language = langCode;
+      c.locale = langCode;
       c.sessionToken = newSessionToken();
       ensureNatalFileOrReset(c, store);
       writeStore(store);
@@ -1299,6 +1309,26 @@ async function handle(req, res) {
       if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
       const store = auth.store;
       const c = auth.c;
+      const wantsLang = body && (body.language != null || body.locale != null);
+      const hasBirthPayload = !!(
+        body &&
+        (body.birthDate || body.birthTime || body.birthPlace || body.gender ||
+          body.birthLat != null || body.birthLon != null || body.birthTimezone)
+      );
+      if (wantsLang) {
+        const langSaved = profile.saveLanguage(c, body);
+        if (!langSaved.ok) {
+          return send(res, 400, { error: langSaved.error, contact: publicContact(c) }, req);
+        }
+      }
+      if (!hasBirthPayload) {
+        if (!wantsLang) {
+          return send(res, 400, { error: 'Rien à enregistrer.', contact: publicContact(c) }, req);
+        }
+        writeStore(store);
+        logLine('LANGUAGE saved ' + auth.email + ' → ' + c.language);
+        return send(res, 200, { ok: true, contact: publicContact(c) }, req);
+      }
       const saved = profile.saveProfile(c, body);
       if (!saved.ok) {
         const code = saved.code === 'PROFILE_EDIT_LIMIT' ? 403 : 400;
@@ -1311,7 +1341,8 @@ async function handle(req, res) {
       writeStore(store);
       logLine(
         'PROFILE saved ' + auth.email +
-        (saved.isEdit ? ' (edit #' + (c.profileEditCount || 0) + ')' : ' (first)')
+        (saved.isEdit ? ' (edit #' + (c.profileEditCount || 0) + ')' : ' (first)') +
+        (wantsLang ? ' lang=' + c.language : '')
       );
       /* Warm HD+Astro en arrière-plan (cache pour mois/jour/IA). */
       if (profile.isComplete(c) && !chartCache.hasValidCache(c)) {

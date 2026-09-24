@@ -69,8 +69,514 @@
   };
 
   var THEME_KEY = 'cercle.theme';
+  var LANG_KEY = 'cercle.lang';
   var IA_MAX = 1000;
   var IA_LS_PREFIX = 'cercle.ia.';
+
+  var APP_LANGS = [
+    { code: 'fr', label: 'Français' },
+    { code: 'en', label: 'English' },
+    { code: 'es', label: 'Español' },
+    { code: 'he', label: 'עברית' },
+    { code: 'pt', label: 'Português' },
+    { code: 'de', label: 'Deutsch' },
+    { code: 'it', label: 'Italiano' },
+    { code: 'ar', label: 'العربية' },
+    { code: 'zh', label: '中文' },
+    { code: 'ja', label: '日本語' },
+    { code: 'ru', label: 'Русский' },
+    { code: 'hi', label: 'हिन्दी' },
+    { code: 'nl', label: 'Nederlands' },
+    { code: 'pl', label: 'Polski' },
+    { code: 'tr', label: 'Türkçe' },
+    { code: 'ko', label: '한국어' }
+  ];
+  var APP_LANG_CODES = {};
+  APP_LANGS.forEach(function (L) { APP_LANG_CODES[L.code] = true; });
+
+  /* Compact i18n — login, account, nav, language warnings. Fallback: en → fr */
+  var I18N = {
+    fr: {
+      'lang.label': 'Langue',
+      'lang.warn_login': 'Important : tous les documents générés (manuscrits, réponses de l’IA) seront rédigés dans cette langue.',
+      'lang.warn_account': 'Les nouveaux manuscrits et réponses IA utiliseront cette langue. Les documents déjà générés restent tels quels.',
+      'login.lede': 'Gratuit, Céleste (59 €) ou Divin (137 €).<br>L’IA Céleste t’accompagne dans le Divin.',
+      'login.email': 'Email',
+      'login.password': 'Mot de passe',
+      'login.password_ph': '8 caractères minimum',
+      'login.submit': 'Se connecter',
+      'login.hint': 'Première connexion : choisis un mot de passe (8 caractères min). Même email que ton paiement.',
+      'login.connecting': 'Connexion…',
+      'nav.vie': 'Vie',
+      'nav.mois': 'Mois',
+      'nav.jour': 'Jour',
+      'nav.couple': 'Couple',
+      'account.title': 'Ton compte',
+      'account.close': 'Fermer',
+      'account.logout': 'Se déconnecter',
+      'account.language': 'Langue des manuscrits',
+      'account.appearance': 'Apparence',
+      'account.appearance_hint': 'Choisis le ciel qui t’accompagne : sombre ou clair.',
+      'account.id': 'Identifiant',
+      'account.plan': 'Ton plan',
+      'theme.aria': 'Apparence',
+      'theme.toggle': 'Changer le thème',
+      'err.email': 'Ton email ✦',
+      'err.password': 'Mot de passe : 8 caractères minimum ✦',
+      'err.login': 'Email ou mot de passe incorrect.',
+      'err.unreachable': 'Les Manuscrits Célestes ne sont pas joignables pour le moment. Réessaie dans un instant.'
+    },
+    en: {
+      'lang.label': 'Language',
+      'lang.warn_login': 'Important: all generated documents (manuscripts, AI answers) will be written in this language.',
+      'lang.warn_account': 'New manuscripts and AI answers will use this language. Already generated documents stay as they are.',
+      'login.lede': 'Free, Céleste (€59) or Divin (€137).<br>Céleste AI accompanies you on Divin.',
+      'login.email': 'Email',
+      'login.password': 'Password',
+      'login.password_ph': '8 characters minimum',
+      'login.submit': 'Sign in',
+      'login.hint': 'First sign-in: choose a password (8 characters min). Same email as your payment.',
+      'login.connecting': 'Signing in…',
+      'nav.vie': 'Life',
+      'nav.mois': 'Month',
+      'nav.jour': 'Day',
+      'nav.couple': 'Couple',
+      'account.title': 'Your account',
+      'account.close': 'Close',
+      'account.logout': 'Sign out',
+      'account.language': 'Manuscript language',
+      'account.appearance': 'Appearance',
+      'account.appearance_hint': 'Choose the sky that accompanies you: dark or bright.',
+      'account.id': 'Identity',
+      'account.plan': 'Your plan',
+      'theme.aria': 'Appearance',
+      'theme.toggle': 'Change theme',
+      'err.email': 'Your email ✦',
+      'err.password': 'Password: 8 characters minimum ✦',
+      'err.login': 'Incorrect email or password.',
+      'err.unreachable': 'Les Manuscrits Célestes are unreachable right now. Try again in a moment.'
+    },
+    es: {
+      'lang.label': 'Idioma',
+      'lang.warn_login': 'Importante: todos los documentos generados (manuscritos, respuestas de la IA) se redactarán en este idioma.',
+      'lang.warn_account': 'Los nuevos manuscritos y respuestas de IA usarán este idioma. Los ya generados permanecen igual.',
+      'login.lede': 'Gratis, Céleste (59 €) o Divin (137 €).<br>La IA Céleste te acompaña en Divin.',
+      'login.email': 'Email',
+      'login.password': 'Contraseña',
+      'login.password_ph': '8 caracteres mínimo',
+      'login.submit': 'Iniciar sesión',
+      'login.hint': 'Primera conexión: elige una contraseña (8 car. mín.). El mismo email que tu pago.',
+      'login.connecting': 'Conectando…',
+      'nav.vie': 'Vida',
+      'nav.mois': 'Mes',
+      'nav.jour': 'Día',
+      'nav.couple': 'Pareja',
+      'account.title': 'Tu cuenta',
+      'account.close': 'Cerrar',
+      'account.logout': 'Cerrar sesión',
+      'account.language': 'Idioma de los manuscritos',
+      'account.appearance': 'Apariencia',
+      'account.appearance_hint': 'Elige el cielo que te acompaña: oscuro o claro.',
+      'account.id': 'Identidad',
+      'account.plan': 'Tu plan',
+      'theme.aria': 'Apariencia',
+      'theme.toggle': 'Cambiar tema',
+      'err.email': 'Tu email ✦',
+      'err.password': 'Contraseña: 8 caracteres mínimo ✦',
+      'err.login': 'Email o contraseña incorrectos.',
+      'err.unreachable': 'Los Manuscrits Célestes no están disponibles. Inténtalo en un momento.'
+    },
+    he: {
+      'lang.label': 'שפה',
+      'lang.warn_login': 'חשוב: כל המסמכים שיווצרו (כתבי יד, תשובות ה-AI) ייכתבו בשפה זו.',
+      'lang.warn_account': 'כתבי יד ותשובות AI חדשים ישתמשו בשפה זו. מסמכים שכבר נוצרו נשארים כפי שהם.',
+      'login.lede': 'חינם, Céleste‏ (59 €) או Divin‏ (137 €).<br>ה-AI השמימי מלווה אותך ב-Divin.',
+      'login.email': 'אימייל',
+      'login.password': 'סיסמה',
+      'login.password_ph': 'לפחות 8 תווים',
+      'login.submit': 'התחברות',
+      'login.hint': 'התחברות ראשונה: בחרו סיסמה (לפחות 8 תווים). אותו אימייל כמו בתשלום.',
+      'login.connecting': 'מתחבר…',
+      'nav.vie': 'חיים',
+      'nav.mois': 'חודש',
+      'nav.jour': 'יום',
+      'nav.couple': 'זוגיות',
+      'account.title': 'החשבון שלך',
+      'account.close': 'סגור',
+      'account.logout': 'התנתקות',
+      'account.language': 'שפת כתבי היד',
+      'account.appearance': 'מראה',
+      'account.appearance_hint': 'בחרו את השמיים המלווים אתכם: כהה או בהיר.',
+      'account.id': 'זהות',
+      'account.plan': 'התוכנית שלך',
+      'theme.aria': 'מראה',
+      'theme.toggle': 'החלפת ערכת נושא',
+      'err.email': 'האימייל שלך ✦',
+      'err.password': 'סיסמה: לפחות 8 תווים ✦',
+      'err.login': 'אימייל או סיסמה שגויים.',
+      'err.unreachable': 'Les Manuscrits Célestes אינם זמינים כרגע. נסו שוב בעוד רגע.'
+    },
+    pt: {
+      'lang.label': 'Idioma',
+      'lang.warn_login': 'Importante: todos os documentos gerados (manuscritos, respostas da IA) serão escritos neste idioma.',
+      'lang.warn_account': 'Novos manuscritos e respostas da IA usarão este idioma. Os já gerados permanecem iguais.',
+      'login.lede': 'Grátis, Céleste (59 €) ou Divin (137 €).<br>A IA Céleste acompanha-te no Divin.',
+      'login.email': 'Email',
+      'login.password': 'Palavra-passe',
+      'login.password_ph': '8 caracteres no mínimo',
+      'login.submit': 'Entrar',
+      'login.hint': 'Primeira ligação: escolhe uma palavra-passe (mín. 8). O mesmo email do pagamento.',
+      'login.connecting': 'A entrar…',
+      'nav.vie': 'Vida',
+      'nav.mois': 'Mês',
+      'nav.jour': 'Dia',
+      'nav.couple': 'Casal',
+      'account.title': 'A tua conta',
+      'account.close': 'Fechar',
+      'account.logout': 'Terminar sessão',
+      'account.language': 'Idioma dos manuscritos',
+      'account.appearance': 'Aparência',
+      'account.appearance_hint': 'Escolhe o céu que te acompanha: escuro ou claro.',
+      'account.id': 'Identidade',
+      'account.plan': 'O teu plano',
+      'theme.aria': 'Aparência',
+      'theme.toggle': 'Mudar tema',
+      'err.email': 'O teu email ✦',
+      'err.password': 'Palavra-passe: 8 caracteres no mínimo ✦',
+      'err.login': 'Email ou palavra-passe incorretos.',
+      'err.unreachable': 'Les Manuscrits Célestes estão indisponíveis. Tenta novamente em instantes.'
+    },
+    de: {
+      'lang.label': 'Sprache',
+      'lang.warn_login': 'Wichtig: Alle erzeugten Dokumente (Manuskripte, KI-Antworten) werden in dieser Sprache geschrieben.',
+      'lang.warn_account': 'Neue Manuskripte und KI-Antworten nutzen diese Sprache. Bereits erzeugte Dokumente bleiben unverändert.',
+      'login.lede': 'Kostenlos, Céleste (59 €) oder Divin (137 €).<br>Die Céleste-KI begleitet dich im Divin.',
+      'login.email': 'E-Mail',
+      'login.password': 'Passwort',
+      'login.password_ph': 'Mindestens 8 Zeichen',
+      'login.submit': 'Anmelden',
+      'login.hint': 'Erste Anmeldung: wähle ein Passwort (min. 8 Zeichen). Dieselbe E-Mail wie bei der Zahlung.',
+      'login.connecting': 'Anmeldung…',
+      'nav.vie': 'Leben',
+      'nav.mois': 'Monat',
+      'nav.jour': 'Tag',
+      'nav.couple': 'Paar',
+      'account.title': 'Dein Konto',
+      'account.close': 'Schließen',
+      'account.logout': 'Abmelden',
+      'account.language': 'Manuskriptsprache',
+      'account.appearance': 'Erscheinungsbild',
+      'account.appearance_hint': 'Wähle den Himmel, der dich begleitet: dunkel oder hell.',
+      'account.id': 'Identität',
+      'account.plan': 'Dein Plan',
+      'theme.aria': 'Erscheinungsbild',
+      'theme.toggle': 'Design wechseln',
+      'err.email': 'Deine E-Mail ✦',
+      'err.password': 'Passwort: mindestens 8 Zeichen ✦',
+      'err.login': 'E-Mail oder Passwort falsch.',
+      'err.unreachable': 'Les Manuscrits Célestes sind gerade nicht erreichbar. Bitte später erneut versuchen.'
+    },
+    it: {
+      'lang.label': 'Lingua',
+      'lang.warn_login': 'Importante: tutti i documenti generati (manoscritti, risposte IA) saranno redatti in questa lingua.',
+      'lang.warn_account': 'I nuovi manoscritti e le risposte IA useranno questa lingua. Quelli già generati restano invariati.',
+      'login.lede': 'Gratis, Céleste (59 €) o Divin (137 €).<br>L’IA Céleste ti accompagna nel Divin.',
+      'login.email': 'Email',
+      'login.password': 'Password',
+      'login.password_ph': '8 caratteri minimo',
+      'login.submit': 'Accedi',
+      'login.hint': 'Primo accesso: scegli una password (min. 8 caratteri). La stessa email del pagamento.',
+      'login.connecting': 'Accesso…',
+      'nav.vie': 'Vita',
+      'nav.mois': 'Mese',
+      'nav.jour': 'Giorno',
+      'nav.couple': 'Coppia',
+      'account.title': 'Il tuo account',
+      'account.close': 'Chiudi',
+      'account.logout': 'Esci',
+      'account.language': 'Lingua dei manoscritti',
+      'account.appearance': 'Aspetto',
+      'account.appearance_hint': 'Scegli il cielo che ti accompagna: scuro o chiaro.',
+      'account.id': 'Identità',
+      'account.plan': 'Il tuo piano',
+      'theme.aria': 'Aspetto',
+      'theme.toggle': 'Cambia tema',
+      'err.email': 'La tua email ✦',
+      'err.password': 'Password: 8 caratteri minimo ✦',
+      'err.login': 'Email o password non corretti.',
+      'err.unreachable': 'Les Manuscrits Célestes non sono raggiungibili. Riprova tra un momento.'
+    },
+    ar: {
+      'lang.label': 'اللغة',
+      'lang.warn_login': 'مهم: كل الوثائق المُنشأة (المخطوطات، ردود الذكاء الاصطناعي) ستُكتب بهذه اللغة.',
+      'lang.warn_account': 'المخطوطات وردود الذكاء الجديدة ستستخدم هذه اللغة. الوثائق المُنشأة سابقاً تبقى كما هي.',
+      'login.lede': 'مجاني، Céleste‏ (59 €) أو Divin‏ (137 €).<br>الذكاء السماوي يرافقك في Divin.',
+      'login.email': 'البريد',
+      'login.password': 'كلمة المرور',
+      'login.password_ph': '8 أحرف على الأقل',
+      'login.submit': 'تسجيل الدخول',
+      'login.hint': 'أول اتصال: اختر كلمة مرور (8 أحرف على الأقل). نفس البريد المستخدم في الدفع.',
+      'login.connecting': 'جاري الدخول…',
+      'nav.vie': 'حياة',
+      'nav.mois': 'شهر',
+      'nav.jour': 'يوم',
+      'nav.couple': 'زوجان',
+      'account.title': 'حسابك',
+      'account.close': 'إغلاق',
+      'account.logout': 'تسجيل الخروج',
+      'account.language': 'لغة المخطوطات',
+      'account.appearance': 'المظهر',
+      'account.appearance_hint': 'اختر السماء التي ترافقك: داكنة أو مشرقة.',
+      'account.id': 'الهوية',
+      'account.plan': 'خطتك',
+      'theme.aria': 'المظهر',
+      'theme.toggle': 'تغيير السمة',
+      'err.email': 'بريدك ✦',
+      'err.password': 'كلمة المرور: 8 أحرف على الأقل ✦',
+      'err.login': 'بريد أو كلمة مرور غير صحيحة.',
+      'err.unreachable': 'Les Manuscrits Célestes غير متاحة حالياً. أعد المحاولة بعد لحظة.'
+    },
+    zh: {
+      'lang.label': '语言',
+      'lang.warn_login': '重要：所有生成的文档（手稿、AI 回复）都将使用此语言撰写。',
+      'lang.warn_account': '新的手稿与 AI 回复将使用此语言。已生成的文档保持不变。',
+      'login.lede': '免费、Céleste（59 €）或 Divin（137 €）。<br>Céleste AI 在 Divin 计划中陪伴你。',
+      'login.email': '邮箱',
+      'login.password': '密码',
+      'login.password_ph': '至少 8 个字符',
+      'login.submit': '登录',
+      'login.hint': '首次登录：设置密码（至少 8 个字符）。使用与付款相同的邮箱。',
+      'login.connecting': '登录中…',
+      'nav.vie': '生命',
+      'nav.mois': '月',
+      'nav.jour': '日',
+      'nav.couple': '伴侣',
+      'account.title': '我的账户',
+      'account.close': '关闭',
+      'account.logout': '退出登录',
+      'account.language': '手稿语言',
+      'account.appearance': '外观',
+      'account.appearance_hint': '选择伴随你的天空：深色或明亮。',
+      'account.id': '身份',
+      'account.plan': '你的方案',
+      'theme.aria': '外观',
+      'theme.toggle': '切换主题',
+      'err.email': '请输入邮箱 ✦',
+      'err.password': '密码至少 8 个字符 ✦',
+      'err.login': '邮箱或密码不正确。',
+      'err.unreachable': 'Les Manuscrits Célestes 暂时无法连接。请稍后再试。'
+    },
+    ja: {
+      'lang.label': '言語',
+      'lang.warn_login': '重要：生成されるすべての文書（原稿、AIの回答）はこの言語で書かれます。',
+      'lang.warn_account': '新しい原稿とAIの回答はこの言語を使います。既に生成された文書はそのままです。',
+      'login.lede': '無料、Céleste（59 €）、または Divin（137 €）。<br>DivinではCéleste AIが寄り添います。',
+      'login.email': 'メール',
+      'login.password': 'パスワード',
+      'login.password_ph': '8文字以上',
+      'login.submit': 'ログイン',
+      'login.hint': '初回：パスワードを設定（8文字以上）。お支払いと同じメール。',
+      'login.connecting': '接続中…',
+      'nav.vie': '人生',
+      'nav.mois': '月',
+      'nav.jour': '日',
+      'nav.couple': 'カップル',
+      'account.title': 'アカウント',
+      'account.close': '閉じる',
+      'account.logout': 'ログアウト',
+      'account.language': '原稿の言語',
+      'account.appearance': '外観',
+      'account.appearance_hint': '寄り添う空を選んでください：ダークまたはブライト。',
+      'account.id': '身分',
+      'account.plan': 'プラン',
+      'theme.aria': '外観',
+      'theme.toggle': 'テーマ切替',
+      'err.email': 'メールを入力 ✦',
+      'err.password': 'パスワードは8文字以上 ✦',
+      'err.login': 'メールまたはパスワードが違います。',
+      'err.unreachable': 'Les Manuscrits Célestesに接続できません。しばらくして再試行してください。'
+    },
+    ru: {
+      'lang.label': 'Язык',
+      'lang.warn_login': 'Важно: все создаваемые документы (манускрипты, ответы ИИ) будут написаны на этом языке.',
+      'lang.warn_account': 'Новые манускрипты и ответы ИИ будут на этом языке. Уже созданные документы не меняются.',
+      'login.lede': 'Бесплатно, Céleste (59 €) или Divin (137 €).<br>ИИ Céleste сопровождает вас в Divin.',
+      'login.email': 'Email',
+      'login.password': 'Пароль',
+      'login.password_ph': 'минимум 8 символов',
+      'login.submit': 'Войти',
+      'login.hint': 'Первый вход: выберите пароль (мин. 8). Тот же email, что при оплате.',
+      'login.connecting': 'Вход…',
+      'nav.vie': 'Жизнь',
+      'nav.mois': 'Месяц',
+      'nav.jour': 'День',
+      'nav.couple': 'Пара',
+      'account.title': 'Ваш аккаунт',
+      'account.close': 'Закрыть',
+      'account.logout': 'Выйти',
+      'account.language': 'Язык манускриптов',
+      'account.appearance': 'Оформление',
+      'account.appearance_hint': 'Выберите небо: тёмное или светлое.',
+      'account.id': 'Профиль',
+      'account.plan': 'Ваш план',
+      'theme.aria': 'Оформление',
+      'theme.toggle': 'Сменить тему',
+      'err.email': 'Ваш email ✦',
+      'err.password': 'Пароль: минимум 8 символов ✦',
+      'err.login': 'Неверный email или пароль.',
+      'err.unreachable': 'Les Manuscrits Célestes сейчас недоступны. Попробуйте позже.'
+    },
+    hi: {
+      'lang.label': 'भाषा',
+      'lang.warn_login': 'महत्वपूर्ण: सभी उत्पन्न दस्तावेज़ (पांडुलिपियाँ, AI उत्तर) इसी भाषा में लिखे जाएँगे।',
+      'lang.warn_account': 'नई पांडुलिपियाँ और AI उत्तर इस भाषा का उपयोग करेंगे। पहले से बने दस्तावेज़ वैसे ही रहेंगे।',
+      'login.lede': 'मुफ़्त, Céleste (59 €) या Divin (137 €)।<br>Divin में Céleste AI आपके साथ है।',
+      'login.email': 'ईमेल',
+      'login.password': 'पासवर्ड',
+      'login.password_ph': 'कम से कम 8 अक्षर',
+      'login.submit': 'साइन इन',
+      'login.hint': 'पहली बार: पासवर्ड चुनें (न्यून. 8)। भुगतान वाला ही ईमेल।',
+      'login.connecting': 'कनेक्ट हो रहा है…',
+      'nav.vie': 'जीवन',
+      'nav.mois': 'माह',
+      'nav.jour': 'दिन',
+      'nav.couple': 'जोड़ा',
+      'account.title': 'आपका खाता',
+      'account.close': 'बंद करें',
+      'account.logout': 'साइन आउट',
+      'account.language': 'पांडुलिपि भाषा',
+      'account.appearance': 'रूप',
+      'account.appearance_hint': 'अपना आकाश चुनें: गहरा या उजला।',
+      'account.id': 'पहचान',
+      'account.plan': 'आपकी योजना',
+      'theme.aria': 'रूप',
+      'theme.toggle': 'थीम बदलें',
+      'err.email': 'आपका ईमेल ✦',
+      'err.password': 'पासवर्ड: कम से कम 8 अक्षर ✦',
+      'err.login': 'गलत ईमेल या पासवर्ड।',
+      'err.unreachable': 'Les Manuscrits Célestes अभी उपलब्ध नहीं। थोड़ी देर बाद कोशिश करें।'
+    },
+    nl: {
+      'lang.label': 'Taal',
+      'lang.warn_login': 'Belangrijk: alle gegenereerde documenten (manuscripten, AI-antwoorden) worden in deze taal geschreven.',
+      'lang.warn_account': 'Nieuwe manuscripten en AI-antwoorden gebruiken deze taal. Al gegenereerde documenten blijven ongewijzigd.',
+      'login.lede': 'Gratis, Céleste (59 €) of Divin (137 €).<br>De Céleste-AI begeleidt je in Divin.',
+      'login.email': 'E-mail',
+      'login.password': 'Wachtwoord',
+      'login.password_ph': 'minimaal 8 tekens',
+      'login.submit': 'Inloggen',
+      'login.hint': 'Eerste login: kies een wachtwoord (min. 8). Dezelfde e-mail als bij betaling.',
+      'login.connecting': 'Bezig…',
+      'nav.vie': 'Leven',
+      'nav.mois': 'Maand',
+      'nav.jour': 'Dag',
+      'nav.couple': 'Koppel',
+      'account.title': 'Jouw account',
+      'account.close': 'Sluiten',
+      'account.logout': 'Uitloggen',
+      'account.language': 'Manuscripttaal',
+      'account.appearance': 'Weergave',
+      'account.appearance_hint': 'Kies de hemel die je begeleidt: donker of licht.',
+      'account.id': 'Identiteit',
+      'account.plan': 'Jouw plan',
+      'theme.aria': 'Weergave',
+      'theme.toggle': 'Thema wisselen',
+      'err.email': 'Jouw e-mail ✦',
+      'err.password': 'Wachtwoord: minimaal 8 tekens ✦',
+      'err.login': 'Onjuiste e-mail of wachtwoord.',
+      'err.unreachable': 'Les Manuscrits Célestes zijn even niet bereikbaar. Probeer het zo opnieuw.'
+    },
+    pl: {
+      'lang.label': 'Język',
+      'lang.warn_login': 'Ważne: wszystkie generowane dokumenty (manuskrypty, odpowiedzi AI) będą napisane w tym języku.',
+      'lang.warn_account': 'Nowe manuskrypty i odpowiedzi AI użyją tego języka. Już wygenerowane dokumenty pozostaną bez zmian.',
+      'login.lede': 'Darmowe, Céleste (59 €) lub Divin (137 €).<br>IA Céleste towarzyszy Ci w Divin.',
+      'login.email': 'Email',
+      'login.password': 'Hasło',
+      'login.password_ph': 'minimum 8 znaków',
+      'login.submit': 'Zaloguj się',
+      'login.hint': 'Pierwsze logowanie: wybierz hasło (min. 8). Ten sam email co przy płatności.',
+      'login.connecting': 'Logowanie…',
+      'nav.vie': 'Życie',
+      'nav.mois': 'Miesiąc',
+      'nav.jour': 'Dzień',
+      'nav.couple': 'Para',
+      'account.title': 'Twoje konto',
+      'account.close': 'Zamknij',
+      'account.logout': 'Wyloguj',
+      'account.language': 'Język manuskryptów',
+      'account.appearance': 'Wygląd',
+      'account.appearance_hint': 'Wybierz niebo: ciemne lub jasne.',
+      'account.id': 'Tożsamość',
+      'account.plan': 'Twój plan',
+      'theme.aria': 'Wygląd',
+      'theme.toggle': 'Zmień motyw',
+      'err.email': 'Twój email ✦',
+      'err.password': 'Hasło: minimum 8 znaków ✦',
+      'err.login': 'Nieprawidłowy email lub hasło.',
+      'err.unreachable': 'Les Manuscrits Célestes są niedostępne. Spróbuj za chwilę.'
+    },
+    tr: {
+      'lang.label': 'Dil',
+      'lang.warn_login': 'Önemli: oluşturulan tüm belgeler (el yazmaları, yapay zekâ yanıtları) bu dilde yazılacaktır.',
+      'lang.warn_account': 'Yeni el yazmaları ve yapay zekâ yanıtları bu dili kullanır. Önceden oluşturulanlar aynı kalır.',
+      'login.lede': 'Ücretsiz, Céleste (59 €) veya Divin (137 €).<br>Céleste yapay zekâsı Divin’de size eşlik eder.',
+      'login.email': 'E-posta',
+      'login.password': 'Şifre',
+      'login.password_ph': 'en az 8 karakter',
+      'login.submit': 'Giriş yap',
+      'login.hint': 'İlk giriş: bir şifre seçin (min. 8). Ödemedeki aynı e-posta.',
+      'login.connecting': 'Bağlanıyor…',
+      'nav.vie': 'Yaşam',
+      'nav.mois': 'Ay',
+      'nav.jour': 'Gün',
+      'nav.couple': 'Çift',
+      'account.title': 'Hesabın',
+      'account.close': 'Kapat',
+      'account.logout': 'Çıkış yap',
+      'account.language': 'El yazması dili',
+      'account.appearance': 'Görünüm',
+      'account.appearance_hint': 'Seni eşlik eden gökyüzünü seç: koyu veya açık.',
+      'account.id': 'Kimlik',
+      'account.plan': 'Planın',
+      'theme.aria': 'Görünüm',
+      'theme.toggle': 'Temayı değiştir',
+      'err.email': 'E-postan ✦',
+      'err.password': 'Şifre: en az 8 karakter ✦',
+      'err.login': 'E-posta veya şifre hatalı.',
+      'err.unreachable': 'Les Manuscrits Célestes şu an erişilemiyor. Biraz sonra tekrar dene.'
+    },
+    ko: {
+      'lang.label': '언어',
+      'lang.warn_login': '중요: 생성되는 모든 문서(원고, AI 답변)는 이 언어로 작성됩니다.',
+      'lang.warn_account': '새 원고와 AI 답변은 이 언어를 사용합니다. 이미 생성된 문서는 그대로 유지됩니다.',
+      'login.lede': '무료, Céleste(59 €) 또는 Divin(137 €).<br>Divin에서는 Céleste AI가 함께합니다.',
+      'login.email': '이메일',
+      'login.password': '비밀번호',
+      'login.password_ph': '최소 8자',
+      'login.submit': '로그인',
+      'login.hint': '첫 로그인: 비밀번호를 정하세요(최소 8자). 결제와 같은 이메일.',
+      'login.connecting': '연결 중…',
+      'nav.vie': '인생',
+      'nav.mois': '월',
+      'nav.jour': '일',
+      'nav.couple': '커플',
+      'account.title': '내 계정',
+      'account.close': '닫기',
+      'account.logout': '로그아웃',
+      'account.language': '원고 언어',
+      'account.appearance': '외관',
+      'account.appearance_hint': '함께할 하늘을 고르세요: 어두운 또는 밝은.',
+      'account.id': '신원',
+      'account.plan': '내 플랜',
+      'theme.aria': '외관',
+      'theme.toggle': '테마 변경',
+      'err.email': '이메일을 입력하세요 ✦',
+      'err.password': '비밀번호: 최소 8자 ✦',
+      'err.login': '이메일 또는 비밀번호가 올바르지 않습니다.',
+      'err.unreachable': 'Les Manuscrits Célestes에 연결할 수 없습니다. 잠시 후 다시 시도하세요.'
+    }
+  };
 
   var state = {
     screen: 'login',
@@ -95,6 +601,7 @@
     coupleGenError: null,
     editingPartner: false,
     theme: 'dark',
+    lang: 'fr',
     editingBirth: false
   };
 
@@ -105,6 +612,91 @@
     } catch (e) {
       return 'dark';
     }
+  }
+
+  function normalizeLang(code) {
+    var raw = String(code == null ? '' : code).trim().toLowerCase().replace(/_/g, '-');
+    if (!raw) return 'fr';
+    var primary = raw.split('-')[0];
+    if (primary === 'zh') return 'zh';
+    return APP_LANG_CODES[primary] ? primary : 'fr';
+  }
+
+  function getStoredLang() {
+    try {
+      return normalizeLang(localStorage.getItem(LANG_KEY) || 'fr');
+    } catch (e) {
+      return 'fr';
+    }
+  }
+
+  function t(key) {
+    var code = normalizeLang(state.lang || 'fr');
+    var pack = I18N[code] || I18N.en || I18N.fr;
+    if (pack && pack[key] != null) return pack[key];
+    if (I18N.en && I18N.en[key] != null) return I18N.en[key];
+    if (I18N.fr && I18N.fr[key] != null) return I18N.fr[key];
+    return key;
+  }
+
+  function isRtlLang(code) {
+    var c = normalizeLang(code);
+    return c === 'he' || c === 'ar';
+  }
+
+  function applyLang(code, persist) {
+    var lang = normalizeLang(code);
+    state.lang = lang;
+    document.documentElement.setAttribute('lang', lang);
+    document.documentElement.setAttribute('dir', isRtlLang(lang) ? 'rtl' : 'ltr');
+    if (persist !== false) {
+      try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
+    }
+  }
+
+  function setLang(code, opts) {
+    opts = opts || {};
+    applyLang(code, true);
+    if (state.user) {
+      state.user.language = state.lang;
+      state.user.locale = state.lang;
+      saveUser();
+    }
+    if (opts.render !== false) render();
+    if (opts.saveRemote && state.user && state.user.token) {
+      fetch(API + '/profile', {
+        method: 'POST',
+        headers: authHeaders(true),
+        body: JSON.stringify({
+          email: state.user.email,
+          language: state.lang,
+          locale: state.lang
+        })
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+        .then(function (res) {
+          if (res.ok && res.data && res.data.contact) applyAccess(res.data.contact);
+        })
+        .catch(function () {});
+    }
+  }
+
+  function languageSelectHtml(id, selected) {
+    var cur = normalizeLang(selected || state.lang || 'fr');
+    var opts = APP_LANGS.map(function (L) {
+      return '<option value="' + L.code + '"' + (L.code === cur ? ' selected' : '') + '>' +
+        L.label + '</option>';
+    }).join('');
+    return '<select class="input lang-select" id="' + id + '" aria-label="' + t('lang.label') + '">' +
+      opts + '</select>';
+  }
+
+  function languageBlockHtml(id, warnKey) {
+    return '<div class="field lang-field">' +
+      '<label class="label" for="' + id + '">' + t('lang.label') + '</label>' +
+      languageSelectHtml(id, state.lang) +
+      '<p class="lang-warn" role="note">' + t(warnKey) + '</p>' +
+      '</div>';
   }
 
   function applyTheme(theme, persist) {
@@ -121,15 +713,26 @@
   function setTheme(theme) {
     applyTheme(theme, true);
     render();
+    var frame = document.querySelector('.pdf-view .natal-frame');
+    if (frame) {
+      try {
+        var src = frame.getAttribute('src');
+        if (src) {
+          var next = withThemeQuery(src);
+          if (next && next !== src) frame.setAttribute('src', next);
+        }
+      } catch (e) {}
+      applyIframeManuscriptTheme(frame);
+    }
   }
 
   function themeToggleHtml(compact) {
     var isLight = state.theme === 'light';
     if (compact) {
-      return '<button type="button" class="theme-chip" id="theme-chip" aria-label="Changer le thème">' +
+      return '<button type="button" class="theme-chip" aria-label="' + t('theme.toggle') + '">' +
         (isLight ? 'BRIGHT' : 'SOMBRE') + '</button>';
     }
-    return '<div class="theme-toggle" role="group" aria-label="Apparence">' +
+    return '<div class="theme-toggle" role="group" aria-label="' + t('theme.aria') + '">' +
       '<button type="button" data-theme-set="dark" class="' + (!isLight ? 'active' : '') + '">SOMBRE</button>' +
       '<button type="button" data-theme-set="light" class="' + (isLight ? 'active' : '') + '">BRIGHT</button>' +
       '</div>';
@@ -138,13 +741,19 @@
   function load() {
     state.theme = getStoredTheme();
     applyTheme(state.theme, false);
+    applyLang(getStoredLang(), false);
     try { state.user = JSON.parse(localStorage.getItem('cercle.user') || 'null'); } catch (e) { state.user = null; }
     /* Ancienne session sans mot de passe / token → reconnexion obligatoire. */
     if (state.user && (!state.user.email || !state.user.token)) {
       state.user = null;
       try { localStorage.removeItem('cercle.user'); } catch (e2) {}
     }
-    if (state.user) state.screen = localStorage.getItem('cercle.installedHint') ? 'app' : 'install';
+    if (state.user) {
+      if (state.user.language || state.user.locale) {
+        applyLang(state.user.language || state.user.locale, true);
+      }
+      state.screen = localStorage.getItem('cercle.installedHint') ? 'app' : 'install';
+    }
   }
   function saveUser() {
     localStorage.setItem('cercle.user', JSON.stringify(state.user));
@@ -275,6 +884,9 @@
     state.user = Object.assign({}, state.user || {}, d);
     if (d.token) state.user.token = d.token;
     else if (prevToken) state.user.token = prevToken;
+    if (d.language || d.locale) {
+      applyLang(d.language || d.locale, true);
+    }
     syncProfileFlag();
     /* Ne pas garder un « Relire » local si le serveur n’a pas le fichier. */
     if (!natalCanRead()) clearNatalLocalBook();
@@ -2616,7 +3228,12 @@
     return fetch(API + '/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email, password: password })
+      body: JSON.stringify({
+        email: email,
+        password: password,
+        language: state.lang,
+        locale: state.lang
+      })
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); });
   }
 
@@ -2648,14 +3265,20 @@
     return '<div class="screen">' +
       '<div class="scroll noshift stack" style="justify-content:center;max-width:420px;margin:0 auto;width:100%">' +
         '<div class="brand"><span class="star">✦</span><h1>Les Manuscrits<br><span>Célestes</span></h1>' +
-        '<p class="lede">Gratuit, Céleste (59 €) ou Divin (137 €).<br>L’IA Céleste t’accompagne dans le Divin.</p></div>' +
+        '<p class="lede">' + t('login.lede') + '</p></div>' +
         '<div class="card stack">' +
-          '<div class="field"><label class="label" for="email">Email</label>' +
+          languageBlockHtml('login-lang', 'lang.warn_login') +
+          '<div class="field">' +
+            '<span class="label">' + t('account.appearance') + '</span>' +
+            '<p class="muted acct-hint" style="margin:0 0 .35rem">' + t('account.appearance_hint') + '</p>' +
+            themeToggleHtml(false) +
+          '</div>' +
+          '<div class="field"><label class="label" for="email">' + t('login.email') + '</label>' +
           '<input class="input" id="email" type="email" placeholder="toi@email.com" autocomplete="username"></div>' +
-          '<div class="field"><label class="label" for="password">Mot de passe</label>' +
-          '<input class="input" id="password" type="password" placeholder="8 caractères minimum" autocomplete="current-password"></div>' +
-          '<button class="btn" id="go-in">Se connecter</button>' +
-          '<p class="lede" style="font-size:.85rem;text-align:center">Première connexion : choisis un mot de passe (8 caractères min). Même email que ton paiement.</p>' +
+          '<div class="field"><label class="label" for="password">' + t('login.password') + '</label>' +
+          '<input class="input" id="password" type="password" placeholder="' + t('login.password_ph') + '" autocomplete="current-password"></div>' +
+          '<button class="btn" id="go-in">' + t('login.submit') + '</button>' +
+          '<p class="lede" style="font-size:.85rem;text-align:center">' + t('login.hint') + '</p>' +
         '</div></div></div>';
   }
 
@@ -2745,13 +3368,13 @@
 
   function nav() {
     var tabs = [
-      ['natal', '✦', 'Vie'],
-      ['mois', '☽', 'Mois'],
-      ['jour', '☀', 'Jour'],
-      ['couple', '♡', 'Couple']
+      ['natal', '✦', t('nav.vie')],
+      ['mois', '☽', t('nav.mois')],
+      ['jour', '☀', t('nav.jour')],
+      ['couple', '♡', t('nav.couple')]
     ];
-    return '<nav class="nav">' + tabs.map(function (t) {
-      return '<button data-tab="' + t[0] + '" class="' + (state.tab === t[0] ? 'active' : '') + '"><span class="ic">' + t[1] + '</span>' + t[2] + '</button>';
+    return '<nav class="nav">' + tabs.map(function (tab) {
+      return '<button data-tab="' + tab[0] + '" class="' + (state.tab === tab[0] ? 'active' : '') + '"><span class="ic">' + tab[1] + '</span>' + tab[2] + '</button>';
     }).join('') + '</nav>';
   }
 
@@ -3209,14 +3832,14 @@
     }
 
     return '<div class="sheet" id="account-sheet"><div class="panel account-panel stack">' +
-      '<h3>Ton compte</h3>' +
+      '<h3>' + t('account.title') + '</h3>' +
       '<div class="acct-block">' +
-        '<div class="label">Identifiant</div>' +
+        '<div class="label">' + t('account.id') + '</div>' +
         '<p class="acct-value">' + (u.prenom || '—') + '</p>' +
         '<p class="acct-email">' + (u.email || '') + '</p>' +
       '</div>' +
       '<div class="acct-block">' +
-        '<div class="label">Ton plan</div>' +
+        '<div class="label">' + t('account.plan') + '</div>' +
         '<p class="acct-value">' + planName + '</p>' +
         '<p class="muted">' + [planPrice, planState].filter(Boolean).join(' · ') + '</p>' +
       '</div>' +
@@ -3229,8 +3852,11 @@
       downloadBlock +
       profileBlock +
       '<div class="acct-block">' +
-        '<div class="label">Apparence</div>' +
-        '<p class="muted acct-hint">Choisis le ciel qui t’accompagne : sombre ou clair.</p>' +
+        languageBlockHtml('account-lang', 'lang.warn_account') +
+      '</div>' +
+      '<div class="acct-block">' +
+        '<div class="label">' + t('account.appearance') + '</div>' +
+        '<p class="muted acct-hint">' + t('account.appearance_hint') + '</p>' +
         themeToggleHtml(false) +
       '</div>' +
       '<div class="acct-block">' +
@@ -3239,8 +3865,8 @@
         '<p class="muted acct-hint">Pour toute assistance : contact@formations-spiritualite-energetique.com</p>' +
         '<div class="stack">' + actions + '</div>' +
       '</div>' +
-      '<button class="btn ghost" id="close-account">Fermer</button>' +
-      '<button class="link" id="logout">Se déconnecter</button>' +
+      '<button class="btn ghost" id="close-account">' + t('account.close') + '</button>' +
+      '<button class="link" id="logout">' + t('account.logout') + '</button>' +
       '</div></div>';
   }
 
@@ -3342,7 +3968,9 @@
     var ia = iaCtx ? readerIaPanel(iaCtx) : '';
     return '<div class="pdf-view"><header>' +
       '<button type="button" class="pdf-back" id="close-pdf">← Retour</button>' +
-      '<span class="kicker">' + titlePlain + '</span></header>' +
+      '<span class="kicker">' + titlePlain + '</span>' +
+      themeToggleHtml(true) +
+      '</header>' +
       '<div class="pdf-body manuscript-protect">' + body + ia + '</div>' +
       '<div class="ms-sel-bar" id="ms-sel-bar" hidden>' +
         '<button type="button" class="ms-sel-btn" id="ms-sel-ask">' +
@@ -3388,29 +4016,44 @@
     if (go) go.onclick = function () {
       var email = (document.getElementById('email').value || '').trim();
       var password = (document.getElementById('password').value || '');
-      if (!email) { alert('Ton email ✦'); return; }
+      var langEl = document.getElementById('login-lang');
+      if (langEl && langEl.value) applyLang(langEl.value, true);
+      if (!email) { alert(t('err.email')); return; }
       if (!password || password.length < 8) {
-        alert('Mot de passe : 8 caractères minimum ✦');
+        alert(t('err.password'));
         return;
       }
       go.disabled = true;
-      go.textContent = 'Connexion…';
+      go.textContent = t('login.connecting');
       apiLogin(email, password).then(function (res) {
         if (!res.ok) {
-          alert((res.data && res.data.error) || 'Email ou mot de passe incorrect.');
+          alert((res.data && res.data.error) || t('err.login'));
           go.disabled = false;
-          go.textContent = 'Se connecter';
+          go.textContent = t('login.submit');
           return;
         }
         applyAccess(Object.assign({ email: email }, res.data));
         afterLogin();
         render();
       }).catch(function () {
-        alert('Les Manuscrits Célestes ne sont pas joignables pour le moment. Réessaie dans un instant.');
+        alert(t('err.unreachable'));
         go.disabled = false;
-        go.textContent = 'Se connecter';
+        go.textContent = t('login.submit');
       });
     };
+
+    var loginLang = document.getElementById('login-lang');
+    if (loginLang) {
+      loginLang.onchange = function () {
+        setLang(loginLang.value, { render: true, saveRemote: false });
+      };
+    }
+    var accountLang = document.getElementById('account-lang');
+    if (accountLang) {
+      accountLang.onchange = function () {
+        setLang(accountLang.value, { render: true, saveRemote: true });
+      };
+    }
 
     var retry = document.getElementById('retry-access');
     if (retry) retry.onclick = function () {
@@ -3609,10 +4252,11 @@
           });
       };
     }
-    var themeChip = document.getElementById('theme-chip');
-    if (themeChip) themeChip.onclick = function () {
-      setTheme(state.theme === 'light' ? 'dark' : 'light');
-    };
+    document.querySelectorAll('.theme-chip').forEach(function (themeChip) {
+      themeChip.onclick = function () {
+        setTheme(state.theme === 'light' ? 'dark' : 'light');
+      };
+    });
     document.querySelectorAll('[data-theme-set]').forEach(function (b) {
       b.onclick = function () { setTheme(b.getAttribute('data-theme-set')); };
     });
