@@ -123,6 +123,8 @@
       'account.plan': 'Ton plan',
       'theme.aria': 'Apparence',
       'theme.toggle': 'Changer le thème',
+      'theme.dark': 'SOMBRE',
+      'theme.light': 'CLAIR',
       'err.email': 'Ton email ✦',
       'err.password': 'Mot de passe : 8 caractères minimum ✦',
       'err.login': 'Email ou mot de passe incorrect.',
@@ -155,6 +157,8 @@
       'account.plan': 'Your plan',
       'theme.aria': 'Appearance',
       'theme.toggle': 'Change theme',
+      'theme.dark': 'DARK',
+      'theme.light': 'BRIGHT',
       'err.email': 'Your email ✦',
       'err.password': 'Password: 8 characters minimum ✦',
       'err.login': 'Incorrect email or password.',
@@ -187,6 +191,8 @@
       'account.plan': 'Tu plan',
       'theme.aria': 'Apariencia',
       'theme.toggle': 'Cambiar tema',
+      'theme.dark': 'OSCURO',
+      'theme.light': 'CLARO',
       'err.email': 'Tu email ✦',
       'err.password': 'Contraseña: 8 caracteres mínimo ✦',
       'err.login': 'Email o contraseña incorrectos.',
@@ -219,6 +225,8 @@
       'account.plan': 'התוכנית שלך',
       'theme.aria': 'מראה',
       'theme.toggle': 'החלפת ערכת נושא',
+      'theme.dark': 'כהה',
+      'theme.light': 'בהיר',
       'err.email': 'האימייל שלך ✦',
       'err.password': 'סיסמה: לפחות 8 תווים ✦',
       'err.login': 'אימייל או סיסמה שגויים.',
@@ -251,6 +259,8 @@
       'account.plan': 'O teu plano',
       'theme.aria': 'Aparência',
       'theme.toggle': 'Mudar tema',
+      'theme.dark': 'ESCURO',
+      'theme.light': 'CLARO',
       'err.email': 'O teu email ✦',
       'err.password': 'Palavra-passe: 8 caracteres no mínimo ✦',
       'err.login': 'Email ou palavra-passe incorretos.',
@@ -283,6 +293,8 @@
       'account.plan': 'Dein Plan',
       'theme.aria': 'Erscheinungsbild',
       'theme.toggle': 'Design wechseln',
+      'theme.dark': 'DUNKEL',
+      'theme.light': 'HELL',
       'err.email': 'Deine E-Mail ✦',
       'err.password': 'Passwort: mindestens 8 Zeichen ✦',
       'err.login': 'E-Mail oder Passwort falsch.',
@@ -315,6 +327,8 @@
       'account.plan': 'Il tuo piano',
       'theme.aria': 'Aspetto',
       'theme.toggle': 'Cambia tema',
+      'theme.dark': 'SCURO',
+      'theme.light': 'CHIARO',
       'err.email': 'La tua email ✦',
       'err.password': 'Password: 8 caratteri minimo ✦',
       'err.login': 'Email o password non corretti.',
@@ -347,6 +361,8 @@
       'account.plan': 'خطتك',
       'theme.aria': 'المظهر',
       'theme.toggle': 'تغيير السمة',
+      'theme.dark': 'داكن',
+      'theme.light': 'مشرق',
       'err.email': 'بريدك ✦',
       'err.password': 'كلمة المرور: 8 أحرف على الأقل ✦',
       'err.login': 'بريد أو كلمة مرور غير صحيحة.',
@@ -379,6 +395,8 @@
       'account.plan': '你的方案',
       'theme.aria': '外观',
       'theme.toggle': '切换主题',
+      'theme.dark': '深色',
+      'theme.light': '明亮',
       'err.email': '请输入邮箱 ✦',
       'err.password': '密码至少 8 个字符 ✦',
       'err.login': '邮箱或密码不正确。',
@@ -411,6 +429,8 @@
       'account.plan': 'プラン',
       'theme.aria': '外観',
       'theme.toggle': 'テーマ切替',
+      'theme.dark': 'ダーク',
+      'theme.light': 'ブライト',
       'err.email': 'メールを入力 ✦',
       'err.password': 'パスワードは8文字以上 ✦',
       'err.login': 'メールまたはパスワードが違います。',
@@ -443,6 +463,8 @@
       'account.plan': 'Ваш план',
       'theme.aria': 'Оформление',
       'theme.toggle': 'Сменить тему',
+      'theme.dark': 'ТЁМНАЯ',
+      'theme.light': 'СВЕТЛАЯ',
       'err.email': 'Ваш email ✦',
       'err.password': 'Пароль: минимум 8 символов ✦',
       'err.login': 'Неверный email или пароль.',
@@ -475,6 +497,8 @@
       'account.plan': 'आपकी योजना',
       'theme.aria': 'रूप',
       'theme.toggle': 'थीम बदलें',
+      'theme.dark': 'गहरा',
+      'theme.light': 'उजला',
       'err.email': 'आपका ईमेल ✦',
       'err.password': 'पासवर्ड: कम से कम 8 अक्षर ✦',
       'err.login': 'गलत ईमेल या पासवर्ड।',
@@ -507,6 +531,8 @@
       'account.plan': 'Jouw plan',
       'theme.aria': 'Weergave',
       'theme.toggle': 'Thema wisselen',
+      'theme.dark': 'DONKER',
+      'theme.light': 'LICHT',
       'err.email': 'Jouw e-mail ✦',
       'err.password': 'Wachtwoord: minimaal 8 tekens ✦',
       'err.login': 'Onjuiste e-mail of wachtwoord.',
@@ -539,6 +565,8 @@
       'account.plan': 'Twój plan',
       'theme.aria': 'Wygląd',
       'theme.toggle': 'Zmień motyw',
+      'theme.dark': 'CIEMNY',
+      'theme.light': 'JASNY',
       'err.email': 'Twój email ✦',
       'err.password': 'Hasło: minimum 8 znaków ✦',
       'err.login': 'Nieprawidłowy email lub hasło.',
@@ -571,6 +599,8 @@
       'account.plan': 'Planın',
       'theme.aria': 'Görünüm',
       'theme.toggle': 'Temayı değiştir',
+      'theme.dark': 'KOYU',
+      'theme.light': 'AÇIK',
       'err.email': 'E-postan ✦',
       'err.password': 'Şifre: en az 8 karakter ✦',
       'err.login': 'E-posta veya şifre hatalı.',
@@ -603,6 +633,8 @@
       'account.plan': '내 플랜',
       'theme.aria': '외관',
       'theme.toggle': '테마 변경',
+      'theme.dark': '어두운',
+      'theme.light': '밝은',
       'err.email': '이메일을 입력하세요 ✦',
       'err.password': '비밀번호: 최소 8자 ✦',
       'err.login': '이메일 또는 비밀번호가 올바르지 않습니다.',
@@ -857,11 +889,11 @@
     var isLight = state.theme === 'light';
     if (compact) {
       return '<button type="button" class="theme-chip" aria-label="' + t('theme.toggle') + '">' +
-        (isLight ? 'BRIGHT' : 'SOMBRE') + '</button>';
+        (isLight ? t('theme.light') : t('theme.dark')) + '</button>';
     }
     return '<div class="theme-toggle" role="group" aria-label="' + t('theme.aria') + '">' +
-      '<button type="button" data-theme-set="dark" class="' + (!isLight ? 'active' : '') + '">SOMBRE</button>' +
-      '<button type="button" data-theme-set="light" class="' + (isLight ? 'active' : '') + '">BRIGHT</button>' +
+      '<button type="button" data-theme-set="dark" class="' + (!isLight ? 'active' : '') + '">' + t('theme.dark') + '</button>' +
+      '<button type="button" data-theme-set="light" class="' + (isLight ? 'active' : '') + '">' + t('theme.light') + '</button>' +
       '</div>';
   }
 
