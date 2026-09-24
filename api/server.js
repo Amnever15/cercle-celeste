@@ -199,6 +199,7 @@ function emptyContact(email) {
     nom: '',
     language: language.DEFAULT,
     locale: language.DEFAULT,
+    languageLocked: false,
     passwordHash: null,
     sessionToken: null,
     active: false,
@@ -971,6 +972,7 @@ async function handle(req, res) {
         c.monthsPaid = c.plan === 'gratuit' ? 0 : (c.plan === 'divin' ? 1 : 2);
         c.divinMonthsPaid = c.plan === 'divin' ? 1 : 0;
         refreshUltime(c);
+        c.languageLocked = profile.isComplete(c) || !plans.entitlements(c).canNatal;
         c.passwordHash = hashPassword(password);
         c.sessionToken = newSessionToken();
         passwordCreated = true;
@@ -991,6 +993,8 @@ async function handle(req, res) {
         c.plan = 'gratuit';
         c.active = true;
         refreshUltime(c);
+        /* Gratuit: no birth onboarding — lock language from first connection. */
+        c.languageLocked = true;
         c.passwordHash = hashPassword(password);
         c.sessionToken = newSessionToken();
         passwordCreated = true;
@@ -1012,8 +1016,15 @@ async function handle(req, res) {
       }
 
       if (prenom && !c.prenom) c.prenom = prenom;
-      c.language = langCode;
-      c.locale = langCode;
+      /* First connection only: set account language. Reconnection keeps stored language. */
+      if (passwordCreated && !c.languageLocked) {
+        c.language = langCode;
+        c.locale = langCode;
+        refreshUltime(c);
+        const ent = plans.entitlements(c);
+        /* Lock now unless Céleste/Divin onboarding can still confirm language. */
+        if (profile.isComplete(c) || !ent.canNatal) c.languageLocked = true;
+      }
       c.sessionToken = newSessionToken();
       ensureNatalFileOrReset(c, store);
       writeStore(store);
@@ -1339,6 +1350,8 @@ async function handle(req, res) {
           contact: publicContact(c)
         }, req);
       }
+      /* Lock account language after first birth profile is complete. */
+      if (profile.isComplete(c)) c.languageLocked = true;
       writeStore(store);
       logLine(
         'PROFILE saved ' + auth.email +

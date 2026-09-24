@@ -115,6 +115,7 @@ function profileFields(c) {
     return Object.assign({
       language: language.DEFAULT,
       locale: language.DEFAULT,
+      languageLocked: false,
       birthDate: '',
       birthTime: '',
       birthPlace: '',
@@ -158,6 +159,7 @@ function profileFields(c) {
   return Object.assign({
     language: lang,
     locale: lang,
+    languageLocked: !!c.languageLocked,
     birthDate: birthDate,
     birthTime: birthTime,
     birthPlace: birthPlace,
@@ -182,9 +184,12 @@ function profileFields(c) {
   }, partnerFields(c));
 }
 
-/** Persiste language/locale (ISO) — indépendant des edits naissance. */
+/** Persiste language/locale (ISO) — indépendant des edits naissance. Verrouillé après premier réglage. */
 function saveLanguage(c, body) {
   if (!c) return { ok: false, error: 'compte inconnu' };
+  if (c.languageLocked) {
+    return { ok: true, language: language.ofContact(c), locked: true };
+  }
   const raw = body && (body.language != null ? body.language : body.locale);
   if (raw == null || String(raw).trim() === '') {
     return { ok: false, error: 'language requis' };

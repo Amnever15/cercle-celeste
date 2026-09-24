@@ -14,8 +14,8 @@ const types = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
-  '.webmanifest': 'application/manifest+json',
-  '.json': 'application/json'
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.json': 'application/json; charset=utf-8'
 };
 
 function proxyApi(req, res) {
