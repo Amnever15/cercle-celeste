@@ -91,7 +91,7 @@ const LOG = resolveLogPath();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/couple-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file', '/ultime-file', '/download-all'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/couple-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/tts', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file', '/ultime-file', '/download-all'];
 const LAST_WEBHOOKS_MAX = 20;
 const IA_MESSAGES_MAX = 1000;
 
@@ -214,6 +214,7 @@ function emptyContact(email) {
     dailyUsed: 0,
     monthlyUsed: 0,
     iaUsed: 0,
+    ttsCharsUsed: 0,
     usageMonth: '',
     usageYear: 0,
     birthDate: '',
@@ -1908,6 +1909,98 @@ async function handle(req, res) {
         messages: messages,
         contact: publicContact(c)
       }, req);
+    }
+
+    if (route === '/tts' && req.method === 'POST') {
+      const body = (await readBody(req)).body;
+      const auth = requireSession(req, url, body);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const text = String(body.text || '').trim();
+      if (!text) return send(res, 400, { error: 'Texte requis.' }, req);
+      if (text.length > plans.TTS_MAX_CHARS) {
+        return send(res, 400, {
+          error: 'Texte trop long pour la voix (max ' + plans.TTS_MAX_CHARS + ' caractères).'
+        }, req);
+      }
+      const store = auth.store;
+      const c = auth.c;
+      const entitlements = plans.entitlements(c);
+      if (!entitlements.canIa) {
+        return send(res, 403, {
+          error: 'La voix Céleste est réservée au plan Divin.',
+          contact: publicContact(c)
+        }, req);
+      }
+      if (entitlements.ttsCharsLeft < text.length) {
+        return send(res, 403, {
+          error: 'Quota voix du mois atteint. Reviens le 1er, ou écoute avec la voix du navigateur.',
+          ttsCharsLeft: entitlements.ttsCharsLeft,
+          contact: publicContact(c)
+        }, req);
+      }
+      const openaiKey = String(
+        process.env.OPENAI_API_KEY ||
+        process.env.OPENAI_KEY ||
+        process.env.OPEN_AI_API_KEY ||
+        ''
+      ).trim();
+      if (!openaiKey) {
+        return send(res, 503, {
+          error: 'Voix Céleste indisponible (clé OpenAI manquante côté serveur).',
+          contact: publicContact(c)
+        }, req);
+      }
+      let audioBuf;
+      try {
+        const httpNatal = require('./natal/http');
+        const resp = await httpNatal.fetchWithTimeout(
+          'https://api.openai.com/v1/audio/speech',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: 'Bearer ' + openaiKey,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: 'tts-1',
+              voice: 'nova',
+              input: text,
+              response_format: 'mp3'
+            })
+          },
+          60000
+        );
+        if (!resp.ok) {
+          let errTxt = '';
+          try { errTxt = await resp.text(); } catch (_) {}
+          logLine('TTS OpenAI HTTP ' + resp.status + (errTxt ? (' ' + errTxt.slice(0, 200)) : ''));
+          return send(res, 503, {
+            error: 'La voix Céleste ne répond pas pour le moment. Réessaie dans un instant.',
+            contact: publicContact(c)
+          }, req);
+        }
+        audioBuf = Buffer.from(await resp.arrayBuffer());
+      } catch (e) {
+        logLine('TTS fail ' + ((e && e.message) || e));
+        return send(res, 503, {
+          error: 'La voix Céleste ne répond pas pour le moment. Réessaie dans un instant.',
+          contact: publicContact(c)
+        }, req);
+      }
+      const consumed = plans.consumeTts(c, text.length);
+      if (!consumed.ok) {
+        return send(res, 403, {
+          error: consumed.error,
+          contact: publicContact(c)
+        }, req);
+      }
+      writeStore(store);
+      res.writeHead(200, Object.assign({
+        'Content-Type': 'audio/mpeg',
+        'Content-Length': audioBuf.length,
+        'Cache-Control': 'no-store'
+      }, corsHeaders(req)));
+      return res.end(audioBuf);
     }
 
     send(res, 404, { error: 'not found' }, req);

@@ -10,6 +10,9 @@
  */
 const IA_COST_EUR = 0.036;
 const IA_BUDGET_SHARE = 0.5;
+/** OpenAI TTS-1 ≈ $15 / 1M chars → 180k chars/mois ≈ $2,70 / user Divin. */
+const TTS_CHARS_MONTH = 180000;
+const TTS_MAX_CHARS = 4000;
 const profile = require('./profile');
 
 const PLANS = {
@@ -314,6 +317,7 @@ function rollUsage(c) {
     c.usageMonth = m;
     c.dailyUsed = 0;
     c.iaUsed = 0;
+    c.ttsCharsUsed = 0;
   }
   if (c.usageYear !== y) {
     c.usageYear = y;
@@ -403,7 +407,10 @@ function entitlements(c) {
       iaQuota: 0,
       iaUsed: 0,
       iaLeft: 0,
-      iaCostEur: IA_COST_EUR
+      iaCostEur: IA_COST_EUR,
+      ttsCharsQuota: 0,
+      ttsCharsUsed: 0,
+      ttsCharsLeft: 0
     }, profile.profileFields(null));
   }
   applyPlan(c);
@@ -437,6 +444,9 @@ function entitlements(c) {
   const coupleUsedThisMonth = (c.coupleUsedMonth === m) ? (c.coupleUsed || 0) : 0;
   const coupleLeft = canCouple ? Math.max(0, coupleLimit - coupleUsedThisMonth) : 0;
   const iaLeft = canIa ? Math.max(0, iaQuota - (c.iaUsed || 0)) : 0;
+  const ttsCharsQuota = canIa ? TTS_CHARS_MONTH : 0;
+  const ttsCharsUsed = canIa ? (c.ttsCharsUsed || 0) : 0;
+  const ttsCharsLeft = canIa ? Math.max(0, ttsCharsQuota - ttsCharsUsed) : 0;
   return Object.assign({
     exists: true,
     email: c.email,
@@ -473,7 +483,10 @@ function entitlements(c) {
     iaQuota: iaQuota,
     iaUsed: c.iaUsed || 0,
     iaLeft: iaLeft,
-    iaCostEur: IA_COST_EUR
+    iaCostEur: IA_COST_EUR,
+    ttsCharsQuota: ttsCharsQuota,
+    ttsCharsUsed: ttsCharsUsed,
+    ttsCharsLeft: ttsCharsLeft
   }, profile.profileFields(c));
 }
 
@@ -536,12 +549,30 @@ function consumeIa(c) {
   return { ok: true };
 }
 
+function consumeTts(c, charCount) {
+  rollUsage(c);
+  const e = entitlements(c);
+  if (!e.canIa) return { ok: false, error: 'La voix Céleste est réservée au plan Divin.' };
+  const n = Math.max(0, Math.floor(Number(charCount) || 0));
+  if (n <= 0) return { ok: false, error: 'Texte vide.' };
+  if (e.ttsCharsLeft < n) {
+    return {
+      ok: false,
+      error: 'Quota voix du mois atteint. Reviens le 1er, ou écoute avec la voix du navigateur.'
+    };
+  }
+  c.ttsCharsUsed = (c.ttsCharsUsed || 0) + n;
+  return { ok: true, used: c.ttsCharsUsed, left: Math.max(0, TTS_CHARS_MONTH - c.ttsCharsUsed) };
+}
+
 module.exports = {
   PLANS,
   ULTIME_MONTHS,
   DOWNLOAD_UNLOCK_MONTHS,
   IA_COST_EUR,
   IA_BUDGET_SHARE,
+  TTS_CHARS_MONTH,
+  TTS_MAX_CHARS,
   planOf,
   detectPlan,
   detectPlanFallback,
@@ -557,5 +588,6 @@ module.exports = {
   canGenerate,
   consumeGenerate,
   consumeIa,
+  consumeTts,
   rollUsage
 };

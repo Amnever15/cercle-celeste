@@ -1,4 +1,4 @@
-const CACHE = 'cercle-v58';
+const CACHE = 'cercle-v60';
 const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/manifest.webmanifest', '/icon.svg', '/assets/ia-celeste.png'];
 
 self.addEventListener('install', (e) => {
@@ -14,7 +14,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   var url = new URL(e.request.url);
-  if (/^\/(health|access|login|admin(\/(grant|natal-reset|couple-reset|natal-start))?|systeme-webhook|webhook-debug|generate|ia|profile|profile-partner|natal-file|mois-file|jour-file|couple-file|ultime-file|download-all)(\?|$)/.test(url.pathname)) return;
+  if (/^\/(health|access|login|admin(\/(grant|natal-reset|couple-reset|natal-start))?|systeme-webhook|webhook-debug|generate|ia|tts|profile|profile-partner|natal-file|mois-file|jour-file|couple-file|ultime-file|download-all)(\?|$)/.test(url.pathname)) return;
 
   /* Shell app : réseau d’abord pour ne pas garder un vieux app.js (alert profil sans formulaire). */
   var isShell = url.pathname === '/' || url.pathname === '/index.html' ||
