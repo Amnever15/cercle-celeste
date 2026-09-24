@@ -4197,9 +4197,44 @@
       '<div class="pdf-body manuscript-protect">' + body + ia + '</div></div>';
   }
 
+  /** Same view key → keep scroll (polls re-render every 3–5s without jumping to top). */
+  var _renderViewKey = '';
+  function renderViewKey() {
+    return [
+      state.screen || '',
+      state.tab || '',
+      state.pdf ? String(state.pdf) : '',
+      state.account ? '1' : '0',
+      needsOnboarding() ? '1' : '0'
+    ].join('|');
+  }
+
+  function restoreScrollAfterRender(root, savedMain, savedPdf) {
+    function apply() {
+      if (savedMain != null) {
+        var sc = root.querySelector('.scroll');
+        if (sc) sc.scrollTop = savedMain;
+      }
+      if (savedPdf != null) {
+        var pb = root.querySelector('.pdf-body');
+        if (pb) pb.scrollTop = savedPdf;
+      }
+    }
+    apply();
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(function () { apply(); });
+    }
+  }
+
   function render() {
     if (!state.pdf) setPdfFsFallback(false);
     var root = document.getElementById('app');
+    var nextKey = renderViewKey();
+    var sameView = nextKey === _renderViewKey;
+    var scrollEl = sameView ? root.querySelector('.scroll') : null;
+    var pdfBodyEl = sameView ? root.querySelector('.pdf-body') : null;
+    var savedMainScroll = scrollEl ? scrollEl.scrollTop : null;
+    var savedPdfScroll = pdfBodyEl ? pdfBodyEl.scrollTop : null;
     var html = '';
     if (state.screen === 'login') html = loginView();
     else if (state.screen === 'onboarding') html = onboardingView();
@@ -4221,6 +4256,10 @@
     }
     root.innerHTML = html;
     bind();
+    _renderViewKey = nextKey;
+    if (sameView && (savedMainScroll != null || savedPdfScroll != null)) {
+      restoreScrollAfterRender(root, savedMainScroll, savedPdfScroll);
+    }
     var logEl = document.getElementById('ia-log');
     if (logEl) logEl.scrollTop = logEl.scrollHeight;
   }
