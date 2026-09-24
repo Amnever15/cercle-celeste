@@ -632,15 +632,24 @@
     var MORE = {
       fr: {
         'ia.mic_stop': 'Arrêter la dictée',
-        'ia.speak_loading': 'Préparation…'
+        'ia.speak_loading': 'Préparation…',
+        'ia.tts_err': 'La voix Céleste ne répond pas pour le moment. Réessaie dans un instant.',
+        'ia.tts_quota': 'Quota voix du mois atteint. Écouter avec la voix du navigateur ?',
+        'ia.tts_need_auth': 'Reconnecte-toi pour écouter la voix Céleste.'
       },
       en: {
         'ia.mic_stop': 'Stop dictation',
-        'ia.speak_loading': 'Preparing…'
+        'ia.speak_loading': 'Preparing…',
+        'ia.tts_err': 'Céleste’s voice is unavailable right now. Try again in a moment.',
+        'ia.tts_quota': 'Monthly voice quota reached. Listen with the browser voice?',
+        'ia.tts_need_auth': 'Sign in again to hear Céleste’s voice.'
       },
       es: {
         'ia.mic_stop': 'Detener el dictado',
         'ia.speak_loading': 'Preparando…',
+        'ia.tts_err': 'La voz de Céleste no responde por ahora. Inténtalo en un momento.',
+        'ia.tts_quota': 'Cupo de voz del mes agotado. ¿Escuchar con la voz del navegador?',
+        'ia.tts_need_auth': 'Vuelve a iniciar sesión para oír la voz de Céleste.',
         'onboard.lede_edit': 'Corrige un error si hace falta. Te quedan {n} modificación{s}.',
         'onboard.edits_left': 'Te quedan {n} modificación{s}.',
         'partner.edits_left': 'Te quedan {n} corrección{s}.',
@@ -1531,24 +1540,37 @@
       headers: authHeaders(true),
       body: JSON.stringify({
         email: state.user && state.user.email,
-        text: plain
+        text: plain,
+        token: state.user && state.user.token
       })
     }).then(function (res) {
       if (reqId !== _iaSpeakReq) return null;
       if (!res.ok) {
         return res.json().catch(function () { return {}; }).then(function (j) {
-          throw Object.assign(new Error((j && j.error) || 'tts'), { status: res.status, soft: true });
+          var msg = (j && j.error) || t('ia.tts_err');
+          var quota = res.status === 403 && /quota|navigateur|browser|cupo/i.test(String(msg));
+          throw Object.assign(new Error(msg), { status: res.status, quota: quota, soft: true });
         });
       }
       return res.blob();
     }).then(function (blob) {
       if (reqId !== _iaSpeakReq) return;
-      if (!blob || !blob.size) throw new Error('empty');
+      if (!blob || !blob.size) throw new Error(t('ia.tts_err'));
       playIaAudioBlob(blob, btn, reqId);
-    }).catch(function () {
+    }).catch(function (err) {
       if (reqId !== _iaSpeakReq) return;
-      if (iaSpeakSupported()) speakIaBrowser(plain, btn);
-      else stopIaSpeak();
+      /* Divin : pas de bascule silencieuse vers speechSynthesis (sauf quota confirmé). */
+      if (err && err.quota && iaSpeakSupported()) {
+        var ok = false;
+        try { ok = window.confirm(err.message || t('ia.tts_quota')); } catch (e0) { ok = false; }
+        if (ok) {
+          speakIaBrowser(plain, btn);
+          return;
+        }
+      } else {
+        try { window.alert((err && err.message) || t('ia.tts_err')); } catch (e1) { /* ignore */ }
+      }
+      stopIaSpeak();
     });
   }
 
@@ -1561,7 +1583,12 @@
     stopIaSpeak();
     var plain = stripIaSpeakText(text);
     if (!plain) return;
-    if (canIa() && state.user && state.user.token) {
+    /* Plan Divin (canIa) : TOUJOURS OpenAI /tts (natal, mois, jour, couple, ultime, sélection). */
+    if (canIa()) {
+      if (!state.user || !state.user.token) {
+        try { window.alert(t('ia.tts_need_auth')); } catch (e) { /* ignore */ }
+        return;
+      }
       speakIaOpenAi(plain.slice(0, 4000), btn);
       return;
     }
