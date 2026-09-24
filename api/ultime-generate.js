@@ -1,7 +1,7 @@
 /**
  * Génération Manuscrit Ultime (async) — pipeline séparé du natal.
  * Réutilise HD + Astro + Claude natal (GENERATIONS a aussi MANUSCRIT ULTIME
- * GENERATION.html pour l’édition ~140 p. ; contenu long dédié à brancher ensuite).
+ * GENERATION.html pour l’édition ~180 p. ; contenu long dédié à brancher ensuite).
  * Écrit ultime-* fichiers / flags — ne touche jamais au natal.
  */
 const fs = require('fs');

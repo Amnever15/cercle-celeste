@@ -3823,7 +3823,7 @@
         (readyProfile ? askBtn('ultime', ultimeAsk, ultimeRead) : '') +
         '</div>';
     } else if (plan() === 'gratuit' && months === 0) {
-      ultime = '<div class="card lock stack"><div class="label">' + t('plan.celeste_or_divin') + '</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">140 pages</p><p>' + t('ultime.lock_intro') + '</p></div>';
+      ultime = '<div class="card lock stack"><div class="label">' + t('plan.celeste_or_divin') + '</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">180 pages</p><p>' + t('ultime.lock_intro') + '</p></div>';
     } else if (ultimeOn() && isPausedPaid()) {
       ultime = '<div class="card lock stack"><div class="label">' + t('plan.paused') + '</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + tf('ultime.pages_unlocked', { n: ULTIME.pages }) + '</p><p>' + t('ultime.pause_reopen') +
         (plan() === 'divin' ? '' : tf('ultime.months_kept', { n: months })) +
