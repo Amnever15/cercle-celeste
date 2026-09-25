@@ -1906,3 +1906,69 @@ html[data-theme="light"] .ia-quota-modal {
     radial-gradient(ellipse at 50% 18%, rgba(201,168,76,.18), transparent 55%),
     rgba(250, 246, 238, .94);
 }
+
+/* ??? Desktop ? phone retention nudge ??? */
+.desktop-phone-nudge {
+  position: fixed;
+  inset: 0;
+  z-index: 13100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(201,168,76,.16), transparent 55%),
+    rgba(4, 2, 14, .88);
+  backdrop-filter: blur(8px);
+}
+.desktop-phone-nudge-sheet {
+  width: min(420px, 100%);
+  text-align: center;
+  gap: 12px;
+  margin: 0;
+  max-height: min(92vh, 720px);
+  overflow-y: auto;
+}
+.desktop-phone-nudge-sheet h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.desktop-phone-nudge-sheet p {
+  margin: 0;
+  line-height: 1.45;
+}
+.desktop-nudge-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+.desktop-nudge-qr img {
+  width: 168px;
+  height: 168px;
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px;
+  box-sizing: border-box;
+}
+.desktop-nudge-qr-hint {
+  font-size: .88rem !important;
+  margin: 0 !important;
+}
+.desktop-nudge-homescreen {
+  font-size: .9rem !important;
+  margin: 0 !important;
+}
+.desktop-nudge-ctas {
+  width: 100%;
+  gap: 8px;
+}
+.desktop-nudge-ctas .btn {
+  width: 100%;
+}
+html[data-theme="light"] .desktop-phone-nudge {
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(201,168,76,.18), transparent 55%),
+    rgba(250, 246, 238, .94);
+}

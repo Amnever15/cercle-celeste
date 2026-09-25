@@ -739,7 +739,20 @@
         'voice.onyx': 'Onyx — grave',
         'voice.nova': 'Nova — défaut',
         'voice.sage': 'Sage — posé',
-        'voice.shimmer': 'Shimmer — doux'
+        'voice.shimmer': 'Shimmer — doux',
+        'desktop.nudge_title': 'Ouvre Céleste sur ton téléphone',
+        'desktop.nudge_body': 'Sur ordinateur, on revient peu. Sur mobile, Céleste devient un rituel quotidien. Envoie-toi le lien, ou scanne le QR.',
+        'desktop.nudge_homescreen': 'Sur ton téléphone : une fois l’app ouverte, ajoute-la à l’écran d’accueil pour un accès comme une vraie app.',
+        'desktop.nudge_qr_hint': 'Scanne avec l’appareil photo de ton téléphone',
+        'desktop.nudge_whatsapp': 'Envoyer via WhatsApp',
+        'desktop.nudge_email': 'M’envoyer par email',
+        'desktop.nudge_copy': 'Copier le lien',
+        'desktop.nudge_copied': 'Lien copié ✦',
+        'desktop.nudge_install_pc': 'Installer aussi sur cet ordinateur',
+        'desktop.nudge_dismiss': 'Plus tard',
+        'desktop.wa_text': 'Voici mon lien Céleste — à ouvrir sur mon téléphone pour y revenir chaque jour : {url}',
+        'desktop.mail_subject': 'Mon lien Céleste (à ouvrir sur téléphone)',
+        'desktop.mail_body': 'Ouvre Céleste sur ton téléphone pour y revenir facilement chaque jour :\n\n{url}\n\nAstuce : une fois ouvert, ajoute l’app à l’écran d’accueil.'
       },
       en: {
         'reader.close': 'Close manuscript',
@@ -817,7 +830,20 @@
         'voice.onyx': 'Onyx — deep',
         'voice.nova': 'Nova — default',
         'voice.sage': 'Sage — steady',
-        'voice.shimmer': 'Shimmer — soft'
+        'voice.shimmer': 'Shimmer — soft',
+        'desktop.nudge_title': 'Open Céleste on your phone',
+        'desktop.nudge_body': 'On a computer, people rarely come back. On mobile, Céleste becomes a daily ritual. Send yourself the link, or scan the QR.',
+        'desktop.nudge_homescreen': 'On your phone: once the app is open, Add to Home Screen for app-like access.',
+        'desktop.nudge_qr_hint': 'Scan with your phone camera',
+        'desktop.nudge_whatsapp': 'Send via WhatsApp',
+        'desktop.nudge_email': 'Email me the link',
+        'desktop.nudge_copy': 'Copy link',
+        'desktop.nudge_copied': 'Link copied ✦',
+        'desktop.nudge_install_pc': 'Also install on this computer',
+        'desktop.nudge_dismiss': 'Later',
+        'desktop.wa_text': 'Here’s my Céleste link — open it on my phone so I can come back every day: {url}',
+        'desktop.mail_subject': 'My Céleste link (open on phone)',
+        'desktop.mail_body': 'Open Céleste on your phone for an easy daily return:\n\n{url}\n\nTip: once open, Add to Home Screen.'
       },
       es: {
         'reader.close': 'Cerrar el manuscrito',
@@ -899,7 +925,20 @@
         'voice.onyx': 'Onyx — grave',
         'voice.nova': 'Nova — predeterminada',
         'voice.sage': 'Sage — serena',
-        'voice.shimmer': 'Shimmer — suave'
+        'voice.shimmer': 'Shimmer — suave',
+        'desktop.nudge_title': 'Abre Céleste en tu teléfono',
+        'desktop.nudge_body': 'En el ordenador casi no se vuelve. En el móvil, Céleste se vuelve un ritual diario. Envíate el enlace o escanea el QR.',
+        'desktop.nudge_homescreen': 'En el teléfono: cuando abras la app, añádela a la pantalla de inicio para usarla como una app.',
+        'desktop.nudge_qr_hint': 'Escanea con la cámara del teléfono',
+        'desktop.nudge_whatsapp': 'Enviar por WhatsApp',
+        'desktop.nudge_email': 'Enviarme por email',
+        'desktop.nudge_copy': 'Copiar enlace',
+        'desktop.nudge_copied': 'Enlace copiado ✦',
+        'desktop.nudge_install_pc': 'Instalar también en este ordenador',
+        'desktop.nudge_dismiss': 'Más tarde',
+        'desktop.wa_text': 'Aquí tienes mi enlace Céleste — ábrelo en mi teléfono para volver cada día: {url}',
+        'desktop.mail_subject': 'Mi enlace Céleste (abrir en el teléfono)',
+        'desktop.mail_body': 'Abre Céleste en tu teléfono para volver fácilmente cada día:\n\n{url}\n\nConsejo: una vez abierta, añádela a la pantalla de inicio.'
       }
     };
     Object.keys(MORE).forEach(function (code) {
@@ -1125,7 +1164,11 @@
       if (state.user.language || state.user.locale) {
         applyLang(state.user.language || state.user.locale, true);
       }
-      state.screen = localStorage.getItem('cercle.installedHint') ? 'app' : 'install';
+      if (isDesktopClient() || localStorage.getItem('cercle.installedHint')) {
+        state.screen = 'app';
+      } else {
+        state.screen = 'install';
+      }
     }
   }
   function saveUser() {
@@ -1246,6 +1289,7 @@
     stopIaSpeak();
     stopMsTtsAudio();
     try { endIaLive({ reason: 'auth' }); } catch (e0) { /* ignore */ }
+    closeDesktopPhoneNudge();
     state.user = null;
     state.screen = 'login';
     state.account = false;
@@ -1299,7 +1343,8 @@
       state.screen = 'onboarding';
       return;
     }
-    if (localStorage.getItem('cercle.installedHint')) {
+    /* Desktop: skip mobile “add to home screen” — phone nudge modal instead. */
+    if (isDesktopClient() || localStorage.getItem('cercle.installedHint')) {
       state.screen = 'app';
     } else {
       state.screen = 'install';
@@ -1352,7 +1397,7 @@
     return /partenaire/i.test(err);
   }
   function goAppOrInstall() {
-    if (localStorage.getItem('cercle.installedHint')) state.screen = 'app';
+    if (isDesktopClient() || localStorage.getItem('cercle.installedHint')) state.screen = 'app';
     else state.screen = 'install';
   }
   function monthsPaid() {
@@ -1687,6 +1732,172 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  /* ——— Desktop → phone retention nudge ——— */
+  var PROD_APP_URL = 'https://cercle-celeste-production.up.railway.app/';
+  var DESKTOP_NUDGE_LS = 'cercle.desktopPhoneNudge.until';
+  var DESKTOP_NUDGE_SS = 'cercle.desktopPhoneNudge.sessionDismiss';
+  var DESKTOP_NUDGE_DAYS = 7;
+  var _desktopNudgeOpen = false;
+  var _desktopNudgeTimer = null;
+
+  function isDesktopClient() {
+    try {
+      var ua = String(navigator.userAgent || '');
+      if (/android|webos|iphone|ipod|blackberry|iemobile|opera mini/i.test(ua)) return false;
+      /* iPadOS 13+ may report as Macintosh with touch */
+      if (/ipad/i.test(ua)) return false;
+      if (navigator.platform === 'MacIntel' && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1) {
+        return false;
+      }
+      if (typeof window.matchMedia === 'function') {
+        if (window.matchMedia('(pointer: coarse)').matches && window.matchMedia('(max-width: 1024px)').matches) {
+          return false;
+        }
+      }
+      return true;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function canonicalAppUrl() {
+    try {
+      var origin = String(location.origin || '').replace(/\/$/, '');
+      if (/cercle-celeste/i.test(origin) || /railway\.app/i.test(origin)) {
+        return origin + '/';
+      }
+    } catch (e0) { /* ignore */ }
+    return PROD_APP_URL;
+  }
+
+  function isDesktopPhoneNudgeDismissed() {
+    try {
+      if (sessionStorage.getItem(DESKTOP_NUDGE_SS) === '1') return true;
+      var until = Number(localStorage.getItem(DESKTOP_NUDGE_LS) || 0);
+      if (until && Date.now() < until) return true;
+    } catch (e) { /* ignore */ }
+    return false;
+  }
+
+  function dismissDesktopPhoneNudge(persistDays) {
+    try {
+      sessionStorage.setItem(DESKTOP_NUDGE_SS, '1');
+      if (persistDays) {
+        localStorage.setItem(
+          DESKTOP_NUDGE_LS,
+          String(Date.now() + DESKTOP_NUDGE_DAYS * 24 * 60 * 60 * 1000)
+        );
+      }
+    } catch (e) { /* ignore */ }
+    closeDesktopPhoneNudge();
+  }
+
+  function closeDesktopPhoneNudge() {
+    _desktopNudgeOpen = false;
+    var el = document.getElementById('desktop-phone-nudge');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  function qrCodeImageUrl(data) {
+    return 'https://api.qrserver.com/v1/create-qr-code/?size=168x168&ecc=M&margin=8&data=' +
+      encodeURIComponent(data);
+  }
+
+  function showDesktopPhoneNudge() {
+    if (_desktopNudgeOpen || !isDesktopClient() || isDesktopPhoneNudgeDismissed()) return;
+    if (!state.user || state.screen !== 'app') return;
+    closeDesktopPhoneNudge();
+    _desktopNudgeOpen = true;
+    var url = canonicalAppUrl();
+    var waText = tf('desktop.wa_text', { url: url });
+    var mailBody = tf('desktop.mail_body', { url: url });
+    var mailSubject = t('desktop.mail_subject');
+    var userEmail = (state.user && state.user.email) ? String(state.user.email) : '';
+    var mailto = 'mailto:' + encodeURIComponent(userEmail) +
+      '?subject=' + encodeURIComponent(mailSubject) +
+      '&body=' + encodeURIComponent(mailBody);
+    var waHref = 'https://wa.me/?text=' + encodeURIComponent(waText);
+    var installPc = state.deferredPrompt
+      ? ('<button type="button" class="btn ghost" id="desktop-nudge-install-pc">' +
+        t('desktop.nudge_install_pc') + '</button>')
+      : '';
+
+    var el = document.createElement('div');
+    el.id = 'desktop-phone-nudge';
+    el.className = 'desktop-phone-nudge';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'desktop-phone-nudge-title');
+    el.innerHTML =
+      '<div class="desktop-phone-nudge-sheet card stack">' +
+        '<h2 id="desktop-phone-nudge-title">' + t('desktop.nudge_title') + '</h2>' +
+        '<p>' + t('desktop.nudge_body') + '</p>' +
+        '<div class="desktop-nudge-qr">' +
+          '<img src="' + escapeHtml(qrCodeImageUrl(url)) + '" width="168" height="168" alt="QR" loading="lazy">' +
+          '<p class="muted desktop-nudge-qr-hint">' + t('desktop.nudge_qr_hint') + '</p>' +
+        '</div>' +
+        '<div class="stack desktop-nudge-ctas">' +
+          '<a class="btn" id="desktop-nudge-wa" href="' + escapeHtml(waHref) + '" target="_blank" rel="noopener noreferrer">' +
+            t('desktop.nudge_whatsapp') + '</a>' +
+          '<a class="btn ghost" id="desktop-nudge-mail" href="' + escapeHtml(mailto) + '">' +
+            t('desktop.nudge_email') + '</a>' +
+          '<button type="button" class="btn ghost" id="desktop-nudge-copy">' + t('desktop.nudge_copy') + '</button>' +
+          installPc +
+        '</div>' +
+        '<p class="muted desktop-nudge-homescreen">' + t('desktop.nudge_homescreen') + '</p>' +
+        '<button type="button" class="link" id="desktop-nudge-dismiss">' + t('desktop.nudge_dismiss') + '</button>' +
+      '</div>';
+    document.body.appendChild(el);
+    el.addEventListener('click', function (ev) {
+      if (ev.target === el) dismissDesktopPhoneNudge(true);
+    });
+    var dismiss = document.getElementById('desktop-nudge-dismiss');
+    if (dismiss) dismiss.onclick = function () { dismissDesktopPhoneNudge(true); };
+    var copyBtn = document.getElementById('desktop-nudge-copy');
+    if (copyBtn) {
+      copyBtn.onclick = function () {
+        function done() {
+          copyBtn.textContent = t('desktop.nudge_copied');
+          setTimeout(function () { copyBtn.textContent = t('desktop.nudge_copy'); }, 1800);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(done).catch(function () {
+            window.prompt(t('desktop.nudge_copy'), url);
+          });
+        } else {
+          window.prompt(t('desktop.nudge_copy'), url);
+          done();
+        }
+      };
+    }
+    var installBtn = document.getElementById('desktop-nudge-install-pc');
+    if (installBtn && state.deferredPrompt) {
+      installBtn.onclick = function () {
+        var dp = state.deferredPrompt;
+        if (!dp) return;
+        dp.prompt();
+        dp.userChoice.then(function () {
+          state.deferredPrompt = null;
+          try { localStorage.setItem('cercle.installedHint', '1'); } catch (e1) {}
+          installBtn.remove();
+        }).catch(function () {});
+      };
+    }
+  }
+
+  function maybeShowDesktopPhoneNudge() {
+    if (_desktopNudgeTimer) {
+      clearTimeout(_desktopNudgeTimer);
+      _desktopNudgeTimer = null;
+    }
+    if (!isDesktopClient() || !state.user || state.screen !== 'app') return;
+    if (isDesktopPhoneNudgeDismissed() || _desktopNudgeOpen) return;
+    _desktopNudgeTimer = setTimeout(function () {
+      _desktopNudgeTimer = null;
+      showDesktopPhoneNudge();
+    }, 500);
   }
 
   function trimIaMessages(list) {
@@ -5608,6 +5819,7 @@
     var savedMainScroll = scrollEl ? scrollEl.scrollTop : null;
     var savedPdfScroll = pdfBodyEl ? pdfBodyEl.scrollTop : null;
     var html = '';
+    if (state.screen === 'install' && isDesktopClient()) state.screen = 'app';
     if (state.screen === 'login') html = loginView();
     else if (state.screen === 'onboarding') html = onboardingView();
     else if (state.screen === 'install') html = installView();
@@ -5640,6 +5852,7 @@
     }
     var logEl = document.getElementById('ia-log');
     if (logEl) logEl.scrollTop = logEl.scrollHeight;
+    maybeShowDesktopPhoneNudge();
   }
 
   function bind() {
@@ -5947,6 +6160,7 @@
     if (lo) lo.onclick = function () {
       stopIaSpeak();
       try { endIaLive({ reason: 'logout' }); } catch (e0) { /* ignore */ }
+      closeDesktopPhoneNudge();
       localStorage.removeItem('cercle.user');
       state.user = null; state.screen = 'login'; state.account = false; state.tab = 'natal';
       state.iaBusy = false; state.iaLoaded = false; state.iaMessages = [];
@@ -5991,6 +6205,6 @@
     render();
   });
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js?v=72').catch(function () {});
+    navigator.serviceWorker.register('/sw.js?v=75').catch(function () {});
   }
 })();
