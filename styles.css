@@ -242,6 +242,19 @@ h1 span { color: var(--gold-light); }
   background-repeat: no-repeat;
   padding-right: 2.2rem;
 }
+.voice-picker-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.voice-picker-row select {
+  flex: 1;
+  min-width: 0;
+}
+.voice-picker-row .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 [dir="rtl"] .lang-select {
   background-position: 18px calc(50% - 3px), 12px calc(50% - 3px);
   padding-right: 1rem;

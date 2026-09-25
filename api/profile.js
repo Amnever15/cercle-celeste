@@ -16,6 +16,33 @@ const GENDERS = ['femme', 'homme', 'autre'];
 const MAX_PROFILE_EDITS = 3;
 const MAX_PARTNER_EDITS = 3;
 
+/**
+ * OpenAI TTS voices for model `tts-1` / `tts-1-hd`
+ * (ballad / verse / marin / cedar need gpt-4o-mini-tts — not listed here).
+ */
+const TTS_VOICES = [
+  'alloy',
+  'ash',
+  'coral',
+  'echo',
+  'fable',
+  'onyx',
+  'nova',
+  'sage',
+  'shimmer'
+];
+const DEFAULT_TTS_VOICE = 'nova';
+
+function normalizeTtsVoice(v) {
+  const id = trim(v).toLowerCase();
+  if (TTS_VOICES.indexOf(id) >= 0) return id;
+  return DEFAULT_TTS_VOICE;
+}
+
+function ttsVoiceOf(c) {
+  return normalizeTtsVoice(c && c.ttsVoice);
+}
+
 function trim(s) {
   return String(s == null ? '' : s).trim();
 }
@@ -116,6 +143,7 @@ function profileFields(c) {
       language: language.DEFAULT,
       locale: language.DEFAULT,
       languageLocked: false,
+      ttsVoice: DEFAULT_TTS_VOICE,
       birthDate: '',
       birthTime: '',
       birthPlace: '',
@@ -160,6 +188,7 @@ function profileFields(c) {
     language: lang,
     locale: lang,
     languageLocked: !!c.languageLocked,
+    ttsVoice: ttsVoiceOf(c),
     birthDate: birthDate,
     birthTime: birthTime,
     birthPlace: birthPlace,
@@ -182,6 +211,22 @@ function profileFields(c) {
     natalError: c.natalError || null,
     natalPagesEst: c.natalPagesEst || null
   }, partnerFields(c));
+}
+
+/** Persiste la voix OpenAI TTS (Divin) — indépendant des edits naissance. */
+function saveTtsVoice(c, body) {
+  if (!c) return { ok: false, error: 'compte inconnu' };
+  const raw = body && body.ttsVoice;
+  if (raw == null || String(raw).trim() === '') {
+    return { ok: false, error: 'ttsVoice requis' };
+  }
+  const id = trim(raw).toLowerCase();
+  if (TTS_VOICES.indexOf(id) < 0) {
+    return { ok: false, error: 'Voix inconnue. Choisis une voix OpenAI TTS valide.' };
+  }
+  c.ttsVoice = id;
+  c.ttsVoiceUpdatedAt = new Date().toISOString();
+  return { ok: true, ttsVoice: id };
 }
 
 /** Persiste language/locale (ISO) — indépendant des edits naissance. Verrouillé après premier réglage. */
@@ -396,7 +441,11 @@ module.exports = {
   GENDERS,
   MAX_PROFILE_EDITS,
   MAX_PARTNER_EDITS,
+  TTS_VOICES,
+  DEFAULT_TTS_VOICE,
   normalizeGender,
+  normalizeTtsVoice,
+  ttsVoiceOf,
   profileFields,
   partnerFields,
   isComplete,
@@ -406,6 +455,7 @@ module.exports = {
   saveProfile,
   savePartnerProfile,
   saveLanguage,
+  saveTtsVoice,
   kindsNeedingProfile,
   requireForGenerate
 };

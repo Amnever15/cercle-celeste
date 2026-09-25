@@ -2,14 +2,14 @@
  * Full-manuscript OpenAI TTS (Divin) with durable disk cache.
  *
  * Quota choice: does NOT consume plans.TTS_CHARS_MONTH (short IA bubble TTS).
- * First generation for a given content hash hits OpenAI once; later listens
+ * First generation for a given content hash + voice hits OpenAI once; later listens
  * stream the cached mp3 (cost ~0). Soft limit on first-gen: none — Divin core.
  *
  * Cache path (volume when STORE_PATH/DATA_DIR set):
- *   {generated}/tts/{safeEmail}/{kind}-{periodKey}-{hash12}.mp3
+ *   {generated}/tts/{safeEmail}/{kind}-{periodKey}-{voice}-{hash12}.mp3
  *   + sidecar .meta.json
  *
- * Invalidation: content hash of speakable text (regenerated manuscript ⇒ new hash).
+ * Invalidation: content hash of speakable text, or voice change ⇒ new cache key.
  */
 const fs = require('fs');
 const path = require('path');
@@ -18,10 +18,11 @@ const natalGen = require('./natal-generate');
 const periodGen = require('./period-generate');
 const coupleGen = require('./couple-generate');
 const ultimeGen = require('./ultime-generate');
+const profile = require('./profile');
 
 const KINDS = ['natal', 'mois', 'jour', 'couple', 'ultime'];
 const OPENAI_CHUNK = 3800;
-const VOICE = 'nova';
+const DEFAULT_VOICE = profile.DEFAULT_TTS_VOICE || 'nova';
 const MODEL = 'tts-1';
 
 /** In-memory jobs: key → { status, done, total, error, audioPath, hash, startedAt } */
@@ -227,9 +228,10 @@ function resolveSource(contact, kind) {
   return null;
 }
 
-function cachePaths(email, kind, periodKey, hash) {
+function cachePaths(email, kind, periodKey, hash, voice) {
   var dir = path.join(ttsRoot(), safeEmailFile(email));
-  var base = safeKeyPart(kind) + '-' + safeKeyPart(periodKey) + '-' + safeKeyPart(hash);
+  var voicePart = safeKeyPart(profile.normalizeTtsVoice(voice));
+  var base = safeKeyPart(kind) + '-' + safeKeyPart(periodKey) + '-' + voicePart + '-' + safeKeyPart(hash);
   return {
     dir: dir,
     mp3: path.join(dir, base + '.mp3'),
@@ -237,8 +239,8 @@ function cachePaths(email, kind, periodKey, hash) {
   };
 }
 
-function jobKey(email, kind) {
-  return String(email || '').toLowerCase().trim() + '|' + kind;
+function jobKey(email, kind, voice) {
+  return String(email || '').toLowerCase().trim() + '|' + kind + '|' + profile.normalizeTtsVoice(voice);
 }
 
 function readMeta(metaPath) {
@@ -313,7 +315,8 @@ function openaiKey() {
   ).trim();
 }
 
-async function synthesizeChunk(text, key, httpNatal) {
+async function synthesizeChunk(text, key, httpNatal, voice) {
+  var voiceId = profile.normalizeTtsVoice(voice);
   var resp = await httpNatal.fetchWithTimeout(
     'https://api.openai.com/v1/audio/speech',
     {
@@ -324,7 +327,7 @@ async function synthesizeChunk(text, key, httpNatal) {
       },
       body: JSON.stringify({
         model: MODEL,
-        voice: VOICE,
+        voice: voiceId,
         input: text,
         response_format: 'mp3'
       })
@@ -341,16 +344,17 @@ async function synthesizeChunk(text, key, httpNatal) {
   return Buffer.from(await resp.arrayBuffer());
 }
 
-async function runJob(email, kind, source, hash, paths, log) {
-  var jk = jobKey(email, kind);
+async function runJob(email, kind, source, hash, paths, log, voice) {
+  var voiceId = profile.normalizeTtsVoice(voice);
+  var jk = jobKey(email, kind, voiceId);
   var chunks = chunkText(source.text, OPENAI_CHUNK);
   var key = openaiKey();
   if (!key) {
-    jobs[jk] = { status: 'error', done: 0, total: 0, error: 'Voix Céleste indisponible (clé OpenAI manquante côté serveur).', hash: hash };
+    jobs[jk] = { status: 'error', done: 0, total: 0, error: 'Voix Céleste indisponible (clé OpenAI manquante côté serveur).', hash: hash, voice: voiceId };
     return;
   }
   if (!chunks.length) {
-    jobs[jk] = { status: 'error', done: 0, total: 0, error: 'Manuscrit vide — rien à lire à voix haute.', hash: hash };
+    jobs[jk] = { status: 'error', done: 0, total: 0, error: 'Manuscrit vide — rien à lire à voix haute.', hash: hash, voice: voiceId };
     return;
   }
 
@@ -360,6 +364,7 @@ async function runJob(email, kind, source, hash, paths, log) {
     total: chunks.length,
     error: null,
     hash: hash,
+    voice: voiceId,
     audioPath: paths.mp3,
     startedAt: Date.now()
   };
@@ -369,13 +374,13 @@ async function runJob(email, kind, source, hash, paths, log) {
     var parts = [];
     for (var i = 0; i < chunks.length; i++) {
       if (jobs[jk] && jobs[jk].cancel) {
-        jobs[jk] = { status: 'error', done: i, total: chunks.length, error: 'Annulé.', hash: hash };
+        jobs[jk] = { status: 'error', done: i, total: chunks.length, error: 'Annulé.', hash: hash, voice: voiceId };
         return;
       }
-      var buf = await synthesizeChunk(chunks[i], key, httpNatal);
+      var buf = await synthesizeChunk(chunks[i], key, httpNatal, voiceId);
       parts.push(buf);
       jobs[jk].done = i + 1;
-      if (log) log('MS-TTS chunk ' + (i + 1) + '/' + chunks.length + ' ' + email + ' ' + kind);
+      if (log) log('MS-TTS chunk ' + (i + 1) + '/' + chunks.length + ' ' + email + ' ' + kind + ' voice=' + voiceId);
     }
     ensureDir(paths.dir);
     var audio = Buffer.concat(parts);
@@ -389,7 +394,7 @@ async function runJob(email, kind, source, hash, paths, log) {
       chunks: chunks.length,
       bytes: audio.length,
       model: MODEL,
-      voice: VOICE,
+      voice: voiceId,
       createdAt: new Date().toISOString(),
       sourcePath: source.sourcePath || null,
       generatedAt: source.generatedAt || null,
@@ -401,19 +406,21 @@ async function runJob(email, kind, source, hash, paths, log) {
       total: chunks.length,
       error: null,
       hash: hash,
+      voice: voiceId,
       audioPath: paths.mp3,
       finishedAt: Date.now()
     };
-    if (log) log('MS-TTS ready ' + email + ' ' + kind + ' chunks=' + chunks.length + ' bytes=' + audio.length);
+    if (log) log('MS-TTS ready ' + email + ' ' + kind + ' voice=' + voiceId + ' chunks=' + chunks.length + ' bytes=' + audio.length);
   } catch (e) {
     var msg = (e && e.message) || String(e);
-    if (log) log('MS-TTS fail ' + email + ' ' + kind + ' ' + msg);
+    if (log) log('MS-TTS fail ' + email + ' ' + kind + ' voice=' + voiceId + ' ' + msg);
     jobs[jk] = {
       status: 'error',
       done: (jobs[jk] && jobs[jk].done) || 0,
       total: chunks.length,
       error: 'La voix Céleste ne répond pas pour le moment. Réessaie dans un instant.',
-      hash: hash
+      hash: hash,
+      voice: voiceId
     };
   }
 }
@@ -438,12 +445,13 @@ function ensureManuscriptTts(contact, kind, opts) {
     return { ok: false, error: 'Manuscrit introuvable ou vide.' };
   }
 
+  var voice = profile.ttsVoiceOf(contact);
   var hash = sha12(source.text);
-  var paths = cachePaths(contact.email, kind, source.periodKey, hash);
+  var paths = cachePaths(contact.email, kind, source.periodKey, hash, voice);
   var note =
     'Full-manuscript TTS is not counted against the short IA chat TTS quota (180k chars/mo). ' +
     'Audio is cached on disk after the first successful generation; later listens cost ~0. ' +
-    'Regenerating the manuscript changes the content hash and invalidates the cache.';
+    'Regenerating the manuscript or changing the account TTS voice changes the cache key.';
 
   if (fileExists(paths.mp3)) {
     var meta = readMeta(paths.meta) || {};
@@ -455,6 +463,7 @@ function ensureManuscriptTts(contact, kind, opts) {
       progress: { done: meta.chunks || 1, total: meta.chunks || 1 },
       audioReady: true,
       hash: hash,
+      voice: voice,
       chars: source.text.length,
       chunks: meta.chunks || null,
       periodKey: source.periodKey,
@@ -462,7 +471,7 @@ function ensureManuscriptTts(contact, kind, opts) {
     };
   }
 
-  var jk = jobKey(contact.email, kind);
+  var jk = jobKey(contact.email, kind, voice);
   var job = jobs[jk];
   if (job && job.status === 'generating' && job.hash === hash) {
     return {
@@ -473,6 +482,7 @@ function ensureManuscriptTts(contact, kind, opts) {
       progress: { done: job.done || 0, total: job.total || 0 },
       audioReady: false,
       hash: hash,
+      voice: voice,
       chars: source.text.length,
       periodKey: source.periodKey,
       note: note
@@ -487,6 +497,7 @@ function ensureManuscriptTts(contact, kind, opts) {
       progress: { done: job.total || 1, total: job.total || 1 },
       audioReady: true,
       hash: hash,
+      voice: voice,
       chars: source.text.length,
       periodKey: source.periodKey,
       note: note
@@ -503,11 +514,12 @@ function ensureManuscriptTts(contact, kind, opts) {
     total: chunkText(source.text, OPENAI_CHUNK).length,
     error: null,
     hash: hash,
+    voice: voice,
     audioPath: paths.mp3,
     startedAt: Date.now()
   };
   setImmediate(function () {
-    runJob(contact.email, kind, source, hash, paths, log).catch(function (e) {
+    runJob(contact.email, kind, source, hash, paths, log, voice).catch(function (e) {
       log('MS-TTS unhandled ' + ((e && e.message) || e));
     });
   });
@@ -520,6 +532,7 @@ function ensureManuscriptTts(contact, kind, opts) {
     progress: { done: 0, total: jobs[jk].total || 0 },
     audioReady: false,
     hash: hash,
+    voice: voice,
     chars: source.text.length,
     periodKey: source.periodKey,
     note: note
@@ -531,21 +544,22 @@ function getCachedAudio(contact, kind) {
   if (KINDS.indexOf(kind) < 0 || !contact) return null;
   var source = resolveSource(contact, kind);
   if (!source || !source.text) return null;
+  var voice = profile.ttsVoiceOf(contact);
   var hash = sha12(source.text);
-  var paths = cachePaths(contact.email, kind, source.periodKey, hash);
+  var paths = cachePaths(contact.email, kind, source.periodKey, hash, voice);
   if (!fileExists(paths.mp3)) {
-    var jk = jobKey(contact.email, kind);
+    var jk = jobKey(contact.email, kind, voice);
     var job = jobs[jk];
     if (job && job.status === 'ready' && job.hash === hash && fileExists(job.audioPath)) {
-      return { path: job.audioPath, hash: hash, type: 'audio/mpeg' };
+      return { path: job.audioPath, hash: hash, voice: voice, type: 'audio/mpeg' };
     }
     return null;
   }
-  return { path: paths.mp3, hash: hash, type: 'audio/mpeg' };
+  return { path: paths.mp3, hash: hash, voice: voice, type: 'audio/mpeg' };
 }
 
-function getJobStatus(email, kind) {
-  return jobs[jobKey(email, kind)] || null;
+function getJobStatus(email, kind, voice) {
+  return jobs[jobKey(email, kind, voice || DEFAULT_VOICE)] || null;
 }
 
 module.exports = {

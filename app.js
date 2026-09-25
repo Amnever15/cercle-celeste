@@ -678,7 +678,22 @@
         'ms.tts_lock_aria': 'Réservé au plan Divin',
         'ms.tts_err': 'Impossible de préparer l’audio du manuscrit. Réessaie dans un instant.',
         'ms.tts_need_file': 'Le manuscrit n’est pas encore disponible à l’écoute.',
-        'ms.tts_aria': 'Écouter le manuscrit entier'
+        'ms.tts_aria': 'Écouter le manuscrit entier',
+        'account.voice': 'Voix de Céleste',
+        'account.voice_hint': 'Choisis la voix OpenAI pour l’écoute IA et les manuscrits.',
+        'account.voice_test': 'Tester',
+        'account.voice_testing': 'Écoute…',
+        'account.voice_saved': 'Voix enregistrée.',
+        'account.voice_lock': 'Voix Céleste · plan Divin',
+        'voice.alloy': 'Alloy — neutre',
+        'voice.ash': 'Ash — calme',
+        'voice.coral': 'Coral — chaleureux',
+        'voice.echo': 'Echo — clair',
+        'voice.fable': 'Fable — narratif',
+        'voice.onyx': 'Onyx — grave',
+        'voice.nova': 'Nova — défaut',
+        'voice.sage': 'Sage — posé',
+        'voice.shimmer': 'Shimmer — doux'
       },
       en: {
         'ia.mic_stop': 'Stop dictation',
@@ -696,7 +711,22 @@
         'ms.tts_lock_aria': 'Reserved for Divin plan',
         'ms.tts_err': 'Could not prepare the manuscript audio. Try again in a moment.',
         'ms.tts_need_file': 'This manuscript is not ready to listen yet.',
-        'ms.tts_aria': 'Listen to the full manuscript'
+        'ms.tts_aria': 'Listen to the full manuscript',
+        'account.voice': 'Céleste’s voice',
+        'account.voice_hint': 'Choose the OpenAI voice for AI listen and manuscripts.',
+        'account.voice_test': 'Preview',
+        'account.voice_testing': 'Playing…',
+        'account.voice_saved': 'Voice saved.',
+        'account.voice_lock': 'Céleste voice · Divin plan',
+        'voice.alloy': 'Alloy — neutral',
+        'voice.ash': 'Ash — calm',
+        'voice.coral': 'Coral — warm',
+        'voice.echo': 'Echo — clear',
+        'voice.fable': 'Fable — narrative',
+        'voice.onyx': 'Onyx — deep',
+        'voice.nova': 'Nova — default',
+        'voice.sage': 'Sage — steady',
+        'voice.shimmer': 'Shimmer — soft'
       },
       es: {
         'ia.mic_stop': 'Detener el dictado',
@@ -718,7 +748,22 @@
         'ms.tts_lock_aria': 'Reservado al plan Divin',
         'ms.tts_err': 'No se pudo preparar el audio del manuscrito. Inténtalo en un momento.',
         'ms.tts_need_file': 'Este manuscrito aún no está listo para escuchar.',
-        'ms.tts_aria': 'Escuchar el manuscrito completo'
+        'ms.tts_aria': 'Escuchar el manuscrito completo',
+        'account.voice': 'Voz de Céleste',
+        'account.voice_hint': 'Elige la voz OpenAI para la escucha IA y los manuscritos.',
+        'account.voice_test': 'Probar',
+        'account.voice_testing': 'Escuchando…',
+        'account.voice_saved': 'Voz guardada.',
+        'account.voice_lock': 'Voz Céleste · plan Divin',
+        'voice.alloy': 'Alloy — neutra',
+        'voice.ash': 'Ash — calmada',
+        'voice.coral': 'Coral — cálida',
+        'voice.echo': 'Echo — clara',
+        'voice.fable': 'Fable — narrativa',
+        'voice.onyx': 'Onyx — grave',
+        'voice.nova': 'Nova — predeterminada',
+        'voice.sage': 'Sage — serena',
+        'voice.shimmer': 'Shimmer — suave'
       }
     };
     Object.keys(MORE).forEach(function (code) {
@@ -1239,6 +1284,127 @@
     if (isPausedPaid()) return false;
     return !!state.user.canIa;
   }
+
+  /* OpenAI TTS voices for tts-1 (Divin account picker). Default: nova. */
+  var TTS_VOICES = ['alloy', 'ash', 'coral', 'echo', 'fable', 'onyx', 'nova', 'sage', 'shimmer'];
+  var DEFAULT_TTS_VOICE = 'nova';
+  var TTS_PREVIEW_SAMPLE =
+    'Bonjour, je suis Céleste. Voici un aperçu de ma voix pour t’accompagner dans tes manuscrits.';
+
+  function normalizeTtsVoice(v) {
+    var id = String(v || '').trim().toLowerCase();
+    return TTS_VOICES.indexOf(id) >= 0 ? id : DEFAULT_TTS_VOICE;
+  }
+
+  function accountTtsVoice() {
+    return normalizeTtsVoice(state.user && state.user.ttsVoice);
+  }
+
+  function voiceSelectHtml(id, selected) {
+    var cur = normalizeTtsVoice(selected);
+    var opts = TTS_VOICES.map(function (v) {
+      return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' +
+        t('voice.' + v) + '</option>';
+    }).join('');
+    return '<select class="input lang-select" id="' + id + '" aria-label="' + t('account.voice') + '">' +
+      opts + '</select>';
+  }
+
+  function accountVoiceBlockHtml() {
+    if (!canIa()) return '';
+    return '<div class="acct-block" id="acct-voice-block">' +
+      '<div class="label">' + t('account.voice') + '</div>' +
+      '<p class="muted acct-hint">' + t('account.voice_hint') + '</p>' +
+      '<div class="voice-picker-row">' +
+        voiceSelectHtml('acct-tts-voice', accountTtsVoice()) +
+        '<button class="btn ghost" type="button" id="acct-tts-preview">' + t('account.voice_test') + '</button>' +
+      '</div>' +
+      '<p class="muted acct-hint" id="acct-tts-voice-status" hidden></p>' +
+    '</div>';
+  }
+
+  function saveAccountTtsVoice(voiceId, opts) {
+    opts = opts || {};
+    if (!state.user || !state.user.token || !canIa()) return Promise.resolve(null);
+    var id = normalizeTtsVoice(voiceId);
+    state.user.ttsVoice = id;
+    saveUser();
+    return fetch(API + '/profile', {
+      method: 'POST',
+      headers: authHeaders(true),
+      body: JSON.stringify({
+        email: state.user.email,
+        ttsVoice: id
+      })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; }); })
+      .then(function (res) {
+        if (res.status === 401) {
+          forceReLogin((res.data && res.data.error) || 'Session expirée.');
+          return null;
+        }
+        if (res.ok && res.data && res.data.contact) applyAccess(res.data.contact);
+        else if (!res.ok) throw new Error((res.data && res.data.error) || t('ia.tts_err'));
+        if (opts.onOk) opts.onOk(id);
+        return id;
+      });
+  }
+
+  function previewAccountTtsVoice() {
+    if (!canIa() || !state.user || !state.user.token) {
+      try { window.alert(t('ia.tts_need_auth')); } catch (e) { /* ignore */ }
+      return;
+    }
+    var btn = document.getElementById('acct-tts-preview');
+    var sel = document.getElementById('acct-tts-voice');
+    var voiceId = normalizeTtsVoice(sel ? sel.value : accountTtsVoice());
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = t('account.voice_testing');
+    }
+    saveAccountTtsVoice(voiceId)
+      .then(function () {
+        stopIaSpeak();
+        var reqId = _iaSpeakReq;
+        return fetch(API + '/tts', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({
+            email: state.user && state.user.email,
+            text: TTS_PREVIEW_SAMPLE,
+            token: state.user && state.user.token
+          })
+        }).then(function (res) {
+          return { res: res, reqId: reqId };
+        });
+      })
+      .then(function (pack) {
+        if (!pack || !pack.res) return null;
+        var res = pack.res;
+        if (!res.ok) {
+          return res.json().catch(function () { return {}; }).then(function (j) {
+            throw new Error((j && j.error) || t('ia.tts_err'));
+          });
+        }
+        return res.blob().then(function (blob) {
+          return { blob: blob, reqId: pack.reqId };
+        });
+      })
+      .then(function (pack) {
+        if (!pack || !pack.blob || !pack.blob.size) return;
+        playIaAudioBlob(pack.blob, null, pack.reqId);
+      })
+      .catch(function (err) {
+        try { window.alert((err && err.message) || t('ia.tts_err')); } catch (e1) { /* ignore */ }
+      })
+      .finally(function () {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = t('account.voice_test');
+        }
+      });
+  }
+
   function iaLeft() {
     if (!state.user || isPausedPaid()) return 0;
     return state.user.iaLeft == null ? 0 : state.user.iaLeft;
@@ -4484,6 +4650,7 @@
       '</div>' +
       downloadBlock +
       profileBlock +
+      accountVoiceBlockHtml() +
       '<div class="acct-block">' +
         '<div class="label">' + t('account.language') + '</div>' +
         '<p class="acct-value">' + tf('account.language_value', { lang: langNativeLabel((state.user && (state.user.language || state.user.locale)) || state.lang) }) + '</p>' +
@@ -4873,6 +5040,24 @@
     if (oa) oa.onclick = function () { state.account = true; render(); };
     var ca = document.getElementById('close-account');
     if (ca) ca.onclick = function () { state.account = false; render(); };
+    var voiceSel = document.getElementById('acct-tts-voice');
+    if (voiceSel) {
+      voiceSel.onchange = function () {
+        var statusEl = document.getElementById('acct-tts-voice-status');
+        saveAccountTtsVoice(voiceSel.value, {
+          onOk: function () {
+            if (statusEl) {
+              statusEl.hidden = false;
+              statusEl.textContent = t('account.voice_saved');
+            }
+          }
+        }).catch(function (err) {
+          try { window.alert((err && err.message) || t('ia.tts_err')); } catch (e) { /* ignore */ }
+        });
+      };
+    }
+    var voicePrev = document.getElementById('acct-tts-preview');
+    if (voicePrev) voicePrev.onclick = function () { previewAccountTtsVoice(); };
     var dlAll = document.getElementById('download-all-ms');
     if (dlAll) {
       dlAll.onclick = function () {

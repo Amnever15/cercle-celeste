@@ -217,6 +217,7 @@ function emptyContact(email) {
     monthlyUsed: 0,
     iaUsed: 0,
     ttsCharsUsed: 0,
+    ttsVoice: profile.DEFAULT_TTS_VOICE,
     usageMonth: '',
     usageYear: 0,
     birthDate: '',
@@ -1323,6 +1324,7 @@ async function handle(req, res) {
       const store = auth.store;
       const c = auth.c;
       const wantsLang = body && (body.language != null || body.locale != null);
+      const wantsVoice = body && body.ttsVoice != null;
       const hasBirthPayload = !!(
         body &&
         (body.birthDate || body.birthTime || body.birthPlace || body.gender ||
@@ -1334,12 +1336,26 @@ async function handle(req, res) {
           return send(res, 400, { error: langSaved.error, contact: publicContact(c) }, req);
         }
       }
+      if (wantsVoice) {
+        const entitlements = plans.entitlements(c);
+        if (!entitlements.canIa) {
+          return send(res, 403, {
+            error: 'Le choix de voix Céleste est réservé au plan Divin.',
+            contact: publicContact(c)
+          }, req);
+        }
+        const voiceSaved = profile.saveTtsVoice(c, body);
+        if (!voiceSaved.ok) {
+          return send(res, 400, { error: voiceSaved.error, contact: publicContact(c) }, req);
+        }
+      }
       if (!hasBirthPayload) {
-        if (!wantsLang) {
+        if (!wantsLang && !wantsVoice) {
           return send(res, 400, { error: 'Rien à enregistrer.', contact: publicContact(c) }, req);
         }
         writeStore(store);
-        logLine('LANGUAGE saved ' + auth.email + ' → ' + c.language);
+        if (wantsVoice) logLine('TTS voice saved ' + auth.email + ' → ' + c.ttsVoice);
+        if (wantsLang) logLine('LANGUAGE saved ' + auth.email + ' → ' + c.language);
         return send(res, 200, { ok: true, contact: publicContact(c) }, req);
       }
       const saved = profile.saveProfile(c, body);
@@ -1977,7 +1993,7 @@ async function handle(req, res) {
             },
             body: JSON.stringify({
               model: 'tts-1',
-              voice: 'nova',
+              voice: profile.ttsVoiceOf(c),
               input: text,
               response_format: 'mp3'
             })
