@@ -1,7 +1,7 @@
 /**
  * Offres + quota IA (messages / mois civil, par contact).
  *
- *   Gratuit : 2 / mois
+ *   Gratuit : 3 / mois
  *   Céleste : 10 / mois
  *   Divin   : 500 / mois
  *
@@ -32,7 +32,7 @@ const PLANS = {
     dailyLimit: 5,
     monthlyLimitYear: 1,
     ia: true,
-    iaQuota: 2
+    iaQuota: 3
   },
   celeste: {
     id: 'celeste',
@@ -568,7 +568,7 @@ function iaQuotaExceededError(e) {
     };
   }
   return {
-    error: 'Tu as utilisé tes 2 messages IA gratuits de ce mois. Passe Céleste (10) ou Divin (500) pour continuer, ou reviens le 1er.',
+    error: 'Tu as utilisé tes 3 messages IA gratuits de ce mois. Passe Céleste (10) ou Divin (500) pour continuer, ou reviens le 1er.',
     code: 'IA_QUOTA',
     upgrade: 'celeste'
   };

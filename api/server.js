@@ -4,7 +4,7 @@
  *
  * Règle Ultime Céleste : 6 mois PAYÉS, cumulés. Une pause ne remet pas à zéro.
  * Divin : Ultime + couple + TTS OpenAI tout de suite. IA : tous plans (quotas / mois).
- * IA plafonnée : Gratuit 2 · Céleste 10 · Divin 500 messages / mois civil.
+ * IA plafonnée : Gratuit 3 · Céleste 10 · Divin 500 messages / mois civil (texte + Mode IA live).
  */
 const http = require('http');
 const fs = require('fs');
@@ -93,7 +93,7 @@ const LOG = resolveLogPath();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/couple-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/tts', '/manuscript-tts', '/manuscript-tts-audio', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file', '/ultime-file', '/download-all'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/couple-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/ia-live/session', '/ia-live/turn', '/ia-live/excerpt', '/ia-live/end', '/tts', '/manuscript-tts', '/manuscript-tts-audio', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file', '/ultime-file', '/download-all'];
 const LAST_WEBHOOKS_MAX = 20;
 const IA_MESSAGES_MAX = 1000;
 
@@ -288,8 +288,8 @@ function emptyContact(email) {
 }
 
 function ensureIaChats(c) {
-  if (!c.iaChats || typeof c.iaChats !== 'object') c.iaChats = { natal: [], mois: [], jour: [], couple: [] };
-  ['natal', 'mois', 'jour', 'couple'].forEach(function (k) {
+  if (!c.iaChats || typeof c.iaChats !== 'object') c.iaChats = { natal: [], mois: [], jour: [], couple: [], ultime: [] };
+  ['natal', 'mois', 'jour', 'couple', 'ultime'].forEach(function (k) {
     if (!Array.isArray(c.iaChats[k])) c.iaChats[k] = [];
   });
   /* Migration ancienne liste unique → fil natal */
@@ -1947,6 +1947,154 @@ async function handle(req, res) {
         messages: messages,
         contact: publicContact(c)
       }, req);
+    }
+
+    /* ——— Mode IA live (OpenAI Realtime) ——— */
+    if (route === '/ia-live/session' && req.method === 'POST') {
+      const body = (await readBody(req)).body;
+      const auth = requireSession(req, url, body);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const c = auth.c;
+      const ctx = normalizeIaContext(body.context);
+      const selectedPassage = String(body.selectedPassage || '').trim().slice(0, 4000);
+      const entitlements = plans.entitlements(c);
+      if (!entitlements.canIa) {
+        return send(res, 403, {
+          error: 'L’IA Céleste n’est pas disponible sur ce compte pour le moment.',
+          code: 'IA_LOCKED',
+          contact: publicContact(c)
+        }, req);
+      }
+      if (entitlements.iaLeft <= 0) {
+        const exceeded = plans.iaQuotaExceededError(entitlements);
+        return send(res, 403, {
+          error: exceeded.error,
+          code: exceeded.code,
+          upgrade: exceeded.upgrade || null,
+          contact: publicContact(c)
+        }, req);
+      }
+      const iaLive = require('./ia-live');
+      if (!iaLive.openaiKey()) {
+        return send(res, 503, {
+          error: 'Mode IA live indisponible (clé OpenAI manquante côté serveur).',
+          contact: publicContact(c)
+        }, req);
+      }
+      let minted;
+      try {
+        minted = await iaLive.mintClientSecret(c, ctx, selectedPassage);
+      } catch (e) {
+        logLine('IA live session fail ' + ((e && e.message) || e));
+        return send(res, 503, {
+          error: (e && e.friendly) || 'Impossible d’ouvrir la session vocale. Réessaie dans un instant.',
+          contact: publicContact(c)
+        }, req);
+      }
+      const sessionId = iaLive.registerSession(c.email, ctx, { voice: minted.voiceInfo.voice });
+      return send(res, 200, {
+        ok: true,
+        sessionId: sessionId,
+        clientSecret: minted.clientSecret,
+        expiresAt: minted.expiresAt,
+        model: minted.model,
+        voice: minted.voiceInfo.voice,
+        accountVoice: minted.voiceInfo.accountVoice,
+        voiceMatched: minted.voiceInfo.matched,
+        voiceNote: minted.voiceInfo.note,
+        context: ctx,
+        maxMs: iaLive.SESSION_MAX_MS,
+        contact: publicContact(c)
+      }, req);
+    }
+
+    if (route === '/ia-live/turn' && req.method === 'POST') {
+      const body = (await readBody(req)).body;
+      const auth = requireSession(req, url, body);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const iaLive = require('./ia-live');
+      const sessionId = String(body.sessionId || '').trim();
+      const live = iaLive.getLiveSession(sessionId, auth.email);
+      if (!live) {
+        return send(res, 404, { error: 'Session live introuvable.', code: 'LIVE_GONE' }, req);
+      }
+      if (live.expired) {
+        return send(res, 403, {
+          error: 'Session live terminée (limite de durée).',
+          code: 'LIVE_EXPIRED',
+          contact: publicContact(auth.c)
+        }, req);
+      }
+      const store = auth.store;
+      const c = auth.c;
+      const check = plans.consumeIa(c);
+      if (!check.ok) {
+        iaLive.endSession(sessionId);
+        return send(res, 403, {
+          error: check.error,
+          code: check.code || null,
+          upgrade: check.upgrade || null,
+          contact: publicContact(c)
+        }, req);
+      }
+      iaLive.bumpTurn(sessionId);
+      const userText = String(body.userText || body.transcript || '').trim().slice(0, 4000);
+      const botText = String(body.assistantText || body.reply || '').trim().slice(0, 8000);
+      if (userText || botText) {
+        appendIaExchange(
+          c,
+          userText || '(voix)',
+          botText || '(réponse vocale)',
+          live.context || body.context
+        );
+      }
+      writeStore(store);
+      return send(res, 200, {
+        ok: true,
+        sessionId: sessionId,
+        contact: publicContact(c)
+      }, req);
+    }
+
+    if (route === '/ia-live/excerpt' && req.method === 'POST') {
+      const body = (await readBody(req)).body;
+      const auth = requireSession(req, url, body);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const iaLive = require('./ia-live');
+      const sessionId = String(body.sessionId || '').trim();
+      const live = sessionId ? iaLive.getLiveSession(sessionId, auth.email) : null;
+      if (sessionId && (!live || live.expired)) {
+        return send(res, 403, {
+          error: 'Session live requise pour cet extrait.',
+          code: 'LIVE_GONE',
+          contact: publicContact(auth.c)
+        }, req);
+      }
+      const ctx = normalizeIaContext((live && live.context) || body.context);
+      const pack = iaLive.getManuscriptExcerpt(auth.c, ctx, {
+        query: body.query,
+        offset: body.offset,
+        maxChars: body.maxChars
+      });
+      return send(res, 200, {
+        ok: !!pack.ok,
+        context: ctx,
+        text: pack.text || '',
+        offset: pack.offset || 0,
+        total: pack.total || 0,
+        nextOffset: pack.nextOffset || 0,
+        error: pack.error || null,
+        contact: publicContact(auth.c)
+      }, req);
+    }
+
+    if (route === '/ia-live/end' && req.method === 'POST') {
+      const body = (await readBody(req)).body;
+      const auth = requireSession(req, url, body);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const iaLive = require('./ia-live');
+      iaLive.endSession(String(body.sessionId || '').trim());
+      return send(res, 200, { ok: true, contact: publicContact(auth.c) }, req);
     }
 
     if (route === '/tts' && req.method === 'POST') {

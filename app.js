@@ -669,7 +669,7 @@
         'ultime.pages_badge_aria': 'Environ 180 pages',
         'ia.quota_left': '{left} / {quota} messages ce mois',
         'ia.quota_exhausted': 'Quota IA du mois atteint. Passe à un plan supérieur, ou reviens le 1er.',
-        'ia.quota_plans': 'Gratuit 2 · Céleste 10 · Divin 500 / mois',
+        'ia.quota_plans': 'Gratuit 3 · Céleste 10 · Divin 500 / mois',
         'ia.pass_celeste': 'Passer Céleste · 59 €',
         'ia.pass_divin': 'Passer Divin · 137 €',
         'ia.included': 'Sur tous les plans',
@@ -678,14 +678,30 @@
         'ia.available': 'Disponible sur ton plan',
         'account.ia_quota': '{left} / {quota} ce mois',
         'account.ia_ok': 'Disponible',
-        'account.ia_lock': 'Incluse dès le Gratuit (2 / mois)',
-        'account.ia_pause': 'Quota Gratuit (2 / mois) pendant la pause',
-        'login.lede': 'Gratuit, Céleste (59 €) ou Divin (137 €).<br>L’IA Céleste : 2 / 10 / 500 messages par mois.',
+        'account.ia_lock': 'Incluse dès le Gratuit (3 / mois)',
+        'account.ia_pause': 'Quota Gratuit (3 / mois) pendant la pause',
+        'login.lede': 'Gratuit, Céleste (59 €) ou Divin (137 €).<br>L’IA Céleste : 3 / 10 / 500 messages par mois.',
         'ia.mic_stop': 'Arrêter la dictée',
         'ia.speak_loading': 'Préparation…',
         'ia.tts_err': 'La voix Céleste ne répond pas pour le moment. Réessaie dans un instant.',
         'ia.tts_quota': 'Quota voix du mois atteint. Écouter avec la voix du navigateur ?',
         'ia.tts_need_auth': 'Reconnecte-toi pour écouter la voix Céleste.',
+        'ia.live': 'Mode IA live',
+        'ia.live_aria': 'Ouvrir le Mode IA live avec Céleste',
+        'ia.live_connecting': 'Connexion à Céleste…',
+        'ia.live_listening': 'Je t’écoute…',
+        'ia.live_speaking': 'Céleste parle…',
+        'ia.live_muted': 'Micro coupé',
+        'ia.live_mute': 'Couper le micro',
+        'ia.live_unmute': 'Réactiver le micro',
+        'ia.live_end': 'Terminer',
+        'ia.live_hint': 'Parle librement — Céleste s’appuie sur ce manuscrit. Chaque échange compte pour 1 message IA.',
+        'ia.live_quota': '{left} / {quota} messages IA restants',
+        'ia.live_voice_note': 'Voix Realtime : {voice}',
+        'ia.live_err': 'Impossible d’ouvrir le Mode IA live. Réessaie dans un instant.',
+        'ia.live_mic': 'Autorise le micro pour parler avec Céleste.',
+        'ia.live_expired': 'Session live terminée (15 min). Tu peux en rouvrir une.',
+        'ia.live_quota_block': 'Quota IA du mois atteint. Passe à un plan supérieur, ou reviens le 1er.',
         'ms.tts_listen': 'Écouter',
         'ms.tts_pause': 'Pause',
         'ms.tts_resume': 'Reprendre',
@@ -721,7 +737,7 @@
         'ultime.pages_badge_aria': 'About 180 pages',
         'ia.quota_left': '{left} / {quota} messages this month',
         'ia.quota_exhausted': 'Monthly AI quota reached. Upgrade your plan, or come back on the 1st.',
-        'ia.quota_plans': 'Free 2 · Céleste 10 · Divin 500 / month',
+        'ia.quota_plans': 'Free 3 · Céleste 10 · Divin 500 / month',
         'ia.pass_celeste': 'Go Céleste · €59',
         'ia.pass_divin': 'Go Divin · €137',
         'ia.included': 'On every plan',
@@ -730,14 +746,30 @@
         'ia.available': 'Available on your plan',
         'account.ia_quota': '{left} / {quota} this month',
         'account.ia_ok': 'Available',
-        'account.ia_lock': 'Included from Free (2 / month)',
-        'account.ia_pause': 'Free quota (2 / month) while paused',
-        'login.lede': 'Free, Céleste (€59) or Divin (€137).<br>Céleste AI: 2 / 10 / 500 messages per month.',
+        'account.ia_lock': 'Included from Free (3 / month)',
+        'account.ia_pause': 'Free quota (3 / month) while paused',
+        'login.lede': 'Free, Céleste (€59) or Divin (€137).<br>Céleste AI: 3 / 10 / 500 messages per month.',
         'ia.mic_stop': 'Stop dictation',
         'ia.speak_loading': 'Preparing…',
         'ia.tts_err': 'Céleste’s voice is unavailable right now. Try again in a moment.',
         'ia.tts_quota': 'Monthly voice quota reached. Listen with the browser voice?',
         'ia.tts_need_auth': 'Sign in again to hear Céleste’s voice.',
+        'ia.live': 'Live AI mode',
+        'ia.live_aria': 'Open Live AI mode with Céleste',
+        'ia.live_connecting': 'Connecting to Céleste…',
+        'ia.live_listening': 'Listening…',
+        'ia.live_speaking': 'Céleste is speaking…',
+        'ia.live_muted': 'Muted',
+        'ia.live_mute': 'Mute mic',
+        'ia.live_unmute': 'Unmute mic',
+        'ia.live_end': 'End call',
+        'ia.live_hint': 'Speak freely — Céleste stays anchored to this manuscript. Each exchange uses 1 AI message.',
+        'ia.live_quota': '{left} / {quota} AI messages left',
+        'ia.live_voice_note': 'Realtime voice: {voice}',
+        'ia.live_err': 'Could not open Live AI mode. Try again in a moment.',
+        'ia.live_mic': 'Allow the microphone to talk with Céleste.',
+        'ia.live_expired': 'Live session ended (15 min). You can open a new one.',
+        'ia.live_quota_block': 'Monthly AI quota reached. Upgrade your plan, or come back on the 1st.',
         'ms.tts_listen': 'Listen',
         'ms.tts_pause': 'Pause',
         'ms.tts_resume': 'Resume',
@@ -773,7 +805,7 @@
         'ultime.pages_badge_aria': 'Unas 180 páginas',
         'ia.quota_left': '{left} / {quota} mensajes este mes',
         'ia.quota_exhausted': 'Cupo de IA del mes agotado. Mejora tu plan, o vuelve el día 1.',
-        'ia.quota_plans': 'Gratis 2 · Céleste 10 · Divin 500 / mes',
+        'ia.quota_plans': 'Gratis 3 · Céleste 10 · Divin 500 / mes',
         'ia.pass_celeste': 'Pasar a Céleste · 59 €',
         'ia.pass_divin': 'Pasar a Divin · 137 €',
         'ia.included': 'En todos los planes',
@@ -782,14 +814,30 @@
         'ia.available': 'Disponible en tu plan',
         'account.ia_quota': '{left} / {quota} este mes',
         'account.ia_ok': 'Disponible',
-        'account.ia_lock': 'Incluida desde Gratis (2 / mes)',
-        'account.ia_pause': 'Cupo Gratis (2 / mes) en pausa',
-        'login.lede': 'Gratis, Céleste (59 €) o Divin (137 €).<br>IA Céleste: 2 / 10 / 500 mensajes al mes.',
+        'account.ia_lock': 'Incluida desde Gratis (3 / mes)',
+        'account.ia_pause': 'Cupo Gratis (3 / mes) en pausa',
+        'login.lede': 'Gratis, Céleste (59 €) o Divin (137 €).<br>IA Céleste: 3 / 10 / 500 mensajes al mes.',
         'ia.mic_stop': 'Detener el dictado',
         'ia.speak_loading': 'Preparando…',
         'ia.tts_err': 'La voz de Céleste no responde por ahora. Inténtalo en un momento.',
         'ia.tts_quota': 'Cupo de voz del mes agotado. ¿Escuchar con la voz del navegador?',
         'ia.tts_need_auth': 'Vuelve a iniciar sesión para oír la voz de Céleste.',
+        'ia.live': 'Modo IA live',
+        'ia.live_aria': 'Abrir Modo IA live con Céleste',
+        'ia.live_connecting': 'Conectando con Céleste…',
+        'ia.live_listening': 'Te escucho…',
+        'ia.live_speaking': 'Céleste habla…',
+        'ia.live_muted': 'Micrófono silenciado',
+        'ia.live_mute': 'Silenciar micro',
+        'ia.live_unmute': 'Reactivar micro',
+        'ia.live_end': 'Terminar',
+        'ia.live_hint': 'Habla con libertad — Céleste se basa en este manuscrito. Cada intercambio cuenta como 1 mensaje IA.',
+        'ia.live_quota': '{left} / {quota} mensajes IA restantes',
+        'ia.live_voice_note': 'Voz Realtime: {voice}',
+        'ia.live_err': 'No se pudo abrir el Modo IA live. Inténtalo en un momento.',
+        'ia.live_mic': 'Autoriza el micrófono para hablar con Céleste.',
+        'ia.live_expired': 'Sesión live terminada (15 min). Puedes abrir otra.',
+        'ia.live_quota_block': 'Cupo de IA del mes agotado. Mejora tu plan, o vuelve el día 1.',
         'onboard.lede_edit': 'Corrige un error si hace falta. Te quedan {n} modificación{s}.',
         'onboard.edits_left': 'Te quedan {n} modificación{s}.',
         'partner.edits_left': 'Te quedan {n} corrección{s}.',
@@ -1166,6 +1214,7 @@
   function forceReLogin(msg) {
     stopIaSpeak();
     stopMsTtsAudio();
+    try { endIaLive({ reason: 'auth' }); } catch (e0) { /* ignore */ }
     state.user = null;
     state.screen = 'login';
     state.account = false;
@@ -4143,6 +4192,467 @@
       });
   }
 
+  /* ——— Mode IA live (OpenAI Realtime WebRTC) ——— */
+  var _live = {
+    open: false,
+    connecting: false,
+    sessionId: null,
+    pc: null,
+    dc: null,
+    stream: null,
+    audioEl: null,
+    muted: false,
+    speaking: false,
+    maxMs: 15 * 60 * 1000,
+    timer: null,
+    endedAt: null,
+    voiceNote: null,
+    pendingUser: '',
+    pendingBot: '',
+    turnBusy: false
+  };
+
+  function liveStatusText() {
+    if (_live.connecting) return t('ia.live_connecting');
+    if (_live.muted) return t('ia.live_muted');
+    if (_live.speaking) return t('ia.live_speaking');
+    return t('ia.live_listening');
+  }
+
+  function refreshLiveUi() {
+    var overlay = document.getElementById('ia-live-overlay');
+    if (!overlay) return;
+    var status = overlay.querySelector('[data-live-status]');
+    if (status) status.textContent = liveStatusText();
+    var quota = overlay.querySelector('[data-live-quota]');
+    if (quota) {
+      quota.textContent = tf('ia.live_quota', { left: iaLeft(), quota: iaQuota() || '—' });
+      quota.classList.toggle('is-out', iaLeft() <= 0);
+    }
+    var portrait = overlay.querySelector('.ia-live-portrait');
+    if (portrait) {
+      portrait.classList.toggle('is-speaking', !!_live.speaking && !_live.connecting);
+      portrait.classList.toggle('is-connecting', !!_live.connecting);
+    }
+    var muteBtn = overlay.querySelector('#ia-live-mute');
+    if (muteBtn) {
+      muteBtn.setAttribute('aria-pressed', _live.muted ? 'true' : 'false');
+      muteBtn.textContent = _live.muted ? t('ia.live_unmute') : t('ia.live_mute');
+    }
+  }
+
+  function closeLiveOverlayDom() {
+    var overlay = document.getElementById('ia-live-overlay');
+    if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  }
+
+  function ensureLiveOverlay() {
+    var existing = document.getElementById('ia-live-overlay');
+    if (existing) return existing;
+    var el = document.createElement('div');
+    el.id = 'ia-live-overlay';
+    el.className = 'ia-live-overlay';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-label', t('ia.live'));
+    el.innerHTML =
+      '<div class="ia-live-sheet">' +
+        '<div class="ia-live-portrait" aria-hidden="true">' +
+          '<img src="/assets/ia-celeste.png" alt="" width="220" height="220">' +
+          '<span class="ia-live-glow"></span>' +
+        '</div>' +
+        '<h2 class="ia-live-title">' + t('ia.live') + '</h2>' +
+        '<p class="ia-live-status" data-live-status>' + t('ia.live_connecting') + '</p>' +
+        '<p class="ia-live-quota" data-live-quota>' + tf('ia.live_quota', { left: iaLeft(), quota: iaQuota() || '—' }) + '</p>' +
+        '<p class="muted ia-live-hint">' + t('ia.live_hint') + '</p>' +
+        '<p class="muted ia-live-voice" data-live-voice hidden></p>' +
+        '<div class="ia-live-actions">' +
+          '<button type="button" class="btn ghost" id="ia-live-mute">' + t('ia.live_mute') + '</button>' +
+          '<button type="button" class="btn" id="ia-live-end">' + t('ia.live_end') + '</button>' +
+        '</div>' +
+        '<audio id="ia-live-audio" autoplay playsinline></audio>' +
+      '</div>';
+    document.body.appendChild(el);
+    el.querySelector('#ia-live-mute').onclick = function () { toggleLiveMute(); };
+    el.querySelector('#ia-live-end').onclick = function () { endIaLive({ reason: 'user' }); };
+    return el;
+  }
+
+  function liveSendEvent(obj) {
+    if (!_live.dc || _live.dc.readyState !== 'open') return;
+    try { _live.dc.send(JSON.stringify(obj)); } catch (e) { /* ignore */ }
+  }
+
+  function reportLiveTurn() {
+    if (!_live.sessionId || _live.turnBusy) return Promise.resolve();
+    if (iaLeft() <= 0) {
+      endIaLive({ reason: 'quota', message: t('ia.live_quota_block') });
+      return Promise.resolve();
+    }
+    _live.turnBusy = true;
+    var payload = {
+      email: state.user && state.user.email,
+      token: state.user && state.user.token,
+      sessionId: _live.sessionId,
+      context: normalizeIaCtx(state.iaContext),
+      userText: _live.pendingUser || '',
+      assistantText: _live.pendingBot || ''
+    };
+    _live.pendingUser = '';
+    _live.pendingBot = '';
+    return fetch(API + '/ia-live/turn', {
+      method: 'POST',
+      headers: authHeaders(true),
+      body: JSON.stringify(payload)
+    }).then(function (r) {
+      return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; });
+    }).then(function (res) {
+      _live.turnBusy = false;
+      if (res.status === 401) {
+        endIaLive({ reason: 'auth' });
+        forceReLogin((res.data && res.data.error) || 'Session expirée.');
+        return;
+      }
+      if (res.data && res.data.contact) applyAccess(res.data.contact);
+      refreshLiveUi();
+      if (!res.ok) {
+        var msg = (res.data && res.data.error) || t('ia.live_quota_block');
+        endIaLive({ reason: 'quota', message: msg });
+      }
+    }).catch(function () {
+      _live.turnBusy = false;
+    });
+  }
+
+  function handleLiveToolCall(item) {
+    if (!item || item.name !== 'get_manuscript_excerpt') return;
+    var args = {};
+    try { args = JSON.parse(item.arguments || '{}'); } catch (e) { args = {}; }
+    fetch(API + '/ia-live/excerpt', {
+      method: 'POST',
+      headers: authHeaders(true),
+      body: JSON.stringify({
+        email: state.user && state.user.email,
+        token: state.user && state.user.token,
+        sessionId: _live.sessionId,
+        context: normalizeIaCtx(state.iaContext),
+        query: args.query || '',
+        offset: args.offset,
+        maxChars: args.maxChars
+      })
+    }).then(function (r) { return r.json(); })
+      .then(function (j) {
+        var out = JSON.stringify({
+          ok: !!(j && j.ok),
+          text: (j && j.text) || '',
+          offset: j && j.offset,
+          total: j && j.total,
+          nextOffset: j && j.nextOffset,
+          error: (j && j.error) || null
+        });
+        liveSendEvent({
+          type: 'conversation.item.create',
+          item: {
+            type: 'function_call_output',
+            call_id: item.call_id,
+            output: out
+          }
+        });
+        liveSendEvent({ type: 'response.create' });
+      })
+      .catch(function () {
+        liveSendEvent({
+          type: 'conversation.item.create',
+          item: {
+            type: 'function_call_output',
+            call_id: item.call_id,
+            output: JSON.stringify({ ok: false, error: 'excerpt_unavailable' })
+          }
+        });
+        liveSendEvent({ type: 'response.create' });
+      });
+  }
+
+  function onLiveServerEvent(raw) {
+    var ev;
+    try { ev = JSON.parse(raw); } catch (e) { return; }
+    if (!ev || !ev.type) return;
+    if (ev.type === 'input_audio_buffer.speech_started') {
+      _live.speaking = false;
+      refreshLiveUi();
+      return;
+    }
+    if (ev.type === 'output_audio_buffer.started' || ev.type === 'response.output_audio.delta' ||
+        ev.type === 'response.audio.delta') {
+      _live.speaking = true;
+      refreshLiveUi();
+      return;
+    }
+    if (ev.type === 'output_audio_buffer.stopped' || ev.type === 'response.output_audio.done' ||
+        ev.type === 'response.audio.done') {
+      _live.speaking = false;
+      refreshLiveUi();
+      return;
+    }
+    if (ev.type === 'conversation.item.input_audio_transcription.completed') {
+      _live.pendingUser = String(ev.transcript || '').trim();
+      return;
+    }
+    if (ev.type === 'response.output_audio_transcript.done' ||
+        ev.type === 'response.audio_transcript.done') {
+      _live.pendingBot = String(ev.transcript || '').trim();
+      return;
+    }
+    if (ev.type === 'response.done') {
+      _live.speaking = false;
+      refreshLiveUi();
+      var resp = ev.response || {};
+      var outputs = resp.output || [];
+      var hasFn = false;
+      var hasMessage = false;
+      for (var i = 0; i < outputs.length; i++) {
+        var item = outputs[i];
+        if (!item) continue;
+        if (item.type === 'function_call') {
+          hasFn = true;
+          handleLiveToolCall(item);
+        }
+        if (item.type === 'message' || item.type === 'audio') hasMessage = true;
+      }
+      if (!hasFn && resp.status === 'completed' && (hasMessage || _live.pendingBot || _live.pendingUser)) {
+        reportLiveTurn();
+      }
+    }
+  }
+
+  function cleanupLivePeer() {
+    if (_live.timer) {
+      clearTimeout(_live.timer);
+      _live.timer = null;
+    }
+    try {
+      if (_live.dc) { _live.dc.onmessage = null; _live.dc.close(); }
+    } catch (e0) { /* ignore */ }
+    _live.dc = null;
+    try {
+      if (_live.pc) _live.pc.close();
+    } catch (e1) { /* ignore */ }
+    _live.pc = null;
+    if (_live.stream) {
+      try {
+        _live.stream.getTracks().forEach(function (tr) { tr.stop(); });
+      } catch (e2) { /* ignore */ }
+    }
+    _live.stream = null;
+    if (_live.audioEl) {
+      try {
+        _live.audioEl.srcObject = null;
+        _live.audioEl.pause();
+      } catch (e3) { /* ignore */ }
+    }
+    _live.audioEl = null;
+  }
+
+  function endIaLive(opts) {
+    opts = opts || {};
+    var sid = _live.sessionId;
+    var wasOpen = _live.open || _live.connecting;
+    _live.open = false;
+    _live.connecting = false;
+    _live.speaking = false;
+    _live.sessionId = null;
+    cleanupLivePeer();
+    closeLiveOverlayDom();
+    if (sid && state.user && state.user.token) {
+      fetch(API + '/ia-live/end', {
+        method: 'POST',
+        headers: authHeaders(true),
+        body: JSON.stringify({
+          email: state.user.email,
+          token: state.user.token,
+          sessionId: sid
+        })
+      }).catch(function () {});
+    }
+    if (wasOpen && opts.message) {
+      try { window.alert(opts.message); } catch (e) { /* ignore */ }
+    } else if (wasOpen && opts.reason === 'expired') {
+      try { window.alert(t('ia.live_expired')); } catch (e2) { /* ignore */ }
+    }
+    if (!refreshIaChatDom()) {
+      /* quota line may have changed */
+    }
+  }
+
+  function toggleLiveMute() {
+    _live.muted = !_live.muted;
+    if (_live.stream) {
+      _live.stream.getAudioTracks().forEach(function (tr) { tr.enabled = !_live.muted; });
+    }
+    refreshLiveUi();
+  }
+
+  function startIaLive() {
+    if (!canIa()) {
+      scrollReaderIaIntoView();
+      return;
+    }
+    if (iaLeft() <= 0) {
+      try { window.alert(t('ia.live_quota_block')); } catch (e0) { /* ignore */ }
+      return;
+    }
+    if (_live.open || _live.connecting) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      try { window.alert(t('ia.live_mic')); } catch (e1) { /* ignore */ }
+      return;
+    }
+    stopIaSpeak();
+    stopIaListen({ manual: true });
+    stopMsTtsAudio();
+    _live.connecting = true;
+    _live.open = true;
+    _live.muted = false;
+    _live.speaking = false;
+    _live.pendingUser = '';
+    _live.pendingBot = '';
+    ensureLiveOverlay();
+    refreshLiveUi();
+
+    var selectedPassage = '';
+    try {
+      var sel = window.getSelection && window.getSelection();
+      if (sel && String(sel).trim().length >= 12) selectedPassage = String(sel).trim().slice(0, 4000);
+    } catch (e2) { /* ignore */ }
+
+    var micPromise = navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+
+    var tokenPromise = fetch(API + '/ia-live/session', {
+      method: 'POST',
+      headers: authHeaders(true),
+      body: JSON.stringify({
+        email: state.user && state.user.email,
+        token: state.user && state.user.token,
+        context: normalizeIaCtx(state.iaContext),
+        selectedPassage: selectedPassage
+      })
+    }).then(function (r) {
+      return r.json().then(function (j) { return { ok: r.ok, status: r.status, data: j }; });
+    });
+
+    Promise.all([micPromise, tokenPromise]).then(function (pack) {
+      if (!_live.open) {
+        try { pack[0].getTracks().forEach(function (tr) { tr.stop(); }); } catch (e3) { /* ignore */ }
+        return;
+      }
+      var stream = pack[0];
+      var res = pack[1];
+      if (res.status === 401) {
+        stream.getTracks().forEach(function (tr) { tr.stop(); });
+        endIaLive({ reason: 'auth' });
+        forceReLogin((res.data && res.data.error) || 'Session expirée.');
+        return;
+      }
+      if (!res.ok || !res.data || !res.data.clientSecret) {
+        stream.getTracks().forEach(function (tr) { tr.stop(); });
+        var errMsg = (res.data && res.data.error) || t('ia.live_err');
+        endIaLive({ reason: 'error', message: errMsg });
+        return;
+      }
+      if (res.data.contact) applyAccess(res.data.contact);
+      _live.sessionId = res.data.sessionId;
+      _live.maxMs = res.data.maxMs || _live.maxMs;
+      _live.stream = stream;
+      _live.voiceNote = res.data.voiceNote || null;
+
+      var overlay = ensureLiveOverlay();
+      var voiceEl = overlay.querySelector('[data-live-voice]');
+      if (voiceEl) {
+        if (res.data.voice) {
+          voiceEl.hidden = false;
+          voiceEl.textContent = tf('ia.live_voice_note', { voice: res.data.voice }) +
+            (res.data.voiceNote ? (' — ' + res.data.voiceNote) : '');
+        } else {
+          voiceEl.hidden = true;
+        }
+      }
+      refreshLiveUi();
+
+      var pc = new RTCPeerConnection();
+      _live.pc = pc;
+      stream.getTracks().forEach(function (tr) { pc.addTrack(tr, stream); });
+
+      var audioEl = overlay.querySelector('#ia-live-audio');
+      _live.audioEl = audioEl;
+      pc.ontrack = function (e) {
+        if (audioEl && e.streams && e.streams[0]) {
+          audioEl.srcObject = e.streams[0];
+          try { audioEl.play(); } catch (e4) { /* ignore */ }
+        }
+      };
+
+      var dc = pc.createDataChannel('oai-events');
+      _live.dc = dc;
+      dc.onmessage = function (ev) { onLiveServerEvent(ev.data); };
+      dc.onopen = function () {
+        _live.connecting = false;
+        refreshLiveUi();
+      };
+
+      return pc.createOffer().then(function (offer) {
+        return pc.setLocalDescription(offer).then(function () {
+          return new Promise(function (resolve) {
+            if (pc.iceGatheringState === 'complete') return resolve();
+            var done = false;
+            var finish = function () {
+              if (done) return;
+              done = true;
+              pc.removeEventListener('icegatheringstatechange', onIce);
+              clearTimeout(to);
+              resolve();
+            };
+            var onIce = function () {
+              if (pc.iceGatheringState === 'complete') finish();
+            };
+            var to = setTimeout(finish, 2500);
+            pc.addEventListener('icegatheringstatechange', onIce);
+          });
+        });
+      }).then(function () {
+        return fetch('https://api.openai.com/v1/realtime/calls', {
+          method: 'POST',
+          body: pc.localDescription.sdp,
+          headers: {
+            Authorization: 'Bearer ' + res.data.clientSecret,
+            'Content-Type': 'application/sdp'
+          }
+        });
+      }).then(function (sdpRes) {
+        if (!sdpRes.ok) throw new Error('webrtc ' + sdpRes.status);
+        return sdpRes.text();
+      }).then(function (answer) {
+        return pc.setRemoteDescription({ type: 'answer', sdp: answer });
+      }).then(function () {
+        _live.connecting = false;
+        refreshLiveUi();
+        _live.timer = setTimeout(function () {
+          endIaLive({ reason: 'expired' });
+        }, _live.maxMs);
+      });
+    }).catch(function (err) {
+      var name = err && err.name;
+      var msg = name === 'NotAllowedError' || name === 'PermissionDeniedError'
+        ? t('ia.live_mic')
+        : t('ia.live_err');
+      endIaLive({ reason: 'error', message: msg });
+    });
+  }
+
   function apiLogin(email, password) {
     return fetch(API + '/login', {
       method: 'POST',
@@ -4527,6 +5037,11 @@
         '<p class="muted ia-guide-line">' + t('ia.guide') + '</p>' +
         iaQuotaLineHtml({ always: true }) +
         '</div>' +
+      '</div>' +
+      '<div class="ia-live-launch">' +
+        '<button type="button" class="btn ghost ia-live-btn" id="ia-live-open"' +
+          (left <= 0 ? ' disabled' : '') +
+          ' aria-label="' + t('ia.live_aria') + '">' + t('ia.live') + '</button>' +
       '</div>' +
       '<div class="ia-log" id="ia-log">' + (log || empty) + '</div>' +
       (left <= 0
@@ -5206,6 +5721,7 @@
       stopIaSpeak();
       stopMsTtsAudio();
       stopIaListen({ manual: true });
+      try { endIaLive({ reason: 'close' }); } catch (e0) { /* ignore */ }
       clearPdfFullscreen();
       state.pdf = null;
       hideMsSelBar();
@@ -5220,6 +5736,8 @@
     if (si) si.onclick = function () { sendIa(); };
     var iq = document.getElementById('ia-q');
     if (iq) iq.onkeydown = function (e) { if (e.key === 'Enter') sendIa(); };
+    var liveOpen = document.getElementById('ia-live-open');
+    if (liveOpen) liveOpen.onclick = function () { startIaLive(); };
 
     var oa = document.getElementById('open-account');
     if (oa) oa.onclick = function () { state.account = true; render(); };
@@ -5322,6 +5840,7 @@
     var lo = document.getElementById('logout');
     if (lo) lo.onclick = function () {
       stopIaSpeak();
+      try { endIaLive({ reason: 'logout' }); } catch (e0) { /* ignore */ }
       localStorage.removeItem('cercle.user');
       state.user = null; state.screen = 'login'; state.account = false; state.tab = 'natal';
       state.iaBusy = false; state.iaLoaded = false; state.iaMessages = [];
@@ -5366,6 +5885,6 @@
     render();
   });
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js?v=37').catch(function () {});
+    navigator.serviceWorker.register('/sw.js?v=72').catch(function () {});
   }
 })();
