@@ -562,58 +562,95 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   flex-shrink: 0;
 }
 
+/* Full-manuscript Écouter — bar just below the iframe (end of reading area). */
+.ms-tts-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: .9rem 0 1.1rem;
+  padding: .85rem 1rem;
+  border: 1px solid rgba(201,168,76,.35);
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(201,168,76,.12), transparent 55%),
+    rgba(12, 7, 28, .55);
+}
+html[data-theme="light"] .ms-tts-footer {
+  background:
+    linear-gradient(135deg, rgba(168,132,46,.12), transparent 55%),
+    rgba(255, 252, 246, .72);
+  border-color: rgba(168,132,46,.35);
+}
 .ms-tts-group {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   flex-shrink: 0;
-  max-width: min(52vw, 220px);
+  max-width: 100%;
 }
 .ms-tts-btn {
-  background: transparent;
-  border: 1px solid var(--stroke);
-  color: var(--gold);
+  background: linear-gradient(135deg, rgba(201,168,76,.22), rgba(201,168,76,.08));
+  border: 1px solid rgba(201,168,76,.65);
+  color: var(--gold-light);
   font-family: 'Inter', sans-serif;
-  font-size: .78rem;
-  letter-spacing: .04em;
+  font-size: .92rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
   cursor: pointer;
-  padding: .4rem .7rem;
-  border-radius: 6px;
+  padding: .65rem 1.25rem;
+  border-radius: 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
   pointer-events: auto;
+  box-shadow: 0 6px 18px rgba(0,0,0,.22);
 }
 .ms-tts-btn:hover,
 .ms-tts-btn:focus-visible {
-  border-color: rgba(201,168,76,.7);
-  background: rgba(201,168,76,.18);
+  border-color: rgba(201,168,76,.9);
+  background: linear-gradient(135deg, rgba(201,168,76,.32), rgba(201,168,76,.14));
+  filter: brightness(1.05);
 }
 .ms-tts-btn.is-loading {
-  opacity: .85;
+  opacity: .9;
   cursor: wait;
   border-color: rgba(201,168,76,.55);
+  text-transform: none;
+  letter-spacing: .03em;
+  font-weight: 500;
+  font-size: .85rem;
 }
 .ms-tts-btn.is-playing,
 .ms-tts-btn.is-paused {
-  border-color: rgba(201,168,76,.75);
-  background: rgba(201,168,76,.2);
+  border-color: rgba(201,168,76,.85);
+  background: rgba(201,168,76,.28);
 }
 .ms-tts-btn.ms-tts-lock {
   color: var(--muted);
   border-style: dashed;
-  font-size: .72rem;
-  max-width: min(48vw, 200px);
+  border-color: rgba(201,168,76,.4);
+  background: transparent;
+  font-size: .8rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: .03em;
+  box-shadow: none;
+  max-width: min(92vw, 420px);
+  white-space: normal;
+  text-align: center;
+  line-height: 1.35;
 }
 .ms-tts-stop {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  border: 1px solid var(--stroke);
-  background: transparent;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid rgba(201,168,76,.55);
+  background: rgba(201,168,76,.1);
   color: var(--gold-light);
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
@@ -621,12 +658,17 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 }
 .ms-tts-stop:hover,
 .ms-tts-stop:focus-visible {
-  border-color: rgba(201,168,76,.7);
-  background: rgba(201,168,76,.18);
+  border-color: rgba(201,168,76,.85);
+  background: rgba(201,168,76,.22);
 }
-html[data-theme="light"] .ms-tts-btn,
+html[data-theme="light"] .ms-tts-btn {
+  color: #5c4818;
+  background: linear-gradient(135deg, rgba(168,132,46,.2), rgba(255,252,246,.85));
+  box-shadow: 0 4px 14px rgba(92,72,24,.12);
+}
 html[data-theme="light"] .ms-tts-stop {
-  background: rgba(255,255,255,.55);
+  background: rgba(255,255,255,.7);
+  color: #5c4818;
 }
 
 /* Plein écran = uniquement le cadre du manuscrit (pas toute la page lecteur). */

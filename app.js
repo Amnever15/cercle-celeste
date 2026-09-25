@@ -4587,13 +4587,16 @@
         extra = '<p class="muted">' + t('couple.unavailable') + '</p>';
       }
     }
-    var body = '<p class="kicker">' + kicker + '</p><h2>' + titleHtml + '</h2>' +
-      paras.map(function (p) { return '<p>' + p + '</p>'; }).join('') + extra;
     var iaCtx = (id === 'natal' || id === 'mois' || id === 'jour' || id === 'couple' || id === 'ultime') ? id : null;
+    var ttsBar = manuscriptTtsControlsHtml(iaCtx);
+    if (ttsBar) {
+      ttsBar = '<div class="ms-tts-footer" role="region" aria-label="' + t('ms.tts_aria') + '">' + ttsBar + '</div>';
+    }
+    var body = '<p class="kicker">' + kicker + '</p><h2>' + titleHtml + '</h2>' +
+      paras.map(function (p) { return '<p>' + p + '</p>'; }).join('') + extra + ttsBar;
     var ia = iaCtx ? readerIaPanel(iaCtx) : '';
     return '<div class="pdf-view"><header>' +
       '<button type="button" class="pdf-back" id="close-pdf">' + t('reader.back') + '</button>' +
-      manuscriptTtsControlsHtml(iaCtx) +
       '<span class="kicker">' + titlePlain + '</span>' +
       themeToggleHtml(true) +
       '</header>' +

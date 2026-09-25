@@ -1,4 +1,4 @@
-const CACHE = 'cercle-v67';
+const CACHE = 'cercle-v68';
 const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/manifest.webmanifest', '/icon.svg', '/assets/ia-celeste.png'];
 
 self.addEventListener('install', (e) => {
