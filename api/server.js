@@ -18,6 +18,7 @@ const coupleGen = require('./couple-generate');
 const ultimeGen = require('./ultime-generate');
 const chartCache = require('./natal/chart-cache');
 const downloadBundle = require('./download-bundle');
+const manuscriptTts = require('./manuscript-tts');
 
 const ROOT = __dirname;
 const ULTIME_MONTHS = plans.ULTIME_MONTHS;
@@ -91,7 +92,7 @@ const LOG = resolveLogPath();
 const PORT = parseInt(process.env.PORT || '8789', 10);
 const SECRET = process.env.WEBHOOK_SECRET || '';
 const DEV = String(process.env.DEV_MODE || 'false') === 'true';
-const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/couple-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/tts', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file', '/ultime-file', '/download-all'];
+const API_ROUTES = ['/health', '/access', '/login', '/admin', '/admin/grant', '/admin/natal-reset', '/admin/couple-reset', '/admin/natal-start', '/systeme-webhook', '/webhook-debug', '/generate', '/ia', '/tts', '/manuscript-tts', '/manuscript-tts-audio', '/profile', '/profile-partner', '/natal-file', '/mois-file', '/jour-file', '/couple-file', '/ultime-file', '/download-all'];
 const LAST_WEBHOOKS_MAX = 20;
 const IA_MESSAGES_MAX = 1000;
 
@@ -2014,6 +2015,83 @@ async function handle(req, res) {
         'Cache-Control': 'no-store'
       }, corsHeaders(req)));
       return res.end(audioBuf);
+    }
+
+    /**
+     * Full-manuscript TTS (Divin only). Cache-first on durable volume.
+     * Does NOT consume TTS_CHARS_MONTH (short IA bubble quota).
+     * POST { kind } → { ready, cached, progress, audioUrl } ; poll until ready.
+     */
+    if (route === '/manuscript-tts' && req.method === 'POST') {
+      const body = (await readBody(req)).body;
+      const auth = requireSession(req, url, body);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const c = auth.c;
+      const entitlements = plans.entitlements(c);
+      if (!entitlements.canIa) {
+        return send(res, 403, {
+          error: 'L’écoute du manuscrit est réservée au plan Divin.',
+          contact: publicContact(c)
+        }, req);
+      }
+      const kind = String(body.kind || '').toLowerCase().trim();
+      if (manuscriptTts.KINDS.indexOf(kind) < 0) {
+        return send(res, 400, { error: 'kind requis (natal, mois, jour, couple, ultime).' }, req);
+      }
+      const result = manuscriptTts.ensureManuscriptTts(c, kind, {
+        log: logLine,
+        retry: !!body.retry
+      });
+      if (!result.ok) {
+        return send(res, 404, { error: result.error || 'Manuscrit introuvable.' }, req);
+      }
+      const emailQ = encodeURIComponent(auth.email);
+      return send(res, 200, {
+        ok: true,
+        kind: kind,
+        cached: !!result.cached,
+        ready: !!result.ready,
+        status: result.status,
+        progress: result.progress || { done: 0, total: 0 },
+        hash: result.hash || null,
+        chars: result.chars || 0,
+        periodKey: result.periodKey || null,
+        audioUrl: result.ready
+          ? ('/manuscript-tts-audio?kind=' + encodeURIComponent(kind) + '&email=' + emailQ)
+          : null,
+        note: result.note || manuscriptTts.NOTE,
+        contact: publicContact(c)
+      }, req);
+    }
+
+    if (route === '/manuscript-tts-audio' && req.method === 'GET') {
+      const auth = requireSession(req, url, null);
+      if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
+      const c = auth.c;
+      const entitlements = plans.entitlements(c);
+      if (!entitlements.canIa) {
+        return send(res, 403, { error: 'L’écoute du manuscrit est réservée au plan Divin.' }, req);
+      }
+      const kind = String(url.searchParams.get('kind') || '').toLowerCase().trim();
+      if (manuscriptTts.KINDS.indexOf(kind) < 0) {
+        return send(res, 400, { error: 'kind requis.' }, req);
+      }
+      const file = manuscriptTts.getCachedAudio(c, kind);
+      if (!file) {
+        return send(res, 404, { error: 'Audio pas encore prêt. Relance Écouter.' }, req);
+      }
+      try {
+        const buf = fs.readFileSync(file.path);
+        res.writeHead(200, Object.assign({
+          'Content-Type': 'audio/mpeg',
+          'Content-Length': buf.length,
+          'Cache-Control': 'private, max-age=86400',
+          'Content-Disposition': 'inline; filename="' + kind + '-voix.mp3"'
+        }, corsHeaders(req)));
+        return res.end(buf);
+      } catch (e) {
+        return send(res, 500, { error: 'lecture audio' }, req);
+      }
     }
 
     send(res, 404, { error: 'not found' }, req);

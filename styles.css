@@ -562,6 +562,73 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   flex-shrink: 0;
 }
 
+.ms-tts-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  max-width: min(52vw, 220px);
+}
+.ms-tts-btn {
+  background: transparent;
+  border: 1px solid var(--stroke);
+  color: var(--gold);
+  font-family: 'Inter', sans-serif;
+  font-size: .78rem;
+  letter-spacing: .04em;
+  cursor: pointer;
+  padding: .4rem .7rem;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  pointer-events: auto;
+}
+.ms-tts-btn:hover,
+.ms-tts-btn:focus-visible {
+  border-color: rgba(201,168,76,.7);
+  background: rgba(201,168,76,.18);
+}
+.ms-tts-btn.is-loading {
+  opacity: .85;
+  cursor: wait;
+  border-color: rgba(201,168,76,.55);
+}
+.ms-tts-btn.is-playing,
+.ms-tts-btn.is-paused {
+  border-color: rgba(201,168,76,.75);
+  background: rgba(201,168,76,.2);
+}
+.ms-tts-btn.ms-tts-lock {
+  color: var(--muted);
+  border-style: dashed;
+  font-size: .72rem;
+  max-width: min(48vw, 200px);
+}
+.ms-tts-stop {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--stroke);
+  background: transparent;
+  color: var(--gold-light);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+.ms-tts-stop:hover,
+.ms-tts-stop:focus-visible {
+  border-color: rgba(201,168,76,.7);
+  background: rgba(201,168,76,.18);
+}
+html[data-theme="light"] .ms-tts-btn,
+html[data-theme="light"] .ms-tts-stop {
+  background: rgba(255,255,255,.55);
+}
+
 /* Plein écran = uniquement le cadre du manuscrit (pas toute la page lecteur). */
 html.pdf-fs-active,
 html.pdf-fs-active body {

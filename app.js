@@ -41,7 +41,7 @@
   };
 
   var ULTIME = {
-    pages: 140,
+    pages: '+175',
     need: 6
   };
 
@@ -667,14 +667,36 @@
         'ia.speak_loading': 'Préparation…',
         'ia.tts_err': 'La voix Céleste ne répond pas pour le moment. Réessaie dans un instant.',
         'ia.tts_quota': 'Quota voix du mois atteint. Écouter avec la voix du navigateur ?',
-        'ia.tts_need_auth': 'Reconnecte-toi pour écouter la voix Céleste.'
+        'ia.tts_need_auth': 'Reconnecte-toi pour écouter la voix Céleste.',
+        'ms.tts_listen': 'Écouter',
+        'ms.tts_pause': 'Pause',
+        'ms.tts_resume': 'Reprendre',
+        'ms.tts_stop': 'Arrêter',
+        'ms.tts_preparing': 'Préparation audio…',
+        'ms.tts_progress': 'Préparation audio… {done}/{total}',
+        'ms.tts_lock': 'Écoute du manuscrit · plan Divin',
+        'ms.tts_lock_aria': 'Réservé au plan Divin',
+        'ms.tts_err': 'Impossible de préparer l’audio du manuscrit. Réessaie dans un instant.',
+        'ms.tts_need_file': 'Le manuscrit n’est pas encore disponible à l’écoute.',
+        'ms.tts_aria': 'Écouter le manuscrit entier'
       },
       en: {
         'ia.mic_stop': 'Stop dictation',
         'ia.speak_loading': 'Preparing…',
         'ia.tts_err': 'Céleste’s voice is unavailable right now. Try again in a moment.',
         'ia.tts_quota': 'Monthly voice quota reached. Listen with the browser voice?',
-        'ia.tts_need_auth': 'Sign in again to hear Céleste’s voice.'
+        'ia.tts_need_auth': 'Sign in again to hear Céleste’s voice.',
+        'ms.tts_listen': 'Listen',
+        'ms.tts_pause': 'Pause',
+        'ms.tts_resume': 'Resume',
+        'ms.tts_stop': 'Stop',
+        'ms.tts_preparing': 'Preparing audio…',
+        'ms.tts_progress': 'Preparing audio… {done}/{total}',
+        'ms.tts_lock': 'Listen to manuscript · Divin plan',
+        'ms.tts_lock_aria': 'Reserved for Divin plan',
+        'ms.tts_err': 'Could not prepare the manuscript audio. Try again in a moment.',
+        'ms.tts_need_file': 'This manuscript is not ready to listen yet.',
+        'ms.tts_aria': 'Listen to the full manuscript'
       },
       es: {
         'ia.mic_stop': 'Detener el dictado',
@@ -685,7 +707,18 @@
         'onboard.lede_edit': 'Corrige un error si hace falta. Te quedan {n} modificación{s}.',
         'onboard.edits_left': 'Te quedan {n} modificación{s}.',
         'partner.edits_left': 'Te quedan {n} corrección{s}.',
-        'account.edits_left': 'Te quedan {n} modificación{s}.'
+        'account.edits_left': 'Te quedan {n} modificación{s}.',
+        'ms.tts_listen': 'Escuchar',
+        'ms.tts_pause': 'Pausa',
+        'ms.tts_resume': 'Reanudar',
+        'ms.tts_stop': 'Parar',
+        'ms.tts_preparing': 'Preparando audio…',
+        'ms.tts_progress': 'Preparando audio… {done}/{total}',
+        'ms.tts_lock': 'Escuchar el manuscrito · plan Divin',
+        'ms.tts_lock_aria': 'Reservado al plan Divin',
+        'ms.tts_err': 'No se pudo preparar el audio del manuscrito. Inténtalo en un momento.',
+        'ms.tts_need_file': 'Este manuscrito aún no está listo para escuchar.',
+        'ms.tts_aria': 'Escuchar el manuscrito completo'
       }
     };
     Object.keys(MORE).forEach(function (code) {
@@ -1029,6 +1062,8 @@
   }
 
   function forceReLogin(msg) {
+    stopIaSpeak();
+    stopMsTtsAudio();
     state.user = null;
     state.screen = 'login';
     state.account = false;
@@ -1613,6 +1648,7 @@
       return;
     }
     stopIaSpeak();
+    stopMsTtsAudio();
     var plain = stripIaSpeakText(text);
     if (!plain) return;
     /* Plan Divin (canIa) : TOUJOURS OpenAI /tts (natal, mois, jour, couple, ultime, sélection). */
@@ -1625,6 +1661,247 @@
       return;
     }
     speakIaBrowser(plain, btn);
+  }
+
+  /* ——— Full-manuscript Écouter (Divin, cached server audio) ——— */
+  var _msTts = {
+    kind: null,
+    req: 0,
+    pollTimer: null,
+    audio: null,
+    audioUrl: null,
+    mode: 'idle', /* idle | loading | playing | paused */
+    progress: null
+  };
+
+  function clearMsTtsPoll() {
+    if (_msTts.pollTimer) {
+      try { clearTimeout(_msTts.pollTimer); } catch (e) { /* ignore */ }
+      _msTts.pollTimer = null;
+    }
+  }
+
+  function stopMsTtsAudio() {
+    clearMsTtsPoll();
+    _msTts.req += 1;
+    if (_msTts.audio) {
+      try { _msTts.audio.pause(); } catch (e) { /* ignore */ }
+      try { _msTts.audio.src = ''; } catch (e2) { /* ignore */ }
+      _msTts.audio = null;
+    }
+    if (_msTts.audioUrl) {
+      try { URL.revokeObjectURL(_msTts.audioUrl); } catch (e3) { /* ignore */ }
+      _msTts.audioUrl = null;
+    }
+    _msTts.mode = 'idle';
+    _msTts.progress = null;
+    _msTts.kind = null;
+    syncMsTtsButtons();
+  }
+
+  function msTtsHasFrame(kind) {
+    if (kind === 'natal') return !!(natalCanRead() && (natalPdfUrl() || state.natalPreview));
+    if (kind === 'ultime') return !!(ultimeCanRead() && (ultimePdfUrl() || state.ultimePreview));
+    if (kind === 'mois' || kind === 'jour') return !!(periodCanRead(kind) && (periodPdfUrl(kind) || (state.periodPreviewKind === kind && state.periodPreview)));
+    if (kind === 'couple') return !!(coupleCanRead() && (couplePdfUrl() || state.couplePreview));
+    return false;
+  }
+
+  function syncMsTtsButtons() {
+    var btn = document.getElementById('ms-tts');
+    var stop = document.getElementById('ms-tts-stop');
+    if (!btn) return;
+    var label = btn.querySelector('.ms-tts-label');
+    btn.classList.remove('is-loading', 'is-playing', 'is-paused');
+    btn.removeAttribute('disabled');
+    if (_msTts.mode === 'loading') {
+      btn.classList.add('is-loading');
+      btn.setAttribute('aria-pressed', 'true');
+      btn.disabled = true;
+      var p = _msTts.progress;
+      if (label) {
+        label.textContent = (p && p.total)
+          ? tf('ms.tts_progress', { done: p.done || 0, total: p.total })
+          : t('ms.tts_preparing');
+      }
+      if (stop) stop.hidden = false;
+      return;
+    }
+    if (_msTts.mode === 'playing') {
+      btn.classList.add('is-playing');
+      btn.setAttribute('aria-pressed', 'true');
+      if (label) label.textContent = t('ms.tts_pause');
+      if (stop) stop.hidden = false;
+      return;
+    }
+    if (_msTts.mode === 'paused') {
+      btn.classList.add('is-paused');
+      btn.setAttribute('aria-pressed', 'true');
+      if (label) label.textContent = t('ms.tts_resume');
+      if (stop) stop.hidden = false;
+      return;
+    }
+    btn.setAttribute('aria-pressed', 'false');
+    if (label) label.textContent = t('ms.tts_listen');
+    if (stop) stop.hidden = true;
+  }
+
+  function playMsTtsBlob(blob, reqId, kind) {
+    if (reqId !== _msTts.req) return;
+    if (_msTts.audioUrl) {
+      try { URL.revokeObjectURL(_msTts.audioUrl); } catch (e) { /* ignore */ }
+    }
+    _msTts.audioUrl = URL.createObjectURL(blob);
+    var audio = new Audio(_msTts.audioUrl);
+    _msTts.audio = audio;
+    _msTts.kind = kind;
+    _msTts.mode = 'playing';
+    _msTts.progress = null;
+    syncMsTtsButtons();
+    audio.onended = function () {
+      if (_msTts.audio === audio) stopMsTtsAudio();
+    };
+    audio.onerror = function () {
+      if (_msTts.audio === audio) stopMsTtsAudio();
+    };
+    var p = audio.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(function () { if (_msTts.audio === audio) stopMsTtsAudio(); });
+    }
+  }
+
+  function fetchMsTtsAudio(kind, reqId) {
+    var url = withAuthQuery(
+      API + '/manuscript-tts-audio?kind=' + encodeURIComponent(kind) +
+      '&email=' + encodeURIComponent(state.user.email)
+    );
+    return fetch(url, { method: 'GET', headers: authHeaders(false) }).then(function (res) {
+      if (reqId !== _msTts.req) return null;
+      if (!res.ok) {
+        return res.json().catch(function () { return {}; }).then(function (j) {
+          throw new Error((j && j.error) || t('ms.tts_err'));
+        });
+      }
+      return res.blob();
+    }).then(function (blob) {
+      if (reqId !== _msTts.req) return;
+      if (!blob || !blob.size) throw new Error(t('ms.tts_err'));
+      playMsTtsBlob(blob, reqId, kind);
+    });
+  }
+
+  function pollMsTts(kind, reqId) {
+    if (reqId !== _msTts.req) return;
+    fetch(API + '/manuscript-tts', {
+      method: 'POST',
+      headers: authHeaders(true),
+      body: JSON.stringify({
+        email: state.user && state.user.email,
+        token: state.user && state.user.token,
+        kind: kind
+      })
+    }).then(function (res) {
+      if (reqId !== _msTts.req) return null;
+      return res.json().then(function (j) {
+        if (!res.ok) throw new Error((j && j.error) || t('ms.tts_err'));
+        return j;
+      });
+    }).then(function (j) {
+      if (reqId !== _msTts.req || !j) return;
+      if (j.progress) {
+        _msTts.progress = j.progress;
+        syncMsTtsButtons();
+      }
+      if (j.ready) {
+        return fetchMsTtsAudio(kind, reqId);
+      }
+      _msTts.pollTimer = setTimeout(function () { pollMsTts(kind, reqId); }, 1800);
+    }).catch(function (err) {
+      if (reqId !== _msTts.req) return;
+      try { window.alert((err && err.message) || t('ms.tts_err')); } catch (e) { /* ignore */ }
+      stopMsTtsAudio();
+    });
+  }
+
+  function startMsTts(kind) {
+    if (!canIa()) return;
+    if (!state.user || !state.user.token) {
+      try { window.alert(t('ia.tts_need_auth')); } catch (e) { /* ignore */ }
+      return;
+    }
+    if (!msTtsHasFrame(kind)) {
+      try { window.alert(t('ms.tts_need_file')); } catch (e2) { /* ignore */ }
+      return;
+    }
+    stopIaSpeak();
+    stopMsTtsAudio();
+    var reqId = _msTts.req;
+    _msTts.kind = kind;
+    _msTts.mode = 'loading';
+    _msTts.progress = null;
+    syncMsTtsButtons();
+    pollMsTts(kind, reqId);
+  }
+
+  function toggleMsTts(kind) {
+    if (!canIa()) {
+      try { window.alert(t('ms.tts_lock')); } catch (e) { /* ignore */ }
+      return;
+    }
+    if (_msTts.mode === 'loading' && _msTts.kind === kind) return;
+    if (_msTts.mode === 'playing' && _msTts.kind === kind && _msTts.audio) {
+      try { _msTts.audio.pause(); } catch (e1) { /* ignore */ }
+      _msTts.mode = 'paused';
+      syncMsTtsButtons();
+      return;
+    }
+    if (_msTts.mode === 'paused' && _msTts.kind === kind && _msTts.audio) {
+      var p = _msTts.audio.play();
+      _msTts.mode = 'playing';
+      syncMsTtsButtons();
+      if (p && typeof p.catch === 'function') {
+        p.catch(function () { stopMsTtsAudio(); });
+      }
+      return;
+    }
+    startMsTts(kind);
+  }
+
+  function manuscriptTtsControlsHtml(kind) {
+    if (!kind) return '';
+    if (!canIa()) {
+      return '<button type="button" class="ms-tts-btn ms-tts-lock" id="ms-tts-lock" ' +
+        'aria-label="' + t('ms.tts_lock_aria') + '" title="' + t('ms.tts_lock') + '" data-plan-link="divin">' +
+        '<span class="ms-tts-label">' + t('ms.tts_lock') + '</span></button>';
+    }
+    if (!msTtsHasFrame(kind)) return '';
+    return '<div class="ms-tts-group">' +
+      '<button type="button" class="ms-tts-btn" id="ms-tts" data-ms-kind="' + kind + '" ' +
+        'aria-label="' + t('ms.tts_aria') + '" aria-pressed="false" title="' + t('ms.tts_aria') + '">' +
+        '<span class="ms-tts-label">' + t('ms.tts_listen') + '</span></button>' +
+      '<button type="button" class="ms-tts-stop" id="ms-tts-stop" hidden aria-label="' + t('ms.tts_stop') + '" title="' + t('ms.tts_stop') + '">×</button>' +
+      '</div>';
+  }
+
+  function bindMsTtsControls() {
+    var btn = document.getElementById('ms-tts');
+    if (btn) {
+      btn.onclick = function () {
+        var kind = btn.getAttribute('data-ms-kind') || state.pdf;
+        toggleMsTts(kind);
+      };
+      if (_msTts.kind && _msTts.kind === (btn.getAttribute('data-ms-kind') || state.pdf) && _msTts.mode !== 'idle') {
+        syncMsTtsButtons();
+      }
+    }
+    var stop = document.getElementById('ms-tts-stop');
+    if (stop) {
+      stop.onclick = function () { stopMsTtsAudio(); };
+    }
+    var lock = document.getElementById('ms-tts-lock');
+    if (lock && !lock.getAttribute('data-bound')) {
+      lock.setAttribute('data-bound', '1');
+    }
   }
 
   function bindIaSpeakButtons(root) {
@@ -3823,7 +4100,7 @@
         (readyProfile ? askBtn('ultime', ultimeAsk, ultimeRead) : '') +
         '</div>';
     } else if (plan() === 'gratuit' && months === 0) {
-      ultime = '<div class="card lock stack"><div class="label">' + t('plan.celeste_or_divin') + '</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">180 pages</p><p>' + t('ultime.lock_intro') + '</p></div>';
+      ultime = '<div class="card lock stack"><div class="label">' + t('plan.celeste_or_divin') + '</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + tf('ultime.pages_plain', { n: ULTIME.pages }) + '</p><p>' + t('ultime.lock_intro') + '</p></div>';
     } else if (ultimeOn() && isPausedPaid()) {
       ultime = '<div class="card lock stack"><div class="label">' + t('plan.paused') + '</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + tf('ultime.pages_unlocked', { n: ULTIME.pages }) + '</p><p>' + t('ultime.pause_reopen') +
         (plan() === 'divin' ? '' : tf('ultime.months_kept', { n: months })) +
@@ -4316,6 +4593,7 @@
     var ia = iaCtx ? readerIaPanel(iaCtx) : '';
     return '<div class="pdf-view"><header>' +
       '<button type="button" class="pdf-back" id="close-pdf">' + t('reader.back') + '</button>' +
+      manuscriptTtsControlsHtml(iaCtx) +
       '<span class="kicker">' + titlePlain + '</span>' +
       themeToggleHtml(true) +
       '</header>' +
@@ -4571,6 +4849,7 @@
     var cp = document.getElementById('close-pdf');
     if (cp) cp.onclick = function () {
       stopIaSpeak();
+      stopMsTtsAudio();
       stopIaListen({ manual: true });
       clearPdfFullscreen();
       state.pdf = null;
@@ -4579,6 +4858,7 @@
     };
     bindPdfFullscreen();
     bindManuscriptSelection();
+    bindMsTtsControls();
     bindIaSpeakButtons(document.getElementById('ia-log') || document);
     bindIaMicButton();
     var si = document.getElementById('send-ia');
