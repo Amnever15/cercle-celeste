@@ -1,5 +1,5 @@
 /**
- * Génération natal complète (28 pages) — port serveur de
+ * Génération natal complète (~33 pages : ~28 + teaser Gene Keys Activation) — port serveur de
  * GENERATIONS/manuscrit-celeste-generation.html
  *
  * - HD API + Astro API + Claude (8 parties) côté serveur uniquement

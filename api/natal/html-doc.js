@@ -331,11 +331,15 @@ function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
       '<div class="orn">✦ ········· ✦ ········· ✦</div>' +
       (geneKeys.introduction ? '<div class="body">' + paras(geneKeys.introduction) + '</div>' : '') +
       carteHtml +
+      (geneKeys.mode === 'teaser' && geneKeys.pont_ultime
+        ? '<div class="syn-block" style="margin-top:1.4em"><div class="syn-k">Vers le Manuscrit Ultime</div><div class="body">' +
+          paras(geneKeys.pont_ultime) + '</div></div>'
+        : '') +
       '<footer class="page-ftr">' + footerLabel + '</footer>' +
       '</section>' +
       renderGkSequenceHtml(geneKeys.activation, 'Activation Sequence') +
-      renderGkSequenceHtml(geneKeys.venus, 'Venus Sequence') +
-      renderGkSequenceHtml(geneKeys.pearl, 'Pearl Sequence');
+      (geneKeys.mode === 'teaser' ? '' : renderGkSequenceHtml(geneKeys.venus, 'Venus Sequence')) +
+      (geneKeys.mode === 'teaser' ? '' : renderGkSequenceHtml(geneKeys.pearl, 'Pearl Sequence'));
 
     var lev = geneKeys.pearl && geneKeys.pearl.synthese_3_leviers;
     if (lev && (lev.annee || lev.amour || lev.abondance)) {
@@ -905,9 +909,11 @@ function estimatePages(manuscrit) {
     });
   }
   var words = parts.join(' ').split(/\s+/).filter(Boolean).length;
-  /* Couverture + placements + Gene Keys (~30 p.) → +175 pour Ultime enrichi */
+  /* Couverture + placements + Gene Keys Ultime (Vénus/Pearl) → plancher ~175 p. */
   var base = Math.max(1, Math.round(words / 280));
-  return manuscrit.gene_keys ? Math.max(base, 175) : base;
+  var gk = manuscrit.gene_keys;
+  var fullGk = gk && gk.mode !== 'teaser' && (gk.venus || gk.pearl || gk.mode === 'full');
+  return fullGk ? Math.max(base, 175) : base;
 }
 
 /** Extrait un texte compact pour contextualiser l’IA Céleste. */

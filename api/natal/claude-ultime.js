@@ -362,6 +362,7 @@ async function generateUltimeManuscrit(contact, hd, astro, onProgress) {
   if (onProgress) onProgress('Gene Keys — profil hologénétique…', 72);
   var geneKeysBlock = await generateGeneKeysBlock(contact, hd, astro, onProgress);
   manuscrit.gene_keys = geneKeysBlock;
+  if (manuscrit.gene_keys) manuscrit.gene_keys.mode = 'full';
 
   if (manuscrit.intro && typeof manuscrit.intro === 'string') {
     if (!/Gene Keys/i.test(manuscrit.intro)) {

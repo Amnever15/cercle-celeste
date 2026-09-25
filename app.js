@@ -10,11 +10,11 @@
   };
 
   var NATAL = {
-    pages: 28,
+    pages: 33,
     kicker: 'Natal',
-    intro: 'Les 28 pages de ton thème — toujours accessibles tant que ton abonnement est actif.',
+    intro: 'Les ~33 pages de ton thème — toujours accessibles tant que ton abonnement est actif.',
     body: [
-      'Ici s’ouvrira le manuscrit de 28 pages, écrit à partir de ta date, ton heure et ton lieu de naissance.',
+      'Ici s’ouvrira le manuscrit de ~33 pages, écrit à partir de ta date, ton heure et ton lieu de naissance.',
       'Il ne change pas : c’est qui tu es. Tu le relis autant de fois que tu veux, tant que ton espace reste ouvert.',
       'Si tu quittes l’abonnement, ce coffre se ferme. Tes données restent ; le livre se rouvre dès que tu reviens.'
     ]
@@ -659,6 +659,19 @@
         if (I18N[code][k] == null) I18N[code][k] = I18N.en[k];
       });
     });
+    /* Manuscrit de vie v2 (~33 p. + teaser Gene Keys Activation) */
+    if (I18N.fr) {
+      I18N.fr['natal.intro'] = 'Les ~33 pages de ton thème — toujours accessibles tant que ton abonnement est actif.';
+      I18N.fr['natal.pages_price'] = '~33 pages · 59 € / mois';
+    }
+    if (I18N.en) {
+      I18N.en['natal.intro'] = 'The ~33 pages of your chart — always available while your subscription is active.';
+      I18N.en['natal.pages_price'] = '~33 pages · €59 / month';
+    }
+    if (I18N.es) {
+      I18N.es['natal.intro'] = 'Las ~33 páginas de tu carta — siempre accesibles mientras tu suscripción esté activa.';
+      I18N.es['natal.pages_price'] = '~33 páginas · 59 € / mes';
+    }
   })();
 
   (function addI18nMore() {
@@ -666,7 +679,7 @@
       fr: {
         'reader.close': 'Fermer le manuscrit',
         'pages.unit': 'pages',
-        'natal.pages_badge_aria': 'Environ 28 pages',
+        'natal.pages_badge_aria': 'Environ 33 pages',
         'ultime.pages_badge_aria': 'Environ 180 pages',
         'ia.quota_left': '{left} / {quota} messages ce mois',
         'ia.quota_exhausted': 'Quota IA du mois atteint. Passe à un plan supérieur, ou reviens le 1er.',
@@ -757,7 +770,7 @@
       en: {
         'reader.close': 'Close manuscript',
         'pages.unit': 'pages',
-        'natal.pages_badge_aria': 'About 28 pages',
+        'natal.pages_badge_aria': 'About 33 pages',
         'ultime.pages_badge_aria': 'About 180 pages',
         'ia.quota_left': '{left} / {quota} messages this month',
         'ia.quota_exhausted': 'Monthly AI quota reached. Upgrade your plan, or come back on the 1st.',
@@ -848,7 +861,7 @@
       es: {
         'reader.close': 'Cerrar el manuscrito',
         'pages.unit': 'páginas',
-        'natal.pages_badge_aria': 'Unas 28 páginas',
+        'natal.pages_badge_aria': 'Unas 33 páginas',
         'ultime.pages_badge_aria': 'Unas 180 páginas',
         'ia.quota_left': '{left} / {quota} mensajes este mes',
         'ia.quota_exhausted': 'Cupo de IA del mes agotado. Mejora tu plan, o vuelve el día 1.',
@@ -5206,7 +5219,7 @@
         '<span class="pages-badge-unit">' + t('pages.unit') + '</span></div>';
     }
     return '<div class="pages-badge pages-badge--natal" aria-label="' + t('natal.pages_badge_aria') + '">' +
-      '<span class="pages-badge-num">~28</span>' +
+      '<span class="pages-badge-num">~33</span>' +
       '<span class="pages-badge-unit">' + t('pages.unit') + '</span></div>';
   }
 

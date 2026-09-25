@@ -552,7 +552,7 @@ function canGenerate(c, kind) {
       ok: false,
       error: paused
         ? 'Abonnement en pause : le manuscrit natal se rouvre dès que tu reprends. En attendant, utilise les quotas Gratuit (jour / mois).'
-        : 'Le manuscrit de 28 pages est dans le plan Céleste.'
+        : 'Le manuscrit de ~33 pages est dans le plan Céleste.'
     };
   }
   if (kind === 'couple') {

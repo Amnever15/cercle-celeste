@@ -1,11 +1,13 @@
 /**
- * Rédaction Manuscrit Céleste 28 pages — port des prompts GENERATIONS
+ * Rédaction Manuscrit Céleste de vie (~33 pages) — port des prompts GENERATIONS
+ * + teaser Gene Keys (Séquence d'Activation seule). Venus/Pearl restent Ultime.
  * (manuscrit-celeste-generation.html → callClaude ; langue via contact.language).
  * Clé : process.env.CLAUDE_KEY || ANTHROPIC_API_KEY — jamais exposée au client.
  */
 const { requestJson, sleep } = require('./http');
 const { parseClaudeJsonRaw } = require('./json-fix');
 const language = require('../language');
+const { buildGeneKeysProfile } = require('./gene-keys');
 
 function claudeKey() {
   return String(process.env.CLAUDE_KEY || process.env.ANTHROPIC_API_KEY || '').trim();
@@ -435,7 +437,99 @@ Retourne UNIQUEMENT ce JSON :
     conclusion: rE.conclusion,
     synthese: rH && rH.synthese ? rH.synthese : null
   };
-  return normalizeManuscrit(enrichPlacementsFromAstro(assembled, astro));
+  assembled = normalizeManuscrit(enrichPlacementsFromAstro(assembled, astro));
+
+  /* Teaser Gene Keys (~5 p.) : Activation Sequence seulement — Ultime garde Vénus + Pearl + profondeur. */
+  try {
+    if (onProgress) onProgress('Gene Keys — Séquence d\'Activation (aperçu)…', 92);
+    assembled.gene_keys = await generateGeneKeysTeaser(contact, hd, client, langRule);
+  } catch (gkErr) {
+    console.warn('[claude-natal] Gene Keys teaser failed:', gkErr && gkErr.message);
+  }
+
+  return assembled;
+}
+
+/**
+ * Teaser Gene Keys pour le Manuscrit Céleste de vie (~5 pages).
+ * Uniquement la Séquence d'Activation (4 sphères), textes courts.
+ * Venus Sequence + Pearl Sequence = exclusivité Manuscrit Ultime.
+ */
+async function generateGeneKeysTeaser(contact, hd, client, langRule) {
+  var profile = buildGeneKeysProfile(hd);
+  var act = (profile && profile.activation) || [];
+  function sphereLine(s) {
+    if (!s || !s.ok) return (s && s.idFr ? s.idFr : '?') + ': (donnée manquante)';
+    return (
+      s.idFr + ' = Gene Key ' + s.label + ' « ' + s.key.nom + ' » | Ombre: ' + s.key.ombre +
+      ' → Don: ' + s.key.don + ' → Siddhi: ' + s.key.siddhi
+    );
+  }
+  var lines = act.map(sphereLine).join('\n');
+  var prenom = (client && client.prenom) || 'toi';
+
+  function sphereJson(s, fallbackId) {
+    var ok = s && s.ok;
+    return (
+      '{"id":"' + (ok ? s.id : fallbackId) + '",' +
+      '"nom":"' + (ok ? s.idFr : fallbackId) + '",' +
+      '"gene_key":"' + (ok ? s.label : '—') + '",' +
+      '"nom_cle":"' + (ok && s.key ? s.key.nom : '—') + '",' +
+      '"ombre":"' + (ok && s.key ? s.key.ombre : '—') + '",' +
+      '"don":"' + (ok && s.key ? s.key.don : '—') + '",' +
+      '"siddhi":"' + (ok && s.key ? s.key.siddhi : '—') + '",' +
+      '"texte":"120–160 mots. Contemplation courte Ombre→Don→Siddhi pour ' + prenom + '. Style tu, incarné. 2 paragraphes \\n\\n."}'
+    );
+  }
+
+  var prompt =
+    'Tu es un maître Gene Keys (Richard Rudd). Tu rédiges un APERÇU pour ' + prenom +
+    ' dans le Manuscrit Céleste de vie.\n' +
+    'RÈGLES : Tutoiement, JSON brut strict. N\'invente AUCUN numéro de Gene Key.\n' +
+    'Nomme « Gene Keys ». Chaque sphère : Ombre → Don → Siddhi, en plus court que l\'Ultime.\n' +
+    'NE développe PAS Venus Sequence ni Pearl Sequence (réservées au Manuscrit Ultime).\n' +
+    (langRule || '') + '\n' +
+    'PROFIL ACTIVATION (données réelles) :\n' + lines + '\n\n' +
+    'Génère uniquement :\n{\n' +
+    '  "gene_keys": {\n' +
+    '    "mode": "teaser",\n' +
+    '    "titre": "Tes Gene Keys — Aperçu",\n' +
+    '    "sous_titre": "Séquence d\'Activation · Ombre → Don → Siddhi",\n' +
+    '    "introduction": "110–140 mots. Présente Gene Keys à ' + prenom +
+    ' : 64 clés, Ombre/Don/Siddhi. Dis que ceci est un aperçu (Activation). Termine en ouvrant vers le Manuscrit Ultime pour Venus Sequence, Pearl Sequence et la contemplation complète.",\n' +
+    '    "activation": {\n' +
+    '      "titre": "Séquence d\'Activation",\n' +
+    '      "introduction": "70–90 mots. Les 4 sphères de ton Activation.",\n' +
+    '      "spheres": [\n' +
+    '        ' + sphereJson(act[0], 'lifes_work') + ',\n' +
+    '        ' + sphereJson(act[1], 'evolution') + ',\n' +
+    '        ' + sphereJson(act[2], 'radiance') + ',\n' +
+    '        ' + sphereJson(act[3], 'purpose') + '\n' +
+    '      ]\n' +
+    '    },\n' +
+    '    "pont_ultime": "55–75 mots. Invite chaleureusement ' + prenom +
+    ' à ouvrir le Manuscrit Ultime (~180 pages) pour Venus, Pearl et la profondeur Gene Keys."\n' +
+    '  }\n}';
+
+  var raw = await claudeJsonApi(prompt, 7000, 'GK-teaser-natal');
+  var gk = (raw && raw.gene_keys) || raw || {};
+  gk.mode = 'teaser';
+  gk.profil_calcule = {
+    activation: act.map(function (s) {
+      return {
+        id: s.id,
+        idFr: s.idFr,
+        label: s.label,
+        ok: s.ok,
+        key: s.key,
+        side: s.side,
+        planet: s.planet
+      };
+    })
+  };
+  if (!gk.titre) gk.titre = 'Tes Gene Keys — Aperçu';
+  if (!gk.sous_titre) gk.sous_titre = 'Séquence d\'Activation · Ombre → Don → Siddhi';
+  return gk;
 }
 
 /** Structure attendue (dry-run sans Claude). */
