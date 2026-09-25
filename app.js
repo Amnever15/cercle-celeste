@@ -681,6 +681,7 @@
         'ms.tts_aria': 'Écouter le manuscrit entier',
         'account.voice': 'Voix de Céleste',
         'account.voice_hint': 'Choisis la voix OpenAI pour l’écoute IA et les manuscrits.',
+        'account.voice_choose': 'Choisir la voix',
         'account.voice_test': 'Tester',
         'account.voice_testing': 'Écoute…',
         'account.voice_saved': 'Voix enregistrée.',
@@ -714,6 +715,7 @@
         'ms.tts_aria': 'Listen to the full manuscript',
         'account.voice': 'Céleste’s voice',
         'account.voice_hint': 'Choose the OpenAI voice for AI listen and manuscripts.',
+        'account.voice_choose': 'Choose a voice',
         'account.voice_test': 'Preview',
         'account.voice_testing': 'Playing…',
         'account.voice_saved': 'Voice saved.',
@@ -751,6 +753,7 @@
         'ms.tts_aria': 'Escuchar el manuscrito completo',
         'account.voice': 'Voz de Céleste',
         'account.voice_hint': 'Elige la voz OpenAI para la escucha IA y los manuscritos.',
+        'account.voice_choose': 'Elegir la voz',
         'account.voice_test': 'Probar',
         'account.voice_testing': 'Escuchando…',
         'account.voice_saved': 'Voz guardada.',
@@ -1300,14 +1303,49 @@
     return normalizeTtsVoice(state.user && state.user.ttsVoice);
   }
 
-  function voiceSelectHtml(id, selected) {
+  function voiceLabelParts(voiceId) {
+    var full = t('voice.' + voiceId);
+    var parts = String(full).split(/\s+[—–-]\s+/);
+    return {
+      name: parts[0] || voiceId,
+      trait: parts[1] || ''
+    };
+  }
+
+  function voicePickerHtml(id, selected) {
     var cur = normalizeTtsVoice(selected);
-    var opts = TTS_VOICES.map(function (v) {
-      return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' +
-        t('voice.' + v) + '</option>';
+    var cards = TTS_VOICES.map(function (v) {
+      var parts = voiceLabelParts(v);
+      var active = v === cur;
+      return '<button type="button" class="voice-card' + (active ? ' active' : '') + '"' +
+        ' role="radio" aria-checked="' + (active ? 'true' : 'false') + '"' +
+        ' data-voice="' + v + '"' +
+        ' id="' + id + '-' + v + '">' +
+        '<span class="voice-name">' + escapeHtml(parts.name) + '</span>' +
+        (parts.trait ? '<span class="voice-trait">' + escapeHtml(parts.trait) + '</span>' : '') +
+      '</button>';
     }).join('');
-    return '<select class="input lang-select" id="' + id + '" aria-label="' + t('account.voice') + '">' +
-      opts + '</select>';
+    return '<div class="voice-picker" id="' + id + '" role="radiogroup" aria-labelledby="' + id + '-lbl">' +
+      cards +
+    '</div>';
+  }
+
+  function selectedAccountTtsVoiceFromDom() {
+    var active = document.querySelector('#acct-tts-voice .voice-card.active');
+    return normalizeTtsVoice(active ? active.getAttribute('data-voice') : accountTtsVoice());
+  }
+
+  function setActiveVoiceCard(voiceId) {
+    var id = normalizeTtsVoice(voiceId);
+    var root = document.getElementById('acct-tts-voice');
+    if (!root) return;
+    var cards = root.querySelectorAll('.voice-card');
+    for (var i = 0; i < cards.length; i++) {
+      var card = cards[i];
+      var on = card.getAttribute('data-voice') === id;
+      card.classList.toggle('active', on);
+      card.setAttribute('aria-checked', on ? 'true' : 'false');
+    }
   }
 
   function accountVoiceBlockHtml() {
@@ -1315,10 +1353,11 @@
     return '<div class="acct-block" id="acct-voice-block">' +
       '<div class="label">' + t('account.voice') + '</div>' +
       '<p class="muted acct-hint">' + t('account.voice_hint') + '</p>' +
-      '<div class="voice-picker-row">' +
-        voiceSelectHtml('acct-tts-voice', accountTtsVoice()) +
-        '<button class="btn ghost" type="button" id="acct-tts-preview">' + t('account.voice_test') + '</button>' +
+      '<div class="voice-choose">' +
+        '<div class="voice-choose-label" id="acct-tts-voice-lbl">' + t('account.voice_choose') + '</div>' +
+        voicePickerHtml('acct-tts-voice', accountTtsVoice()) +
       '</div>' +
+      '<button class="btn ghost" type="button" id="acct-tts-preview">' + t('account.voice_test') + '</button>' +
       '<p class="muted acct-hint" id="acct-tts-voice-status" hidden></p>' +
     '</div>';
   }
@@ -1356,8 +1395,7 @@
       return;
     }
     var btn = document.getElementById('acct-tts-preview');
-    var sel = document.getElementById('acct-tts-voice');
-    var voiceId = normalizeTtsVoice(sel ? sel.value : accountTtsVoice());
+    var voiceId = selectedAccountTtsVoiceFromDom();
     if (btn) {
       btn.disabled = true;
       btn.textContent = t('account.voice_testing');
@@ -5040,11 +5078,15 @@
     if (oa) oa.onclick = function () { state.account = true; render(); };
     var ca = document.getElementById('close-account');
     if (ca) ca.onclick = function () { state.account = false; render(); };
-    var voiceSel = document.getElementById('acct-tts-voice');
-    if (voiceSel) {
-      voiceSel.onchange = function () {
+    var voicePicker = document.getElementById('acct-tts-voice');
+    if (voicePicker) {
+      voicePicker.onclick = function (e) {
+        var card = e.target && e.target.closest ? e.target.closest('.voice-card') : null;
+        if (!card || !voicePicker.contains(card)) return;
+        var voiceId = normalizeTtsVoice(card.getAttribute('data-voice'));
+        setActiveVoiceCard(voiceId);
         var statusEl = document.getElementById('acct-tts-voice-status');
-        saveAccountTtsVoice(voiceSel.value, {
+        saveAccountTtsVoice(voiceId, {
           onOk: function () {
             if (statusEl) {
               statusEl.hidden = false;
@@ -5052,7 +5094,7 @@
             }
           }
         }).catch(function (err) {
-          try { window.alert((err && err.message) || t('ia.tts_err')); } catch (e) { /* ignore */ }
+          try { window.alert((err && err.message) || t('ia.tts_err')); } catch (e2) { /* ignore */ }
         });
       };
     }
