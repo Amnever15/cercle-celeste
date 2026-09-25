@@ -76,7 +76,7 @@ function contextLabel(ctx) {
   if (ctx === 'mois') return 'du mois';
   if (ctx === 'jour') return 'du jour';
   if (ctx === 'couple') return 'de couple';
-  if (ctx === 'ultime') return 'Ultime';
+  if (ctx === 'ultime') return 'Manuscrit Ultime';
   return 'de ta vie';
 }
 

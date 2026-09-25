@@ -575,8 +575,8 @@ function canGenerate(c, kind) {
     return {
       ok: false,
       error: paused
-        ? 'Abonnement en pause : l’Ultime se rouvre dès que tu reprends. Tes mois payés sont conservés.'
-        : 'L’Ultime s’ouvre après 6 mois Céleste, ou tout de suite en Divin.'
+        ? 'Abonnement en pause : le Manuscrit Ultime se rouvre dès que tu reprends. Tes mois payés sont conservés.'
+        : 'Le Manuscrit Ultime s’ouvre après 6 mois Céleste, ou tout de suite en Divin.'
     };
   }
   if (kind === 'jour' && e.dailyLeft === 0) return { ok: false, error: 'Tes 5 manuscrits du jour de ce mois sont utilisés. Reviens le mois prochain, ou passe Céleste.' };

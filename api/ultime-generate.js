@@ -191,7 +191,7 @@ async function generateUltime(contact, opts) {
   var hd = chart.hd;
   var astro = chart.astro;
   if (chart.fromCache) {
-    onProgress('Carte céleste déjà connue — rédaction Ultime…', 35);
+    onProgress('Carte céleste déjà connue — rédaction Manuscrit Ultime…', 35);
   } else {
     onProgress('Alignement des planètes terminé…', 40);
   }
@@ -204,7 +204,7 @@ async function generateUltime(contact, opts) {
     throw new Error('Manuscrit Ultime incomplet (' + sectionCount + ' chapitres, attendu ≥18) — régénère.');
   }
 
-  onProgress('Assemblage et reliure de l’Ultime…', 92);
+  onProgress('Assemblage et reliure du Manuscrit Ultime…', 92);
   var html = htmlDoc.buildNatalHtml(contact, manuscrit, hd, astro, {
     coverMain: 'Ton Manuscrit',
     coverGold: 'Ultime',
@@ -316,7 +316,7 @@ function startUltimeJob(email) {
         }, { source: gen.source, pagesEst: gen.pagesEst });
         _hooks.log('ULTIME ready ' + key + ' ~' + (gen.pagesEst || '?') + 'p');
       } catch (err) {
-        markError(key, (err && err.message) || 'Génération Ultime impossible');
+        markError(key, (err && err.message) || 'Génération Manuscrit Ultime impossible');
         _hooks.log('ULTIME error ' + key + ': ' + ((err && err.message) || err));
       } finally {
         delete runningJobs[key];
