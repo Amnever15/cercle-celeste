@@ -41,7 +41,7 @@
   };
 
   var ULTIME = {
-    pages: '+175',
+    pages: '~180',
     need: 6
   };
 
@@ -663,6 +663,24 @@
   (function addI18nMore() {
     var MORE = {
       fr: {
+        'reader.close': 'Fermer le manuscrit',
+        'pages.unit': 'pages',
+        'natal.pages_badge_aria': 'Environ 28 pages',
+        'ultime.pages_badge_aria': 'Environ 180 pages',
+        'ia.quota_left': '{left} / {quota} messages ce mois',
+        'ia.quota_exhausted': 'Quota IA du mois atteint. Passe à un plan supérieur, ou reviens le 1er.',
+        'ia.quota_plans': 'Gratuit 2 · Céleste 10 · Divin 500 / mois',
+        'ia.pass_celeste': 'Passer Céleste · 59 €',
+        'ia.pass_divin': 'Passer Divin · 137 €',
+        'ia.included': 'Sur tous les plans',
+        'ia.lock_reader': 'Pose tes questions sur ce manuscrit — IA incluse selon ton plan.',
+        'ia.card_ok': 'Elle t’accompagne sous chaque manuscrit, pendant que tu lis.',
+        'ia.available': 'Disponible sur ton plan',
+        'account.ia_quota': '{left} / {quota} ce mois',
+        'account.ia_ok': 'Disponible',
+        'account.ia_lock': 'Incluse dès le Gratuit (2 / mois)',
+        'account.ia_pause': 'Quota Gratuit (2 / mois) pendant la pause',
+        'login.lede': 'Gratuit, Céleste (59 €) ou Divin (137 €).<br>L’IA Céleste : 2 / 10 / 500 messages par mois.',
         'ia.mic_stop': 'Arrêter la dictée',
         'ia.speak_loading': 'Préparation…',
         'ia.tts_err': 'La voix Céleste ne répond pas pour le moment. Réessaie dans un instant.',
@@ -697,6 +715,24 @@
         'voice.shimmer': 'Shimmer — doux'
       },
       en: {
+        'reader.close': 'Close manuscript',
+        'pages.unit': 'pages',
+        'natal.pages_badge_aria': 'About 28 pages',
+        'ultime.pages_badge_aria': 'About 180 pages',
+        'ia.quota_left': '{left} / {quota} messages this month',
+        'ia.quota_exhausted': 'Monthly AI quota reached. Upgrade your plan, or come back on the 1st.',
+        'ia.quota_plans': 'Free 2 · Céleste 10 · Divin 500 / month',
+        'ia.pass_celeste': 'Go Céleste · €59',
+        'ia.pass_divin': 'Go Divin · €137',
+        'ia.included': 'On every plan',
+        'ia.lock_reader': 'Ask questions about this manuscript — AI included on your plan.',
+        'ia.card_ok': 'She accompanies you under each manuscript as you read.',
+        'ia.available': 'Available on your plan',
+        'account.ia_quota': '{left} / {quota} this month',
+        'account.ia_ok': 'Available',
+        'account.ia_lock': 'Included from Free (2 / month)',
+        'account.ia_pause': 'Free quota (2 / month) while paused',
+        'login.lede': 'Free, Céleste (€59) or Divin (€137).<br>Céleste AI: 2 / 10 / 500 messages per month.',
         'ia.mic_stop': 'Stop dictation',
         'ia.speak_loading': 'Preparing…',
         'ia.tts_err': 'Céleste’s voice is unavailable right now. Try again in a moment.',
@@ -731,6 +767,24 @@
         'voice.shimmer': 'Shimmer — soft'
       },
       es: {
+        'reader.close': 'Cerrar el manuscrito',
+        'pages.unit': 'páginas',
+        'natal.pages_badge_aria': 'Unas 28 páginas',
+        'ultime.pages_badge_aria': 'Unas 180 páginas',
+        'ia.quota_left': '{left} / {quota} mensajes este mes',
+        'ia.quota_exhausted': 'Cupo de IA del mes agotado. Mejora tu plan, o vuelve el día 1.',
+        'ia.quota_plans': 'Gratis 2 · Céleste 10 · Divin 500 / mes',
+        'ia.pass_celeste': 'Pasar a Céleste · 59 €',
+        'ia.pass_divin': 'Pasar a Divin · 137 €',
+        'ia.included': 'En todos los planes',
+        'ia.lock_reader': 'Haz preguntas sobre este manuscrito — IA incluida según tu plan.',
+        'ia.card_ok': 'Te acompaña bajo cada manuscrito mientras lees.',
+        'ia.available': 'Disponible en tu plan',
+        'account.ia_quota': '{left} / {quota} este mes',
+        'account.ia_ok': 'Disponible',
+        'account.ia_lock': 'Incluida desde Gratis (2 / mes)',
+        'account.ia_pause': 'Cupo Gratis (2 / mes) en pausa',
+        'login.lede': 'Gratis, Céleste (59 €) o Divin (137 €).<br>IA Céleste: 2 / 10 / 500 mensajes al mes.',
         'ia.mic_stop': 'Detener el dictado',
         'ia.speak_loading': 'Preparando…',
         'ia.tts_err': 'La voz de Céleste no responde por ahora. Inténtalo en un momento.',
@@ -1284,8 +1338,14 @@
   }
   function canIa() {
     if (!state.user) return false;
-    if (isPausedPaid()) return false;
     return !!state.user.canIa;
+  }
+  /** OpenAI TTS (bulles + manuscrits + voix compte) : Divin actif uniquement. */
+  function canOpenAiTts() {
+    if (!state.user) return false;
+    if (isPausedPaid()) return false;
+    if (state.user.canOpenAiTts != null) return !!state.user.canOpenAiTts;
+    return plan() === 'divin' && isActive();
   }
 
   /* OpenAI TTS voices for tts-1 (Divin account picker). Default: nova. */
@@ -1349,7 +1409,7 @@
   }
 
   function accountVoiceBlockHtml() {
-    if (!canIa()) return '';
+    if (!canOpenAiTts()) return '';
     return '<div class="acct-block" id="acct-voice-block">' +
       '<div class="label">' + t('account.voice') + '</div>' +
       '<p class="muted acct-hint">' + t('account.voice_hint') + '</p>' +
@@ -1364,7 +1424,7 @@
 
   function saveAccountTtsVoice(voiceId, opts) {
     opts = opts || {};
-    if (!state.user || !state.user.token || !canIa()) return Promise.resolve(null);
+    if (!state.user || !state.user.token || !canOpenAiTts()) return Promise.resolve(null);
     var id = normalizeTtsVoice(voiceId);
     state.user.ttsVoice = id;
     saveUser();
@@ -1390,7 +1450,7 @@
   }
 
   function previewAccountTtsVoice() {
-    if (!canIa() || !state.user || !state.user.token) {
+    if (!canOpenAiTts() || !state.user || !state.user.token) {
       try { window.alert(t('ia.tts_need_auth')); } catch (e) { /* ignore */ }
       return;
     }
@@ -1444,8 +1504,38 @@
   }
 
   function iaLeft() {
-    if (!state.user || isPausedPaid()) return 0;
-    return state.user.iaLeft == null ? 0 : state.user.iaLeft;
+    if (!state.user) return 0;
+    if (state.user.iaLeft == null) return 0;
+    return Math.max(0, Math.floor(Number(state.user.iaLeft)));
+  }
+  function iaQuota() {
+    if (!state.user || state.user.iaQuota == null) return 0;
+    return Math.max(0, Math.floor(Number(state.user.iaQuota)));
+  }
+  function iaQuotaLineHtml(opts) {
+    opts = opts || {};
+    if (!canIa()) return '';
+    var left = iaLeft();
+    var quota = iaQuota();
+    if (!quota) return '';
+    var cls = 'ia-quota-line';
+    if (left <= 0) cls += ' is-out';
+    else if (left <= Math.max(1, Math.ceil(quota * 0.2))) cls += ' is-low';
+    if (opts.always || left <= Math.max(2, Math.ceil(quota * 0.25)) || left <= 0) {
+      return '<p class="' + cls + '">' + tf('ia.quota_left', { left: left, quota: quota }) + '</p>';
+    }
+    return '';
+  }
+  function iaUpgradeCtaHtml() {
+    var p = plan();
+    if (p === 'divin') return '';
+    if (p === 'celeste') {
+      return '<button class="btn ghost ia-upgrade-cta" type="button" data-plan-link="divin">' + t('ia.pass_divin') + '</button>';
+    }
+    return '<div class="stack ia-upgrade-cta">' +
+      '<button class="btn" type="button" data-plan-link="celeste">' + t('ia.pass_celeste') + '</button>' +
+      '<button class="btn ghost" type="button" data-plan-link="divin">' + t('ia.pass_divin') + '</button>' +
+      '</div>';
   }
 
   function escapeHtml(s) {
@@ -1673,7 +1763,7 @@
   }
 
   function iaSpeakAvailable() {
-    return iaSpeakSupported() || (typeof Audio !== 'undefined' && canIa());
+    return iaSpeakSupported() || (typeof Audio !== 'undefined' && canOpenAiTts());
   }
 
   /** Texte parlé : retire le markdown léger éventuel. */
@@ -1855,8 +1945,8 @@
     stopMsTtsAudio();
     var plain = stripIaSpeakText(text);
     if (!plain) return;
-    /* Plan Divin (canIa) : TOUJOURS OpenAI /tts (natal, mois, jour, couple, ultime, sélection). */
-    if (canIa()) {
+    /* Divin : OpenAI /tts. Autres plans IA : speechSynthesis navigateur. */
+    if (canOpenAiTts()) {
       if (!state.user || !state.user.token) {
         try { window.alert(t('ia.tts_need_auth')); } catch (e) { /* ignore */ }
         return;
@@ -2028,7 +2118,7 @@
   }
 
   function startMsTts(kind) {
-    if (!canIa()) return;
+    if (!canOpenAiTts()) return;
     if (!state.user || !state.user.token) {
       try { window.alert(t('ia.tts_need_auth')); } catch (e) { /* ignore */ }
       return;
@@ -2048,7 +2138,7 @@
   }
 
   function toggleMsTts(kind) {
-    if (!canIa()) {
+    if (!canOpenAiTts()) {
       try { window.alert(t('ms.tts_lock')); } catch (e) { /* ignore */ }
       return;
     }
@@ -2073,7 +2163,7 @@
 
   function manuscriptTtsControlsHtml(kind) {
     if (!kind) return '';
-    if (!canIa()) {
+    if (!canOpenAiTts()) {
       return '<button type="button" class="ms-tts-btn ms-tts-lock" id="ms-tts-lock" ' +
         'aria-label="' + t('ms.tts_lock_aria') + '" title="' + t('ms.tts_lock') + '" data-plan-link="divin">' +
         '<span class="ms-tts-label">' + t('ms.tts_lock') + '</span></button>';
@@ -2337,7 +2427,7 @@
     passage = String(passage || '').trim().replace(/\s+/g, ' ');
     if (passage.length < MS_SEL_MIN) return;
     hideMsSelBar();
-    if (state.pdf === 'natal' || state.pdf === 'mois' || state.pdf === 'jour' || state.pdf === 'couple') {
+    if (state.pdf === 'natal' || state.pdf === 'mois' || state.pdf === 'jour' || state.pdf === 'couple' || state.pdf === 'ultime') {
       state.iaContext = state.pdf;
     }
     scrollReaderIaIntoView();
@@ -2880,6 +2970,7 @@
             });
           }
           state.couplePreview = u;
+          state.tab = 'couple';
           state.pdf = 'couple';
           state.iaContext = 'couple';
           state.iaLoaded = false;
@@ -3066,7 +3157,10 @@
           }
           state.periodPreview = u;
           state.periodPreviewKind = kind;
+          state.tab = kind;
           state.pdf = kind;
+          state.iaContext = kind;
+          state.iaLoaded = false;
           state.periodGenError = null;
           markBook(kind);
           render();
@@ -3453,7 +3547,10 @@
             });
           }
           state.natalPreview = u;
+          state.tab = 'natal';
           state.pdf = 'natal';
+          state.iaContext = 'natal';
+          state.iaLoaded = false;
           state.natalGenError = null;
           render();
           return null;
@@ -3526,6 +3623,7 @@
             });
           }
           state.ultimePreview = u;
+          state.tab = 'natal';
           state.pdf = 'ultime';
           state.iaContext = 'ultime';
           state.iaLoaded = false;
@@ -3992,7 +4090,8 @@
     }
     if (state.iaBusy) return;
     if (iaLeft() <= 0) {
-      alert('Le ciel se repose pour ce mois. Reviens le 1er.');
+      alert(t('ia.quota_exhausted'));
+      scrollReaderIaIntoView();
       return;
     }
     var email = state.user.email;
@@ -4280,6 +4379,17 @@
   }
 
 
+  function pagesBadgeHtml(kind) {
+    if (kind === 'ultime') {
+      return '<div class="pages-badge pages-badge--ultime" aria-label="' + t('ultime.pages_badge_aria') + '">' +
+        '<span class="pages-badge-num">~180</span>' +
+        '<span class="pages-badge-unit">' + t('pages.unit') + '</span></div>';
+    }
+    return '<div class="pages-badge pages-badge--natal" aria-label="' + t('natal.pages_badge_aria') + '">' +
+      '<span class="pages-badge-num">~28</span>' +
+      '<span class="pages-badge-unit">' + t('pages.unit') + '</span></div>';
+  }
+
   function natalTab() {
     var prenom = (state.user && state.user.prenom) || t('welcome.you');
     var months = monthsPaid();
@@ -4289,28 +4399,44 @@
     var natalAsk = t('natal.ask');
     var natalRead = t('natal.read');
     var planLbl = ((state.user && state.user.planLabel) || t('plan.free')) + (isPausedPaid() ? t('plan.pause_suffix') : '');
+    var natalInline = state.pdf === 'natal' ? pdfView('natal') : '';
+    var ultimeInline = state.pdf === 'ultime' ? pdfView('ultime') : '';
     var natalCard = canNatal()
-      ? '<div class="card stack"><div class="label">' + t('natal.kicker') + '</div><h2>' + natalTitleHtml() + '</h2><p>' + t('natal.intro') + '</p>' +
+      ? '<div class="card stack"><div class="label">' + t('natal.kicker') + '</div><h2>' + natalTitleHtml() + '</h2>' +
+        pagesBadgeHtml('natal') +
+        '<p>' + t('natal.intro') + '</p>' +
         natalStatusLine() +
         (readyProfile ? askBtn('natal', natalAsk, natalRead) : '') +
+        natalInline +
         '</div>'
-      : '<div class="card lock stack"><div class="label">' + t('plan.celeste') + '</div><h2>' + natalTitleHtml() + '</h2><p class="muted">' + t('natal.pages_price') + '</p><p>' + (isPausedPaid() ? t('natal.lock_paused') : t('natal.lock_need')) + '</p></div>';
+      : '<div class="card lock stack"><div class="label">' + t('plan.celeste') + '</div><h2>' + natalTitleHtml() + '</h2>' +
+        pagesBadgeHtml('natal') +
+        '<p class="muted">' + t('natal.pages_price') + '</p><p>' + (isPausedPaid() ? t('natal.lock_paused') : t('natal.lock_need')) + '</p></div>';
     var ultimeAsk = t('ultime.ask');
     var ultimeRead = t('ultime.read');
     var ultime;
     if (unlocked) {
-      ultime = '<div class="card stack"><div class="label">' + t('plan.unlocked') + '</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + tf('ultime.pages_plain', { n: ULTIME.pages }) + '</p><p>' + (plan() === 'divin' ? t('ultime.divin_now') : t('ultime.six_months')) + t('ultime.once') + '</p>' +
+      ultime = '<div class="card stack"><div class="label">' + t('plan.unlocked') + '</div><h2>' + ultimeTitleHtml() + '</h2>' +
+        pagesBadgeHtml('ultime') +
+        '<p class="muted">' + tf('ultime.pages_plain', { n: ULTIME.pages }) + '</p><p>' + (plan() === 'divin' ? t('ultime.divin_now') : t('ultime.six_months')) + t('ultime.once') + '</p>' +
         ultimeStatusLine() +
         (readyProfile ? askBtn('ultime', ultimeAsk, ultimeRead) : '') +
+        ultimeInline +
         '</div>';
     } else if (plan() === 'gratuit' && months === 0) {
-      ultime = '<div class="card lock stack"><div class="label">' + t('plan.celeste_or_divin') + '</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + tf('ultime.pages_plain', { n: ULTIME.pages }) + '</p><p>' + t('ultime.lock_intro') + '</p></div>';
+      ultime = '<div class="card lock stack"><div class="label">' + t('plan.celeste_or_divin') + '</div><h2>' + ultimeTitleHtml() + '</h2>' +
+        pagesBadgeHtml('ultime') +
+        '<p class="muted">' + tf('ultime.pages_plain', { n: ULTIME.pages }) + '</p><p>' + t('ultime.lock_intro') + '</p></div>';
     } else if (ultimeOn() && isPausedPaid()) {
-      ultime = '<div class="card lock stack"><div class="label">' + t('plan.paused') + '</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + tf('ultime.pages_unlocked', { n: ULTIME.pages }) + '</p><p>' + t('ultime.pause_reopen') +
+      ultime = '<div class="card lock stack"><div class="label">' + t('plan.paused') + '</div><h2>' + ultimeTitleHtml() + '</h2>' +
+        pagesBadgeHtml('ultime') +
+        '<p class="muted">' + tf('ultime.pages_unlocked', { n: ULTIME.pages }) + '</p><p>' + t('ultime.pause_reopen') +
         (plan() === 'divin' ? '' : tf('ultime.months_kept', { n: months })) +
         '</p></div>';
     } else {
-      ultime = '<div class="card lock stack"><div class="label">' + t('plan.locked') + '</div><h2>' + ultimeTitleHtml() + '</h2><p class="muted">' + tf('ultime.pages_locked', { n: ULTIME.pages }) + '</p><p>' + tf('ultime.lock_progress', { have: months, left: left }) + '</p></div>';
+      ultime = '<div class="card lock stack"><div class="label">' + t('plan.locked') + '</div><h2>' + ultimeTitleHtml() + '</h2>' +
+        pagesBadgeHtml('ultime') +
+        '<p class="muted">' + tf('ultime.pages_locked', { n: ULTIME.pages }) + '</p><p>' + tf('ultime.lock_progress', { have: months, left: left }) + '</p></div>';
     }
     return '<div class="hero-month"><div class="label">' + tf('plan.label', { name: planLbl }) + '</div>' +
       '<div class="month">' + natalTitleHtml() + '</div>' +
@@ -4358,16 +4484,22 @@
 
   function iaCard() {
     if (canIa()) {
+      var left = iaLeft();
+      var quota = iaQuota();
+      var planLbl = plan() === 'divin' ? t('plan.divin') : plan() === 'celeste' ? t('plan.celeste') : t('plan.free');
       return '<div class="card stack ia-card">' +
         iaPortraitHtml() +
-        '<div class="label">' + t('plan.divin') + '</div><h2>' + t('ia.title') + '</h2><p class="muted">' + t('ia.available') + '</p>' +
-        '<p>' + t('ia.card_ok') + '</p></div>';
+        '<div class="label">' + planLbl + '</div><h2>' + t('ia.title') + '</h2><p class="muted">' + t('ia.available') + '</p>' +
+        (quota ? '<p class="ia-quota-line' + (left <= 0 ? ' is-out' : '') + '">' + tf('ia.quota_left', { left: left, quota: quota }) + '</p>' : '') +
+        '<p>' + t('ia.card_ok') + '</p>' +
+        (left <= 0 ? iaUpgradeCtaHtml() : '') +
+        '</div>';
     }
     return '<div class="card lock stack ia-card">' +
       iaPortraitHtml() +
-      '<div class="label">' + t('plan.divin_price') + '</div><h2>' + t('ia.title') + '</h2><p class="muted">' + t('ia.included') + '</p>' +
+      '<div class="label">' + t('ia.included') + '</div><h2>' + t('ia.title') + '</h2><p class="muted">' + t('ia.quota_plans') + '</p>' +
       '<p>' + t('ia.card_lock') + '</p>' +
-      '<button class="btn ghost" type="button" data-plan-link="divin">' + t('couple.discover') + '</button></div>';
+      iaUpgradeCtaHtml() + '</div>';
   }
 
 
@@ -4380,7 +4512,7 @@
           '<div><div class="label">' + t('ia.title') + '</div>' +
           '<p>' + t('ia.lock_reader') + '</p></div>' +
         '</div>' +
-        '<button class="btn ghost" type="button" data-plan-link="divin">' + t('ia.pass_divin') + '</button>' +
+        iaUpgradeCtaHtml() +
         '</div>';
     }
     ensureIaHistory(ctx);
@@ -4392,9 +4524,14 @@
       '<div class="reader-ia-head">' +
         iaPortraitHtml('ia-portrait--sm') +
         '<div><div class="label">' + t('ia.title_ms') + '</div>' +
-        '<p class="muted ia-guide-line">' + t('ia.guide') + '</p></div>' +
+        '<p class="muted ia-guide-line">' + t('ia.guide') + '</p>' +
+        iaQuotaLineHtml({ always: true }) +
+        '</div>' +
       '</div>' +
       '<div class="ia-log" id="ia-log">' + (log || empty) + '</div>' +
+      (left <= 0
+        ? ('<p class="muted">' + t('ia.quota_exhausted') + '</p>' + iaUpgradeCtaHtml())
+        : '') +
       '<div class="ia-compose">' +
         '<div class="field"><label class="label" for="ia-q">' + t('ia.question') + '</label>' +
         '<div class="ia-q-row">' +
@@ -4447,7 +4584,9 @@
       '<div class="stack"><div class="card stack"><div class="label">' + t('mois.label') + '</div>' +
       '<h2>' + title + '</h2><p class="muted">' + MONTHLY.pages + quota + '</p><p>' + t('mois.intro') + '</p>' +
       periodStatusLine('mois') +
-      (blocked ? '' : askBtn('mois', t('mois.ask'), t('mois.read'))) + '</div>' + iaCard() + '</div>';
+      (blocked ? '' : askBtn('mois', t('mois.ask'), t('mois.read'))) +
+      (state.pdf === 'mois' ? pdfView('mois') : '') +
+      '</div>' + iaCard() + '</div>';
   }
 
 
@@ -4462,7 +4601,9 @@
       '<div class="stack"><div class="card stack"><div class="label">' + t('jour.label') + '</div>' +
       '<h2>' + title + '</h2><p class="muted">' + TODAY.pages + quota + '</p><p>' + t('jour.intro') + '</p>' +
       periodStatusLine('jour') +
-      (blocked ? '' : askBtn('jour', t('jour.ask'), t('jour.read'))) + '</div>' + iaCard() + '</div>';
+      (blocked ? '' : askBtn('jour', t('jour.ask'), t('jour.read'))) +
+      (state.pdf === 'jour' ? pdfView('jour') : '') +
+      '</div>' + iaCard() + '</div>';
   }
 
 
@@ -4568,6 +4709,7 @@
       ((!needPartner && (left > 0 || ready))
         ? askBtn('couple', t('couple.ask'), t('couple.read'))
         : '') +
+      (state.pdf === 'couple' ? pdfView('couple') : '') +
       '</div>' + iaCard() + '</div>';
   }
 
@@ -4608,7 +4750,7 @@
 
     var iaLine;
     if (canIa()) {
-      iaLine = t('account.ia_ok');
+      iaLine = tf('account.ia_quota', { left: iaLeft(), quota: iaQuota() || '—' });
     } else if (isPausedPaid()) {
       iaLine = t('account.ia_pause');
     } else {
@@ -4797,15 +4939,14 @@
     if (ttsBar) {
       ttsBar = '<div class="ms-tts-footer" role="region" aria-label="' + t('ms.tts_aria') + '">' + ttsBar + '</div>';
     }
-    var body = '<p class="kicker">' + kicker + '</p><h2>' + titleHtml + '</h2>' +
-      paras.map(function (p) { return '<p>' + p + '</p>'; }).join('') + extra + ttsBar;
+    var body = extra + ttsBar;
     var ia = iaCtx ? readerIaPanel(iaCtx) : '';
-    return '<div class="pdf-view"><header>' +
-      '<button type="button" class="pdf-back" id="close-pdf">' + t('reader.back') + '</button>' +
+    return '<div class="pdf-view ms-inline" id="ms-inline" data-ms-kind="' + id + '">' +
+      '<div class="ms-inline-bar">' +
+      '<button type="button" class="pdf-back" id="close-pdf">' + t('reader.close') + '</button>' +
       '<span class="kicker">' + titlePlain + '</span>' +
-      themeToggleHtml(true) +
-      '</header>' +
-      '<div class="pdf-body manuscript-protect">' + body + ia + '</div></div>';
+      '</div>' +
+      '<div class="pdf-body ms-inline-body manuscript-protect">' + body + ia + '</div></div>';
   }
 
   /** Same view key → keep scroll (polls re-render every 3–5s without jumping to top). */
@@ -4827,7 +4968,7 @@
         if (sc) sc.scrollTop = savedMain;
       }
       if (savedPdf != null) {
-        var pb = root.querySelector('.pdf-body');
+        var pb = root.querySelector('.ms-inline-body') || root.querySelector('.pdf-body');
         if (pb) pb.scrollTop = savedPdf;
       }
     }
@@ -4843,7 +4984,7 @@
     var nextKey = renderViewKey();
     var sameView = nextKey === _renderViewKey;
     var scrollEl = sameView ? root.querySelector('.scroll') : null;
-    var pdfBodyEl = sameView ? root.querySelector('.pdf-body') : null;
+      var pdfBodyEl = sameView ? (root.querySelector('.ms-inline-body') || root.querySelector('.pdf-body')) : null;
     var savedMainScroll = scrollEl ? scrollEl.scrollTop : null;
     var savedPdfScroll = pdfBodyEl ? pdfBodyEl.scrollTop : null;
     var html = '';
@@ -4862,7 +5003,6 @@
           : natalTab();
         html = '<div class="screen">' + topbar() + freeQuotaBanner() + '<div class="scroll">' + tab + '</div>' + nav() + '</div>';
         if (state.account) html += accountSheet();
-        if (state.pdf) html += pdfView(state.pdf);
       }
     }
     root.innerHTML = html;
@@ -4870,6 +5010,13 @@
     _renderViewKey = nextKey;
     if (sameView && (savedMainScroll != null || savedPdfScroll != null)) {
       restoreScrollAfterRender(root, savedMainScroll, savedPdfScroll);
+    } else if (state.pdf) {
+      var msEl = document.getElementById('ms-inline');
+      if (msEl && msEl.scrollIntoView) {
+        setTimeout(function () {
+          try { msEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* ignore */ }
+        }, 60);
+      }
     }
     var logEl = document.getElementById('ia-log');
     if (logEl) logEl.scrollTop = logEl.scrollHeight;

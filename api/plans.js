@@ -1,12 +1,18 @@
 /**
- * Offres + quota IA.
+ * Offres + quota IA (messages / mois civil, par contact).
+ *
+ *   Gratuit : 2 / mois
+ *   Céleste : 10 / mois
+ *   Divin   : 500 / mois
  *
  * Message IA (Claude Sonnet 5, sept. 2026) :
  *   $2 / MTok in, $10 / MTok out — https://platform.claude.com/docs/en/about-claude/pricing
  *   8 000 tokens in + 500 tokens out = $0.021
  *   × 0.86 €/$ = 0,018 €  |  ×2 sécurité = 0,036 € / message
  *   Budget max (50 % × 137 €) = 68,50 € → ~1 900 messages possibles
- *   Quota produit = 500 / mois (assez large, et safe même en grosse promo)
+ *   Quota Divin = 500 / mois (assez large, et safe même en grosse promo)
+ *
+ * OpenAI TTS (bulles + manuscrits) : réservé au Divin (canOpenAiTts).
  */
 const IA_COST_EUR = 0.036;
 const IA_BUDGET_SHARE = 0.5;
@@ -25,8 +31,8 @@ const PLANS = {
     ultime: 'never',
     dailyLimit: 5,
     monthlyLimitYear: 1,
-    ia: false,
-    iaQuota: 0
+    ia: true,
+    iaQuota: 2
   },
   celeste: {
     id: 'celeste',
@@ -37,8 +43,8 @@ const PLANS = {
     ultime: 'after6',
     dailyLimit: null,
     monthlyLimitYear: null,
-    ia: false,
-    iaQuota: 0
+    ia: true,
+    iaQuota: 10
   },
   divin: {
     id: 'divin',
@@ -394,6 +400,7 @@ function entitlements(c) {
       canCouple: false,
       canUltime: false,
       canIa: false,
+      canOpenAiTts: false,
       dailyLimit: 5,
       dailyUsed: 0,
       dailyLeft: 5,
@@ -424,11 +431,14 @@ function entitlements(c) {
   const pausedPaid = !active && wasEverPaid(c);
   const dailyLimit = pausedPaid ? free.dailyLimit : p.dailyLimit;
   const monthlyLimitYear = pausedPaid ? free.monthlyLimitYear : p.monthlyLimitYear;
-  const iaQuota = pausedPaid ? 0 : p.iaQuota;
+  /* IA : tous les plans avec quota > 0 ; en pause → quotas Gratuit. */
+  const iaQuota = pausedPaid ? free.iaQuota : (p.iaQuota || 0);
   const canNatal = pausedPaid ? false : !!(p.natal && active);
   const canCouple = pausedPaid ? false : !!(p.couple && active);
   const canUltime = pausedPaid ? false : !!(c.ultimeUnlocked && active);
-  const canIa = pausedPaid ? false : !!(p.ia && active);
+  const canIa = iaQuota > 0 && (pureFree || active || pausedPaid);
+  /* Voix OpenAI (bulles + manuscrits) + sélecteur de voix : Divin actif uniquement. */
+  const canOpenAiTts = !pausedPaid && p.id === 'divin' && active;
   var divinMonths = c.divinMonthsPaid || 0;
   /* Soft count : Divin actif déjà payé au moins 1 fois → au minimum mois 1 (décompte visible). */
   if (divinMonths === 0 && p.id === 'divin' && active && (c.monthsPaid || 0) >= 1) {
@@ -444,9 +454,9 @@ function entitlements(c) {
   const coupleUsedThisMonth = (c.coupleUsedMonth === m) ? (c.coupleUsed || 0) : 0;
   const coupleLeft = canCouple ? Math.max(0, coupleLimit - coupleUsedThisMonth) : 0;
   const iaLeft = canIa ? Math.max(0, iaQuota - (c.iaUsed || 0)) : 0;
-  const ttsCharsQuota = canIa ? TTS_CHARS_MONTH : 0;
-  const ttsCharsUsed = canIa ? (c.ttsCharsUsed || 0) : 0;
-  const ttsCharsLeft = canIa ? Math.max(0, ttsCharsQuota - ttsCharsUsed) : 0;
+  const ttsCharsQuota = canOpenAiTts ? TTS_CHARS_MONTH : 0;
+  const ttsCharsUsed = canOpenAiTts ? (c.ttsCharsUsed || 0) : 0;
+  const ttsCharsLeft = canOpenAiTts ? Math.max(0, ttsCharsQuota - ttsCharsUsed) : 0;
   return Object.assign({
     exists: true,
     email: c.email,
@@ -470,6 +480,7 @@ function entitlements(c) {
     canCouple: canCouple,
     canUltime: canUltime,
     canIa: canIa,
+    canOpenAiTts: canOpenAiTts,
     dailyLimit: dailyLimit,
     dailyUsed: c.dailyUsed || 0,
     dailyLeft: dailyLeft,
@@ -541,10 +552,42 @@ function consumeGenerate(c, kind) {
   }
 }
 
+function iaQuotaExceededError(e) {
+  const planId = (e && e.plan) || 'gratuit';
+  if (planId === 'divin') {
+    return {
+      error: 'Tu as utilisé tes 500 messages IA de ce mois. Reviens le 1er pour un nouveau ciel.',
+      code: 'IA_QUOTA'
+    };
+  }
+  if (planId === 'celeste') {
+    return {
+      error: 'Tu as utilisé tes 10 messages IA de ce mois. Passe Divin pour 500 messages / mois, ou reviens le 1er.',
+      code: 'IA_QUOTA',
+      upgrade: 'divin'
+    };
+  }
+  return {
+    error: 'Tu as utilisé tes 2 messages IA gratuits de ce mois. Passe Céleste (10) ou Divin (500) pour continuer, ou reviens le 1er.',
+    code: 'IA_QUOTA',
+    upgrade: 'celeste'
+  };
+}
+
 function consumeIa(c) {
+  rollUsage(c);
   const e = entitlements(c);
-  if (!e.canIa) return { ok: false, error: 'L’IA Céleste est réservée au plan Divin.' };
-  if (e.iaLeft <= 0) return { ok: false, error: 'Le ciel se repose pour ce mois. Reviens le 1er.' };
+  if (!e.canIa) {
+    return {
+      ok: false,
+      error: 'L’IA Céleste n’est pas disponible sur ce compte pour le moment.',
+      code: 'IA_LOCKED'
+    };
+  }
+  if (e.iaLeft <= 0) {
+    const q = iaQuotaExceededError(e);
+    return { ok: false, error: q.error, code: q.code, upgrade: q.upgrade || null };
+  }
   c.iaUsed = (c.iaUsed || 0) + 1;
   return { ok: true };
 }
@@ -552,7 +595,7 @@ function consumeIa(c) {
 function consumeTts(c, charCount) {
   rollUsage(c);
   const e = entitlements(c);
-  if (!e.canIa) return { ok: false, error: 'La voix Céleste est réservée au plan Divin.' };
+  if (!e.canOpenAiTts) return { ok: false, error: 'La voix Céleste (OpenAI) est réservée au plan Divin.' };
   const n = Math.max(0, Math.floor(Number(charCount) || 0));
   if (n <= 0) return { ok: false, error: 'Texte vide.' };
   if (e.ttsCharsLeft < n) {
@@ -589,5 +632,6 @@ module.exports = {
   consumeGenerate,
   consumeIa,
   consumeTts,
+  iaQuotaExceededError,
   rollUsage
 };

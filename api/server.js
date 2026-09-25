@@ -3,7 +3,8 @@
  * Aucune dépendance npm. Node 18+.
  *
  * Règle Ultime Céleste : 6 mois PAYÉS, cumulés. Une pause ne remet pas à zéro.
- * Divin : Ultime + IA tout de suite. IA plafonnée à 500 questions / mois.
+ * Divin : Ultime + couple + TTS OpenAI tout de suite. IA : tous plans (quotas / mois).
+ * IA plafonnée : Gratuit 2 · Céleste 10 · Divin 500 messages / mois civil.
  */
 const http = require('http');
 const fs = require('fs');
@@ -1338,7 +1339,7 @@ async function handle(req, res) {
       }
       if (wantsVoice) {
         const entitlements = plans.entitlements(c);
-        if (!entitlements.canIa) {
+        if (!entitlements.canOpenAiTts) {
           return send(res, 403, {
             error: 'Le choix de voix Céleste est réservé au plan Divin.',
             contact: publicContact(c)
@@ -1858,7 +1859,8 @@ async function handle(req, res) {
       const ctx = normalizeIaContext(url.searchParams.get('context'));
       if (!e.canIa) {
         return send(res, 403, {
-          error: 'L’IA Céleste est réservée au plan Divin.',
+          error: 'L’IA Céleste n’est pas disponible sur ce compte pour le moment.',
+          code: 'IA_LOCKED',
           context: ctx,
           messages: [],
           contact: publicContact(c)
@@ -1891,15 +1893,19 @@ async function handle(req, res) {
       const entitlements = plans.entitlements(c);
       if (!entitlements.canIa) {
         return send(res, 403, {
-          error: 'L’IA Céleste est réservée au plan Divin.',
+          error: 'L’IA Céleste n’est pas disponible sur ce compte pour le moment.',
+          code: 'IA_LOCKED',
           context: ctx,
           messages: history,
           contact: publicContact(c)
         }, req);
       }
       if (entitlements.iaLeft <= 0) {
+        const exceeded = plans.iaQuotaExceededError(entitlements);
         return send(res, 403, {
-          error: 'Le ciel se repose pour ce mois. Reviens le 1er.',
+          error: exceeded.error,
+          code: exceeded.code,
+          upgrade: exceeded.upgrade || null,
           context: ctx,
           messages: history,
           contact: publicContact(c)
@@ -1925,6 +1931,8 @@ async function handle(req, res) {
       if (!check.ok) {
         return send(res, 403, {
           error: check.error,
+          code: check.code || null,
+          upgrade: check.upgrade || null,
           context: ctx,
           messages: history,
           contact: publicContact(c)
@@ -1955,9 +1963,9 @@ async function handle(req, res) {
       const store = auth.store;
       const c = auth.c;
       const entitlements = plans.entitlements(c);
-      if (!entitlements.canIa) {
+      if (!entitlements.canOpenAiTts) {
         return send(res, 403, {
-          error: 'La voix Céleste est réservée au plan Divin.',
+          error: 'La voix Céleste (OpenAI) est réservée au plan Divin.',
           contact: publicContact(c)
         }, req);
       }
@@ -2044,7 +2052,7 @@ async function handle(req, res) {
       if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
       const c = auth.c;
       const entitlements = plans.entitlements(c);
-      if (!entitlements.canIa) {
+      if (!entitlements.canOpenAiTts) {
         return send(res, 403, {
           error: 'L’écoute du manuscrit est réservée au plan Divin.',
           contact: publicContact(c)
@@ -2085,7 +2093,7 @@ async function handle(req, res) {
       if (!auth.ok) return send(res, auth.code, { error: auth.error }, req);
       const c = auth.c;
       const entitlements = plans.entitlements(c);
-      if (!entitlements.canIa) {
+      if (!entitlements.canOpenAiTts) {
         return send(res, 403, { error: 'L’écoute du manuscrit est réservée au plan Divin.' }, req);
       }
       const kind = String(url.searchParams.get('kind') || '').toLowerCase().trim();
