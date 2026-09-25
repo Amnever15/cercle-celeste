@@ -2965,9 +2965,12 @@
     var text = full
       ? tf('free.banner_full', { m: mLim, mw: manusWord(mLim), d: dLim, dw: manusWord(dLim) })
       : tf('free.banner_left', { m: mLeft, mw: manusWord(mLeft), d: dLeft, dw: manusWord(dLeft) });
+    var upgrade = (plan() === 'gratuit' && !isPausedPaid())
+      ? '<button class="btn ghost free-quota-upgrade" type="button" data-plan-link="celeste">' + t('ia.pass_celeste') + '</button>'
+      : '';
     return '<div class="free-quota-banner" role="status">' +
       '<span class="free-quota-star" aria-hidden="true">✦</span>' +
-      '<p>' + text + '</p></div>';
+      '<div class="free-quota-body"><p>' + text + '</p>' + upgrade + '</div></div>';
   }
 
   var FR_DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
@@ -5017,7 +5020,11 @@
         '</div>'
       : '<div class="card lock stack"><div class="label">' + t('plan.celeste') + '</div><h2>' + natalTitleHtml() + '</h2>' +
         pagesBadgeHtml('natal') +
-        '<p class="muted">' + t('natal.pages_price') + '</p><p>' + (isPausedPaid() ? t('natal.lock_paused') : t('natal.lock_need')) + '</p></div>';
+        '<p class="muted">' + t('natal.pages_price') + '</p><p>' + (isPausedPaid() ? t('natal.lock_paused') : t('natal.lock_need')) + '</p>' +
+        (isPausedPaid() ? '' :
+          '<button class="btn" type="button" data-plan-link="celeste">' + t('ia.pass_celeste') + '</button>' +
+          '<button class="btn ghost" type="button" data-plan-link="divin">' + t('ia.pass_divin') + '</button>') +
+        '</div>';
     var ultimeAsk = t('ultime.ask');
     var ultimeRead = t('ultime.read');
     var ultime;
@@ -5032,7 +5039,9 @@
     } else if (plan() === 'gratuit' && months === 0) {
       ultime = '<div class="card lock stack"><div class="label">' + t('plan.celeste_or_divin') + '</div><h2>' + ultimeTitleHtml() + '</h2>' +
         pagesBadgeHtml('ultime') +
-        '<p class="muted">' + tf('ultime.pages_plain', { n: ULTIME.pages }) + '</p><p>' + t('ultime.lock_intro') + '</p></div>';
+        '<p class="muted">' + tf('ultime.pages_plain', { n: ULTIME.pages }) + '</p><p>' + t('ultime.lock_intro') + '</p>' +
+        '<button class="btn" type="button" data-plan-link="celeste">' + t('ia.pass_celeste') + '</button>' +
+        '<button class="btn ghost" type="button" data-plan-link="divin">' + t('ia.pass_divin') + '</button></div>';
     } else if (ultimeOn() && isPausedPaid()) {
       ultime = '<div class="card lock stack"><div class="label">' + t('plan.paused') + '</div><h2>' + ultimeTitleHtml() + '</h2>' +
         pagesBadgeHtml('ultime') +

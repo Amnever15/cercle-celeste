@@ -496,6 +496,18 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   color: var(--cream);
   opacity: .92;
 }
+.free-quota-banner .free-quota-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.free-quota-banner .free-quota-upgrade {
+  font-size: .72rem;
+  padding: .55rem 1rem;
+}
 @media (min-width: 520px) {
   .free-quota-banner { max-width: 480px; margin-left: auto; margin-right: auto; }
 }
