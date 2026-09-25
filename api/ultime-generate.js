@@ -1,13 +1,13 @@
 /**
  * Génération Manuscrit Ultime (async) — pipeline séparé du natal.
- * Réutilise HD + Astro + Claude natal (GENERATIONS a aussi MANUSCRIT ULTIME
- * GENERATION.html pour l’édition ~180 p. ; contenu long dédié à brancher ensuite).
+ * Port GENERATIONS Ultime : ~23 sections × 1200 mots + Gene Keys (Activation / Vénus / Pearl) — ~180 pages.
  * Écrit ultime-* fichiers / flags — ne touche jamais au natal.
  */
 const fs = require('fs');
 const path = require('path');
 const profile = require('./profile');
 const claudeNatal = require('./natal/claude-natal');
+const claudeUltime = require('./natal/claude-ultime');
 const htmlDoc = require('./natal/html-doc');
 const chartCache = require('./natal/chart-cache');
 
@@ -197,21 +197,23 @@ async function generateUltime(contact, opts) {
   }
 
   onProgress('Le Manuscrit Ultime s’écrit… patience céleste.', 45);
-  var manuscrit = await claudeNatal.generateManuscrit(contact, hd, astro, onProgress);
+  var manuscrit = await claudeUltime.generateUltimeManuscrit(contact, hd, astro, onProgress);
 
   var sectionCount = (manuscrit.sections || []).length;
-  if (sectionCount < 8) {
-    throw new Error('Manuscrit Ultime incomplet (' + sectionCount + ' chapitres) — régénère.');
+  if (sectionCount < 18) {
+    throw new Error('Manuscrit Ultime incomplet (' + sectionCount + ' chapitres, attendu ≥18) — régénère.');
   }
 
   onProgress('Assemblage et reliure de l’Ultime…', 92);
   var html = htmlDoc.buildNatalHtml(contact, manuscrit, hd, astro, {
     coverMain: 'Ton Manuscrit',
     coverGold: 'Ultime',
+    coverEyebrow: 'ÉDITION ULTIME · ~180 PAGES',
     footerLabel: 'Manuscrit Céleste Ultime',
     documentTitle: 'Manuscrit Céleste Ultime'
   });
   var pagesEst = htmlDoc.estimatePages(manuscrit);
+  if (manuscrit.gene_keys && pagesEst < 175) pagesEst = 175;
   var paths = outPaths(email);
 
   var txtParts = [
@@ -227,6 +229,23 @@ async function generateUltime(contact, opts) {
     txtParts.push(s.contenu || '');
     txtParts.push('');
   });
+  if (manuscrit.gene_keys) {
+    txtParts.push('--- GENE KEYS ---');
+    if (manuscrit.gene_keys.introduction) txtParts.push(manuscrit.gene_keys.introduction);
+    ['activation', 'venus', 'pearl'].forEach(function (key) {
+      var seq = manuscrit.gene_keys[key];
+      if (!seq) return;
+      txtParts.push('');
+      txtParts.push('### ' + (seq.titre || key));
+      if (seq.introduction) txtParts.push(seq.introduction);
+      (seq.spheres || []).forEach(function (sp) {
+        if (!sp) return;
+        txtParts.push((sp.nom || '') + ' — GK ' + (sp.gene_key || '') + ' (' + (sp.nom_cle || '') + ')');
+        txtParts.push(sp.texte || '');
+      });
+    });
+    txtParts.push('');
+  }
   if (manuscrit.conclusion) {
     txtParts.push('--- Message ---');
     txtParts.push(manuscrit.conclusion);

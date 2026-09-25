@@ -76,7 +76,8 @@ function parseHD(raw) {
   if (!raw || typeof raw !== 'object') {
     return {
       type: '', profile: '', authority: '', strategy: '', definition: '',
-      cross: '', signature: '', notSelf: '', channels: [], gates: [], designDate: ''
+      cross: '', signature: '', notSelf: '', channels: [], gates: [], designDate: '',
+      activationsPrs: {}, activationsDes: {}
     };
   }
   var P = Object.assign({}, raw, raw.general || {}, raw.Properties || raw.properties || {});
@@ -127,21 +128,58 @@ function parseHD(raw) {
   }).filter(Boolean);
 
   var gatesSet = {};
-  function harvestPlanets(obj) {
+  var activationsPrs = {};
+  var activationsDes = {};
+  function normalizePlanetName(name) {
+    var s = String(name || '').trim().toLowerCase().replace(/[\s_\-]+/g, '');
+    var map = {
+      sun: 'Sun', soleil: 'Sun',
+      earth: 'Earth', terre: 'Earth',
+      moon: 'Moon', lune: 'Moon',
+      mercury: 'Mercury', mercure: 'Mercury',
+      venus: 'Venus', mars: 'Mars', jupiter: 'Jupiter',
+      saturn: 'Saturn', saturne: 'Saturn',
+      uranus: 'Uranus', neptune: 'Neptune',
+      pluto: 'Pluto', pluton: 'Pluto',
+      northnode: 'NorthNode', truenorthnode: 'NorthNode',
+      noeudnord: 'NorthNode', truenorthlunarnode: 'NorthNode',
+      southnode: 'SouthNode', noeudsud: 'SouthNode'
+    };
+    return map[s] || (name ? String(name) : '');
+  }
+  function harvestPlanets(obj, intoMap) {
     if (!obj || typeof obj !== 'object') return;
     var arr = obj.Planets || obj.planets || obj.list || obj;
     if (!Array.isArray(arr)) return;
     arr.forEach(function (p) {
       if (!p) return;
       var g = (typeof p === 'object') ? (p.Gate || p.gate || p.id) : p;
-      if (g != null && g !== 0 && g !== '0') gatesSet[String(g)] = true;
+      if (g == null || g === 0 || g === '0') return;
+      var gNum = parseInt(g, 10);
+      if (!gNum || gNum < 1 || gNum > 64) return;
+      gatesSet[String(gNum)] = true;
+      if (!intoMap || typeof p !== 'object') return;
+      var planet = normalizePlanetName(p.Planet || p.planet || p.name || p.Name || '');
+      if (!planet) return;
+      var line = parseInt(p.Line != null ? p.Line : (p.line != null ? p.line : 0), 10) || 0;
+      intoMap[planet] = { planet: planet, gate: gNum, line: line };
     });
   }
   if (raw.gates && typeof raw.gates === 'object') {
-    harvestPlanets(raw.gates.prs);
-    harvestPlanets(raw.gates.des);
-    if (!raw.gates.prs && !raw.gates.des) harvestPlanets(raw.gates);
+    harvestPlanets(raw.gates.prs, activationsPrs);
+    harvestPlanets(raw.gates.des, activationsDes);
+    if (!raw.gates.prs && !raw.gates.des) harvestPlanets(raw.gates, activationsPrs);
   }
+  function ensureEarth(map) {
+    if (!map || map.Earth || !map.Sun) return;
+    var sunG = map.Sun.gate;
+    var earthG = ((sunG - 1 + 32) % 64) + 1;
+    map.Earth = { planet: 'Earth', gate: earthG, line: map.Sun.line || 0 };
+    gatesSet[String(earthG)] = true;
+  }
+  ensureEarth(activationsPrs);
+  ensureEarth(activationsDes);
+
   var gates = Object.keys(gatesSet).sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); });
   if (gates.length === 0) gates = pickList('Gates.list', 'gates', 'active_gates', 'activeGates');
   if (channels.length === 0) channels = pickList('Channels.list', 'channels', 'active_channels', 'activeChannels');
@@ -157,7 +195,9 @@ function parseHD(raw) {
     notSelf: pick('NotSelfTheme.id', 'NotSelfTheme.name', 'NotSelfTheme', 'not_self', 'notSelf', 'not_self_theme', 'notselftheme'),
     channels: channels,
     gates: gates,
-    designDate: pick('DesignDateUtc', 'design_date', 'designDate', 'design_date_utc', 'create_date')
+    designDate: pick('DesignDateUtc', 'design_date', 'designDate', 'design_date_utc', 'create_date'),
+    activationsPrs: activationsPrs,
+    activationsDes: activationsDes
   };
 }
 

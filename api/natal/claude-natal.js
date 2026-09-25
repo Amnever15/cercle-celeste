@@ -12,7 +12,7 @@ function claudeKey() {
 }
 
 function claudeModel() {
-  return String(process.env.CLAUDE_MODEL || 'claude-sonnet-4-6').trim();
+  return String(process.env.CLAUDE_MODEL || 'claude-sonnet-5').trim();
 }
 
 async function claudeJsonApi(prompt, maxTok, label, opts) {
@@ -21,7 +21,8 @@ async function claudeJsonApi(prompt, maxTok, label, opts) {
   if (!key) throw new Error('CLAUDE_KEY / ANTHROPIC_API_KEY manquant côté serveur.');
   var attempt = 0;
   var maxAttempts = opts.max_attempts != null ? opts.max_attempts : 6;
-  var tokLimit = Math.min(8192, Math.max(500, maxTok || 5500));
+  /* Ultime Gene Keys : jusqu’à 16k (contemplations 380–420 mots/sphère) — aligné GENERATIONS */
+  var tokLimit = Math.min(16000, Math.max(500, maxTok || 5500));
   var timeoutMs = opts.timeout_ms != null ? opts.timeout_ms : 180000;
   var model = opts.model || claudeModel();
   var jsonRetryHint =
@@ -49,16 +50,28 @@ async function claudeJsonApi(prompt, maxTok, label, opts) {
           body: JSON.stringify({
             model: model,
             max_tokens: tokLimit,
-            messages: [{ role: 'user', content: userPrompt }]
+            output_config: { effort: opts.effort || 'low' },
+            messages: [{ role: 'user', content: userPrompt + (attempt === 1 ? '\n\nAnswer directly with JSON only. No deliberation.' : '') }]
           })
         }
       });
-      var block = (data.content && data.content[0] && data.content[0].text) || '';
-      var raw = String(block).trim()
+      // Sonnet 5 : thinking adaptatif — content[0] peut être thinking sans .text
+      var blocks = (data && data.content) || [];
+      var textParts = [];
+      for (var bi = 0; bi < blocks.length; bi++) {
+        var blk = blocks[bi];
+        if (blk && blk.type === 'text' && blk.text) textParts.push(blk.text);
+        else if (blk && !blk.type && blk.text) textParts.push(blk.text);
+      }
+      var raw = textParts.join('\n').trim()
         .replace(/^```json\s*/i, '')
         .replace(/^```\s*/i, '')
         .replace(/```\s*$/i, '')
         .trim();
+      if (!raw) {
+        var types = blocks.map(function (b) { return b && b.type; }).join(',') || '(empty)';
+        throw new Error('Reponse vide [' + (label || '?') + '] stop=' + data.stop_reason + ' blocks=[' + types + ']');
+      }
       if (data.stop_reason === 'max_tokens') {
         throw new Error('Reponse tronquee [' + (label || '?') + '] — ' + raw.length + ' chars / ' + tokLimit + ' tokens');
       }

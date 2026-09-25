@@ -151,6 +151,7 @@ function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
   opts = opts || {};
   var coverMain = opts.coverMain || 'Ton Manuscrit';
   var coverGold = opts.coverGold != null ? opts.coverGold : 'Céleste';
+  var coverEyebrow = opts.coverEyebrow != null ? String(opts.coverEyebrow || '') : '';
   var coverFor = opts.coverFor || null;
   var footerLabel = opts.footerLabel || 'Ton Manuscrit Céleste';
   var documentTitle = opts.documentTitle || 'Manuscrit Céleste';
@@ -168,6 +169,7 @@ function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
   var affirmations = (manuscrit && manuscrit.affirmations) || [];
   var rituels = (manuscrit && manuscrit.rituels) || [];
   var syn = (manuscrit && manuscrit.synthese) || null;
+  var geneKeys = (manuscrit && manuscrit.gene_keys) || null;
 
   var dateStr = [date + (heure ? ' · ' + heure : ''), lieu].filter(Boolean).join(' · ');
 
@@ -247,36 +249,109 @@ function buildNatalHtml(contact, manuscrit, hd, astro, opts) {
       '<div class="page-frame"></div>' +
       '<header class="page-hdr"><span>✦</span><span class="hdr-name">' + prenom + '</span><span>✦</span></header>' +
       '<div class="chapter-inner">' +
-      '<p class="eyebrow">— SYNTHÈSE EXÉCUTIVE —</p>' +
-      '<h2 class="ch-title">L’Essence de ton Manuscrit</h2>' +
-      '<p class="ch-sub">Ce que le ciel et ton design ont écrit pour toi — condensé</p>' +
+      '<p class="sec-title">Synthèse exécutive</p>' +
+      '<p class="sec-sub">L\'essence de ton manuscrit</p>' +
       '<div class="orn">✦ ········· ✦ ········· ✦</div>' +
-      (syn.essence
-        ? '<div class="syn-block"><div class="syn-k">TON ESSENCE</div><p class="essence">' + esc(syn.essence) + '</p></div>'
-        : '') +
+      (syn.essence ? '<div class="syn-block"><div class="syn-k">Ton essence</div><p class="essence">' + esc(syn.essence) + '</p></div>' : '') +
       (Array.isArray(syn.forces) && syn.forces.length
-        ? '<div class="syn-block"><div class="syn-k">TES 3 FORCES SIGNATURES</div><ul class="forces">' +
-          syn.forces.map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('') +
-          '</ul></div>'
+        ? '<div class="syn-block"><div class="syn-k">Tes forces</div><ul class="forces">' +
+          syn.forces.map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('') + '</ul></div>'
         : '') +
-      (syn.chemin_croissance
-        ? '<div class="syn-block"><div class="syn-k">TON CHEMIN DE CROISSANCE</div><p>' + esc(syn.chemin_croissance) + '</p></div>'
-        : '') +
-      (syn.direction_geo
-        ? '<div class="syn-block"><div class="syn-k">TA DIRECTION</div><p>' + esc(syn.direction_geo) + '</p></div>'
-        : '') +
-      (syn.strategie_hd
-        ? '<div class="syn-block"><div class="syn-k">TA STRATÉGIE AU QUOTIDIEN</div><p>' + esc(syn.strategie_hd) + '</p></div>'
-        : '') +
-      (syn.fenetre_puissance
-        ? '<div class="syn-block"><div class="syn-k">TA FENÊTRE DE PUISSANCE</div><p>' + esc(syn.fenetre_puissance) + '</p></div>'
-        : '') +
-      (syn.mantra
-        ? '<blockquote class="mantra">' + esc(syn.mantra) + '</blockquote>'
-        : '') +
+      (syn.chemin_croissance ? '<div class="syn-block"><div class="syn-k">Chemin de croissance</div><div class="body">' + paras(syn.chemin_croissance) + '</div></div>' : '') +
+      (syn.strategie_hd ? '<div class="syn-block"><div class="syn-k">Stratégie</div><div class="body">' + paras(syn.strategie_hd) + '</div></div>' : '') +
+      (syn.gene_key_ancre ? '<div class="syn-block"><div class="syn-k">Gene Key d\'ancrage</div><div class="body">' + paras(syn.gene_key_ancre) + '</div></div>' : '') +
+      (syn.mantra ? '<div class="syn-block"><div class="syn-k">Ton mantra</div><p class="mantra">« ' + esc(syn.mantra) + ' »</p></div>' : '') +
       '</div>' +
       '<footer class="page-ftr">' + footerLabel + '</footer>' +
       '</section>';
+  }
+
+  function renderGkSequenceHtml(seq, badge) {
+    if (!seq) return '';
+    var spheres = seq.spheres || [];
+    var intro = seq.introduction ? '<div class="body">' + paras(seq.introduction) + '</div>' : '';
+    var spheresHtml = spheres.map(function (sp, i) {
+      if (!sp) return '';
+      return (
+        '<article class="gk-sphere">' +
+        '<div class="gk-badge">GENE KEY ' + esc(sp.gene_key || '—') + '</div>' +
+        '<h3>' + esc(sp.nom || ('Sphère ' + (i + 1))) + '</h3>' +
+        (sp.nom_cle ? '<p class="gk-cle">' + esc(sp.nom_cle) + '</p>' : '') +
+        '<div class="gk-triplet">' +
+        '<div><span>Ombre</span><strong>' + esc(sp.ombre || '—') + '</strong></div>' +
+        '<div><span>Don</span><strong>' + esc(sp.don || '—') + '</strong></div>' +
+        '<div><span>Siddhi</span><strong>' + esc(sp.siddhi || '—') + '</strong></div>' +
+        '</div>' +
+        '<div class="body">' + paras(sp.texte) + '</div>' +
+        '</article>'
+      );
+    }).join('\n');
+    return (
+      '<section class="sheet neb-2">' +
+      '<div class="page-frame"></div>' +
+      '<header class="page-hdr"><span>✦</span><span class="hdr-name">' + prenom + '</span><span>✦</span></header>' +
+      '<p class="sec-title">' + esc(seq.titre || badge || 'Gene Keys') + '</p>' +
+      '<p class="sec-sub">— GENE KEYS · ' + esc((badge || '').toUpperCase()) + ' —</p>' +
+      '<div class="orn">✦ ········· ✦ ········· ✦</div>' +
+      intro + spheresHtml +
+      '<footer class="page-ftr">' + footerLabel + '</footer>' +
+      '</section>'
+    );
+  }
+
+  var geneKeysHtml = '';
+  if (geneKeys && typeof geneKeys === 'object') {
+    var carteRows = [];
+    var pc = geneKeys.profil_calcule || {};
+    (pc.activation || []).forEach(function (s) { carteRows.push(['Activation', s]); });
+    (pc.venus || []).forEach(function (s) { carteRows.push(['Vénus', s]); });
+    (pc.pearl || []).forEach(function (s) { carteRows.push(['Pearl', s]); });
+    var carteHtml = carteRows.length
+      ? '<div class="gk-carte">' + carteRows.map(function (row) {
+          var s = row[1] || {};
+          var k = s.key || {};
+          return (
+            '<div class="gk-row">' +
+            '<span class="gk-seq">' + esc(row[0]) + '</span>' +
+            '<span class="gk-nom">' + esc(s.idFr || s.id || '') + '</span>' +
+            '<span class="gk-num">' + esc(s.ok ? ('GK ' + (s.label || '')) : '—') + '</span>' +
+            '<span class="gk-meta">' + esc(k.nom || '') +
+            (k.ombre ? (' · ' + k.ombre + ' → ' + k.don + ' → ' + k.siddhi) : '') + '</span>' +
+            '</div>'
+          );
+        }).join('') + '</div>'
+      : '';
+
+    geneKeysHtml =
+      '<section class="sheet neb-1">' +
+      '<div class="page-frame"></div>' +
+      '<header class="page-hdr"><span>✦</span><span class="hdr-name">' + prenom + '</span><span>✦</span></header>' +
+      '<p class="sec-title">' + esc(geneKeys.titre || 'Tes Gene Keys') + '</p>' +
+      '<p class="sec-sub">' + esc(geneKeys.sous_titre || 'Ombre → Don → Siddhi') + '</p>' +
+      '<div class="orn">✦ ········· ✦ ········· ✦</div>' +
+      (geneKeys.introduction ? '<div class="body">' + paras(geneKeys.introduction) + '</div>' : '') +
+      carteHtml +
+      '<footer class="page-ftr">' + footerLabel + '</footer>' +
+      '</section>' +
+      renderGkSequenceHtml(geneKeys.activation, 'Activation Sequence') +
+      renderGkSequenceHtml(geneKeys.venus, 'Venus Sequence') +
+      renderGkSequenceHtml(geneKeys.pearl, 'Pearl Sequence');
+
+    var lev = geneKeys.pearl && geneKeys.pearl.synthese_3_leviers;
+    if (lev && (lev.annee || lev.amour || lev.abondance)) {
+      geneKeysHtml +=
+        '<section class="sheet neb-3">' +
+        '<div class="page-frame"></div>' +
+        '<header class="page-hdr"><span>✦</span><span class="hdr-name">' + prenom + '</span><span>✦</span></header>' +
+        '<p class="sec-title">Tes 3 Leviers Gene Keys</p>' +
+        '<p class="sec-sub">— GENE KEYS —</p>' +
+        '<div class="orn">✦ ········· ✦ ········· ✦</div>' +
+        (lev.annee ? '<div class="gk-levier"><div class="syn-k">Cette année</div><div class="body">' + paras(lev.annee) + '</div></div>' : '') +
+        (lev.amour ? '<div class="gk-levier"><div class="syn-k">En amour</div><div class="body">' + paras(lev.amour) + '</div></div>' : '') +
+        (lev.abondance ? '<div class="gk-levier"><div class="syn-k">Pour l\'abondance</div><div class="body">' + paras(lev.abondance) + '</div></div>' : '') +
+        '<footer class="page-ftr">' + footerLabel + '</footer>' +
+        '</section>';
+    }
   }
 
   return `<!DOCTYPE html>
@@ -611,6 +686,45 @@ html[data-theme="light"] .rituel {
 .essence { font-size: 1.15rem; font-style: italic; color: var(--gold-light); line-height: 1.55; }
 .forces { padding-left: 1.2em; color: var(--cream-soft); }
 .forces li { margin: 0 0 .55em; }
+.cover-eyebrow {
+  font-family: 'Cinzel', serif; font-size: .72rem; letter-spacing: .22em;
+  text-transform: uppercase; color: var(--gold); opacity: .85; margin: 0 0 14px;
+}
+.gk-carte { margin: 1.2rem 0 1.6rem; }
+.gk-row {
+  display: grid; grid-template-columns: 5.5rem 7rem 4.5rem 1fr;
+  gap: .55rem; padding: .55rem 0; border-bottom: 1px solid rgba(201,168,76,.15);
+  font-size: .86rem; align-items: baseline;
+}
+.gk-seq { color: var(--gold); font-family: 'Cinzel', serif; font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; }
+.gk-nom { color: var(--cream); }
+.gk-num { color: var(--gold-light); font-weight: 600; }
+.gk-meta { color: var(--muted); font-size: .78rem; }
+.gk-sphere { margin: 1.4rem 0 1.8rem; padding-top: .4rem; }
+.gk-sphere h3 { font-family: 'Cormorant Garamond', serif; font-size: 1.35rem; color: var(--gold-light); margin: .35rem 0 .15rem; }
+.gk-badge {
+  display: inline-block; font-family: 'Cinzel', serif; font-size: .65rem; letter-spacing: .14em;
+  color: var(--gold); border: 1px solid rgba(201,168,76,.35); padding: .2rem .55rem; margin-bottom: .2rem;
+}
+.gk-cle { color: var(--muted); font-style: italic; margin: 0 0 .7rem; }
+.gk-triplet {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin: 0 0 1rem;
+}
+.gk-triplet > div {
+  background: var(--card-bg); padding: .55rem .65rem; border: 1px solid rgba(201,168,76,.18);
+  text-align: center;
+}
+.gk-triplet span {
+  display: block; font-size: .62rem; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: .25rem; text-align: center;
+}
+.gk-triplet strong { color: var(--cream); font-weight: 500; font-size: .9rem; display: block; text-align: center; }
+.gk-levier { margin: 0 0 1.6rem; }
+.gk-levier .syn-k {
+  display: block; background: rgba(45, 22, 105, .55); border-radius: 4px;
+  padding: .55rem .75rem; margin-bottom: 1.1rem; /* espace sous barre titre → texte (pgLev += 44) */
+  color: var(--gold); letter-spacing: .1em;
+}
 .neb-2 { background: var(--sheet-bg-2); }
 .neb-3 { background: var(--sheet-bg-3); }
 @media print {
@@ -646,6 +760,7 @@ html[data-theme="light"] .rituel {
     <div class="orn">✦ ········· ✦ ········· ✦</div>
   </div>
   <div class="cover-titles">
+    ${coverEyebrow ? '<p class="cover-eyebrow">' + esc(coverEyebrow) + '</p>' : ''}
     <h1>${esc(coverMain)}<span class="gold">${esc(coverGold)}</span></h1>
     <div class="orn">✦ ········· ✦ ········· ✦</div>
     <p class="cover-for">${coverFor ? esc(coverFor) : ('Révélations pour ' + prenom)}</p>
@@ -656,6 +771,8 @@ ${sheetsAfterCover}
 ${placementsSheetHtml}
 
 ${sectionsHtml}
+
+${geneKeysHtml}
 
 ${skipAffirmations || !affirmations.length ? '' : `<section class="sheet neb-1">
   <div class="page-frame"></div>
@@ -749,6 +866,25 @@ ${skipSynthese ? '' : synHtml}
 </html>`;
 }
 
+function pushGeneKeysText(parts, geneKeys) {
+  if (!geneKeys || typeof geneKeys !== 'object') return;
+  if (geneKeys.introduction) parts.push(geneKeys.introduction);
+  ['activation', 'venus', 'pearl'].forEach(function (key) {
+    var seq = geneKeys[key];
+    if (!seq) return;
+    if (seq.introduction) parts.push(seq.introduction);
+    (seq.spheres || []).forEach(function (sp) {
+      if (sp && sp.texte) parts.push(sp.texte);
+    });
+  });
+  var lev = geneKeys.pearl && geneKeys.pearl.synthese_3_leviers;
+  if (lev) {
+    if (lev.annee) parts.push(lev.annee);
+    if (lev.amour) parts.push(lev.amour);
+    if (lev.abondance) parts.push(lev.abondance);
+  }
+}
+
 function estimatePages(manuscrit) {
   var parts = [];
   if (!manuscrit) return 0;
@@ -756,13 +892,22 @@ function estimatePages(manuscrit) {
   (manuscrit.sections || []).forEach(function (s) {
     if (s && s.contenu) parts.push(s.contenu);
   });
+  pushGeneKeysText(parts, manuscrit.gene_keys);
   (manuscrit.affirmations || []).forEach(function (a) { parts.push(a); });
   (manuscrit.rituels || []).forEach(function (r) {
     if (r && r.description) parts.push(r.description);
   });
   if (manuscrit.conclusion) parts.push(manuscrit.conclusion);
+  if (manuscrit.synthese) {
+    var syn = manuscrit.synthese;
+    ['essence', 'chemin_croissance', 'strategie_hd', 'gene_key_ancre', 'mantra'].forEach(function (k) {
+      if (syn[k]) parts.push(syn[k]);
+    });
+  }
   var words = parts.join(' ').split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.round(words / 280));
+  /* Couverture + placements + Gene Keys (~30 p.) → +175 pour Ultime enrichi */
+  var base = Math.max(1, Math.round(words / 280));
+  return manuscrit.gene_keys ? Math.max(base, 175) : base;
 }
 
 /** Extrait un texte compact pour contextualiser l’IA Céleste. */
@@ -777,9 +922,11 @@ function extractPlainText(manuscrit, maxChars) {
     if (s.contenu) parts.push(s.contenu);
     if (s.insight) parts.push(s.insight);
   });
+  pushGeneKeysText(parts, manuscrit.gene_keys);
   if (manuscrit.conclusion) parts.push(manuscrit.conclusion);
   if (manuscrit.rituel && manuscrit.rituel.description) parts.push(manuscrit.rituel.description);
   if (manuscrit.synthese && manuscrit.synthese.essence) parts.push(manuscrit.synthese.essence);
+  if (manuscrit.synthese && manuscrit.synthese.gene_key_ancre) parts.push(manuscrit.synthese.gene_key_ancre);
   var t = parts.join('\n\n').replace(/\s+/g, ' ').trim();
   if (t.length > maxChars) t = t.slice(0, maxChars) + '…';
   return t;
