@@ -4,7 +4,8 @@
  *
  * Règle Ultime Céleste : 6 mois PAYÉS, cumulés. Une pause ne remet pas à zéro.
  * Divin : Ultime + couple + TTS OpenAI tout de suite. IA : tous plans (quotas / mois).
- * IA plafonnée : Gratuit 3 · Céleste 10 · Divin 500 messages / mois civil (texte + Mode IA live).
+ * IA plafonnée : Gratuit 3 · Céleste 10 · Divin 200 · Divin+ 500 messages / mois civil (texte + Mode IA live).
+ * Divin+ = upsell (+44 €) via tag Systeme.io « App Plan Divin PLUS - en cours » (ajoute/retire sans changer le plan Divin).
  */
 const http = require('http');
 const fs = require('fs');
@@ -214,6 +215,7 @@ function emptyContact(email) {
     ultimeUnlocked: false,
     plan: 'gratuit',
     lastPaidPlan: null,
+    divinPlus: false,
     dailyUsed: 0,
     monthlyUsed: 0,
     iaUsed: 0,
@@ -379,22 +381,38 @@ function revoke(c) {
 function applyTagAccess(c, info, event) {
   if (info.prenom) c.prenom = info.prenom;
   if (info.nom) c.nom = info.nom;
+
+  /* Upsell Divin+ : tag add → on ; tag remove → off. Ne révoque jamais le plan Divin. */
+  if (info.hasDivinPlus) {
+    plans.applyDivinPlus(c, true);
+  } else if (info.removedDivinPlus) {
+    plans.applyDivinPlus(c, false);
+  }
+
   if (info.hasDivin) {
     c.plan = 'divin';
     plans.rememberPaidPlan(c, 'divin');
     c.active = true;
     c.canceledAt = null;
     refreshUltime(c);
-    return 'TAG_DIVIN_ACTIVE';
+    return info.hasDivinPlus ? 'TAG_DIVIN_PLUS_ACTIVE' : 'TAG_DIVIN_ACTIVE';
   }
   if (info.hasCeleste) {
     c.plan = 'celeste';
     plans.rememberPaidPlan(c, 'celeste');
     c.active = true;
     c.canceledAt = null;
+    plans.applyDivinPlus(c, false);
     refreshUltime(c);
     return 'TAG_CELESTE_ACTIVE';
   }
+
+  /* Événement uniquement Divin+ (ajout ou retrait) sans tags plan de base → ne pas révoquer. */
+  if (info.hasDivinPlus || info.removedDivinPlus) {
+    refreshUltime(c);
+    return info.hasDivinPlus ? 'TAG_DIVIN_PLUS_ACTIVE' : 'TAG_DIVIN_PLUS_REMOVED';
+  }
+
   var contactLike = event === 'TAG' || event === 'CONTACT' || event === 'UNKNOWN';
   if (!contactLike) return 'IGNORED_' + event;
   if (event === 'UNKNOWN' && !info.sawTagField) return 'IGNORED_' + event;
@@ -605,7 +623,11 @@ function extract(body) {
     tags: tagInfo.tags,
     hasDivin: tagInfo.hasDivin,
     hasCeleste: tagInfo.hasCeleste,
-    sawTagField: tagInfo.sawTagField
+    hasDivinPlus: tagInfo.hasDivinPlus,
+    removedDivinPlus: tagInfo.removedDivinPlus,
+    removedTags: tagInfo.removedTags,
+    sawTagField: tagInfo.sawTagField,
+    looksLikeDivinPlus: plans.looksLikeDivinPlusProduct(body)
   };
 }
 
@@ -1254,6 +1276,7 @@ async function handle(req, res) {
       const info = extract(body);
       logLine('WEBHOOK auth=' + auth.via + ' TAGS seen=' + JSON.stringify(info.tags || []) +
         ' divin=' + !!info.hasDivin + ' celeste=' + !!info.hasCeleste +
+        ' divinPlus=' + !!info.hasDivinPlus + ' removedPlus=' + !!info.removedDivinPlus +
         ' event=' + event + ' email=' + (info.email || ''));
 
       if (!info.email) {
@@ -1278,11 +1301,34 @@ async function handle(req, res) {
       const c = getContact(store, info.email);
       let action = event;
       if (event === 'SALE_NEW') {
-        const r = grantPayment(c, info.saleId, info.prenom, info.nom, info.plan);
-        action = r.doubled ? 'SALE_NEW_ALREADY_COUNTED' : 'SALE_NEW_MONTH_ADDED';
+        /* Upsell Divin+ seul : active le flag, ne compte pas un mois d’abo de base. */
+        const plusOnly = (info.hasDivinPlus || info.looksLikeDivinPlus) &&
+          info.plan !== 'divin' && info.plan !== 'celeste';
+        if (plusOnly) {
+          if (info.prenom) c.prenom = info.prenom;
+          if (info.nom) c.nom = info.nom;
+          plans.applyDivinPlus(c, true);
+          if (c.plan === 'divin') {
+            c.active = true;
+            c.canceledAt = null;
+          }
+          refreshUltime(c);
+          action = 'SALE_DIVIN_PLUS';
+        } else {
+          const r = grantPayment(c, info.saleId, info.prenom, info.nom, info.plan);
+          if (info.hasDivinPlus || info.looksLikeDivinPlus) plans.applyDivinPlus(c, true);
+          action = r.doubled ? 'SALE_NEW_ALREADY_COUNTED' : 'SALE_NEW_MONTH_ADDED';
+        }
       } else if (event === 'REVOKE') {
-        revoke(c);
-        action = 'REVOKED';
+        /* Annulation upsell Divin+ : retire le flag, garde Divin. */
+        if ((info.removedDivinPlus || info.looksLikeDivinPlus) && !info.hasDivin && info.plan !== 'divin' && info.plan !== 'celeste') {
+          plans.applyDivinPlus(c, false);
+          refreshUltime(c);
+          action = 'DIVIN_PLUS_REVOKED';
+        } else {
+          revoke(c);
+          action = 'REVOKED';
+        }
       } else {
         action = applyTagAccess(c, info, event);
       }

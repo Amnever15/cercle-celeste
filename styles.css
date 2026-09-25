@@ -1853,3 +1853,44 @@ html[data-theme="light"] .ia-live-overlay {
 html[data-theme="light"] .ia-live-status {
   color: #5a4818;
 }
+
+/* ??? Quota IA / Divin+ upsell modal ??? */
+.ia-quota-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 13000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(201,168,76,.16), transparent 55%),
+    rgba(4, 2, 14, .88);
+  backdrop-filter: blur(8px);
+}
+.ia-quota-sheet {
+  width: min(400px, 100%);
+  text-align: center;
+  gap: 12px;
+  margin: 0;
+}
+.ia-quota-sheet h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.ia-quota-sheet p {
+  margin: 0;
+  line-height: 1.45;
+}
+.ia-quota-ctas {
+  width: 100%;
+  gap: 8px;
+}
+.ia-quota-ctas .btn {
+  width: 100%;
+}
+html[data-theme="light"] .ia-quota-modal {
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(201,168,76,.18), transparent 55%),
+    rgba(250, 246, 238, .94);
+}

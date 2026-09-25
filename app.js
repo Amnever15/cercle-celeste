@@ -5,6 +5,7 @@
   var PLAN_LINKS = {
     celesteCheckout: 'https://go.formations-spiritualite-energetique.com/app-manuscrits-celestes-checkout',
     divinCheckout: 'https://go.formations-spiritualite-energetique.com/app-divines-checkout',
+    divinPlusCheckout: 'https://go.formations-spiritualite-energetique.com/app-divine-plus-checkout',
     manageAbo: 'https://go.formations-spiritualite-energetique.com/dashboard/fr/profile/manage-subscriptions'
   };
 
@@ -669,9 +670,19 @@
         'ultime.pages_badge_aria': 'Environ 180 pages',
         'ia.quota_left': '{left} / {quota} messages ce mois',
         'ia.quota_exhausted': 'Quota IA du mois atteint. Passe à un plan supérieur, ou reviens le 1er.',
-        'ia.quota_plans': 'Gratuit 3 · Céleste 10 · Divin 500 / mois',
+        'ia.quota_plans': 'Gratuit 3 · Céleste 10 · Divin 200 · Divin+ 500 / mois',
         'ia.pass_celeste': 'Passer Céleste · 59 €',
         'ia.pass_divin': 'Passer Divin · 137 €',
+        'ia.pass_divin_plus': 'Passer Divin+ · +44 €',
+        'ia.upsell_title': 'Quota IA atteint',
+        'ia.upsell_divin_body': 'Tu as utilisé tes 200 messages Divin de ce mois. Passe Divin+ : jusqu’à 500 messages / mois pour 44 € supplémentaires / mois.',
+        'ia.upsell_divin_plus_body': 'Tu as utilisé tes 500 messages Divin+ de ce mois. Reviens le 1er pour un nouveau ciel.',
+        'ia.upsell_celeste_body': 'Tu as utilisé tes 10 messages Céleste. Passe Divin pour 200 messages / mois.',
+        'ia.upsell_free_body': 'Tu as utilisé tes 3 messages gratuits. Céleste (10) ou Divin (200) pour continuer.',
+        'ia.upsell_cta_plus': 'Découvrir Divin+ · +44 € / mois',
+        'ia.upsell_cta_divin': 'Passer Divin · 137 €',
+        'ia.upsell_cta_celeste': 'Passer Céleste · 59 €',
+        'ia.upsell_later': 'Plus tard',
         'ia.included': 'Sur tous les plans',
         'ia.lock_reader': 'Pose tes questions sur ce manuscrit — IA incluse selon ton plan.',
         'ia.card_ok': 'Elle t’accompagne sous chaque manuscrit, pendant que tu lis.',
@@ -680,7 +691,7 @@
         'account.ia_ok': 'Disponible',
         'account.ia_lock': 'Incluse dès le Gratuit (3 / mois)',
         'account.ia_pause': 'Quota Gratuit (3 / mois) pendant la pause',
-        'login.lede': 'Gratuit, Céleste (59 €) ou Divin (137 €).<br>L’IA Céleste : 3 / 10 / 500 messages par mois.',
+        'login.lede': 'Gratuit, Céleste (59 €) ou Divin (137 €).<br>L’IA Céleste : 3 / 10 / 200 messages par mois (Divin+ : 500).',
         'ia.mic_stop': 'Arrêter la dictée',
         'ia.speak_loading': 'Préparation…',
         'ia.tts_err': 'La voix Céleste ne répond pas pour le moment. Réessaie dans un instant.',
@@ -737,9 +748,19 @@
         'ultime.pages_badge_aria': 'About 180 pages',
         'ia.quota_left': '{left} / {quota} messages this month',
         'ia.quota_exhausted': 'Monthly AI quota reached. Upgrade your plan, or come back on the 1st.',
-        'ia.quota_plans': 'Free 3 · Céleste 10 · Divin 500 / month',
+        'ia.quota_plans': 'Free 3 · Céleste 10 · Divin 200 · Divin+ 500 / month',
         'ia.pass_celeste': 'Go Céleste · €59',
         'ia.pass_divin': 'Go Divin · €137',
+        'ia.pass_divin_plus': 'Go Divin+ · +€44',
+        'ia.upsell_title': 'AI quota reached',
+        'ia.upsell_divin_body': 'You’ve used your 200 Divin AI messages this month. Upgrade to Divin+: up to 500 messages / month for an extra €44 / month.',
+        'ia.upsell_divin_plus_body': 'You’ve used your 500 Divin+ AI messages this month. Come back on the 1st for a fresh sky.',
+        'ia.upsell_celeste_body': 'You’ve used your 10 Céleste messages. Go Divin for 200 messages / month.',
+        'ia.upsell_free_body': 'You’ve used your 3 free messages. Céleste (10) or Divin (200) to continue.',
+        'ia.upsell_cta_plus': 'Discover Divin+ · +€44 / month',
+        'ia.upsell_cta_divin': 'Go Divin · €137',
+        'ia.upsell_cta_celeste': 'Go Céleste · €59',
+        'ia.upsell_later': 'Later',
         'ia.included': 'On every plan',
         'ia.lock_reader': 'Ask questions about this manuscript — AI included on your plan.',
         'ia.card_ok': 'She accompanies you under each manuscript as you read.',
@@ -748,7 +769,7 @@
         'account.ia_ok': 'Available',
         'account.ia_lock': 'Included from Free (3 / month)',
         'account.ia_pause': 'Free quota (3 / month) while paused',
-        'login.lede': 'Free, Céleste (€59) or Divin (€137).<br>Céleste AI: 3 / 10 / 500 messages per month.',
+        'login.lede': 'Free, Céleste (€59) or Divin (€137).<br>Céleste AI: 3 / 10 / 200 messages per month (Divin+: 500).',
         'ia.mic_stop': 'Stop dictation',
         'ia.speak_loading': 'Preparing…',
         'ia.tts_err': 'Céleste’s voice is unavailable right now. Try again in a moment.',
@@ -805,9 +826,19 @@
         'ultime.pages_badge_aria': 'Unas 180 páginas',
         'ia.quota_left': '{left} / {quota} mensajes este mes',
         'ia.quota_exhausted': 'Cupo de IA del mes agotado. Mejora tu plan, o vuelve el día 1.',
-        'ia.quota_plans': 'Gratis 3 · Céleste 10 · Divin 500 / mes',
+        'ia.quota_plans': 'Gratis 3 · Céleste 10 · Divin 200 · Divin+ 500 / mes',
         'ia.pass_celeste': 'Pasar a Céleste · 59 €',
         'ia.pass_divin': 'Pasar a Divin · 137 €',
+        'ia.pass_divin_plus': 'Pasar a Divin+ · +44 €',
+        'ia.upsell_title': 'Cupo de IA agotado',
+        'ia.upsell_divin_body': 'Has usado tus 200 mensajes Divin de este mes. Pasa a Divin+: hasta 500 mensajes / mes por 44 € adicionales / mes.',
+        'ia.upsell_divin_plus_body': 'Has usado tus 500 mensajes Divin+ de este mes. Vuelve el día 1 para un cielo nuevo.',
+        'ia.upsell_celeste_body': 'Has usado tus 10 mensajes Céleste. Pasa a Divin para 200 mensajes / mes.',
+        'ia.upsell_free_body': 'Has usado tus 3 mensajes gratis. Céleste (10) o Divin (200) para continuar.',
+        'ia.upsell_cta_plus': 'Descubrir Divin+ · +44 € / mes',
+        'ia.upsell_cta_divin': 'Pasar a Divin · 137 €',
+        'ia.upsell_cta_celeste': 'Pasar a Céleste · 59 €',
+        'ia.upsell_later': 'Más tarde',
         'ia.included': 'En todos los planes',
         'ia.lock_reader': 'Haz preguntas sobre este manuscrito — IA incluida según tu plan.',
         'ia.card_ok': 'Te acompaña bajo cada manuscrito mientras lees.',
@@ -816,7 +847,7 @@
         'account.ia_ok': 'Disponible',
         'account.ia_lock': 'Incluida desde Gratis (3 / mes)',
         'account.ia_pause': 'Cupo Gratis (3 / mes) en pausa',
-        'login.lede': 'Gratis, Céleste (59 €) o Divin (137 €).<br>IA Céleste: 3 / 10 / 500 mensajes al mes.',
+        'login.lede': 'Gratis, Céleste (59 €) o Divin (137 €).<br>IA Céleste: 3 / 10 / 200 mensajes al mes (Divin+: 500).',
         'ia.mic_stop': 'Detener el dictado',
         'ia.speak_loading': 'Preparando…',
         'ia.tts_err': 'La voz de Céleste no responde por ahora. Inténtalo en un momento.',
@@ -1575,9 +1606,15 @@
     }
     return '';
   }
+  function hasDivinPlus() {
+    return !!(state.user && state.user.divinPlus);
+  }
   function iaUpgradeCtaHtml() {
     var p = plan();
-    if (p === 'divin') return '';
+    if (p === 'divin') {
+      if (hasDivinPlus()) return '';
+      return '<button class="btn ia-upgrade-cta" type="button" data-plan-link="divinPlus">' + t('ia.pass_divin_plus') + '</button>';
+    }
     if (p === 'celeste') {
       return '<button class="btn ghost ia-upgrade-cta" type="button" data-plan-link="divin">' + t('ia.pass_divin') + '</button>';
     }
@@ -1585,6 +1622,63 @@
       '<button class="btn" type="button" data-plan-link="celeste">' + t('ia.pass_celeste') + '</button>' +
       '<button class="btn ghost" type="button" data-plan-link="divin">' + t('ia.pass_divin') + '</button>' +
       '</div>';
+  }
+
+  function closeIaQuotaModal() {
+    var el = document.getElementById('ia-quota-modal');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  function showIaQuotaModal() {
+    closeIaQuotaModal();
+    var p = plan();
+    var plus = hasDivinPlus();
+    var bodyKey = 'ia.upsell_free_body';
+    if (p === 'divin' && plus) bodyKey = 'ia.upsell_divin_plus_body';
+    else if (p === 'divin') bodyKey = 'ia.upsell_divin_body';
+    else if (p === 'celeste') bodyKey = 'ia.upsell_celeste_body';
+
+    var ctas = '';
+    if (p === 'divin' && !plus) {
+      ctas = '<button type="button" class="btn" data-plan-link="divinPlus">' + t('ia.upsell_cta_plus') + '</button>';
+    } else if (p === 'celeste') {
+      ctas = '<button type="button" class="btn" data-plan-link="divin">' + t('ia.upsell_cta_divin') + '</button>' +
+        '<button type="button" class="btn ghost" data-plan-link="divinPlus">' + t('ia.upsell_cta_plus') + '</button>';
+    } else if (p === 'divin' && plus) {
+      ctas = '';
+    } else {
+      ctas = '<button type="button" class="btn" data-plan-link="celeste">' + t('ia.upsell_cta_celeste') + '</button>' +
+        '<button type="button" class="btn ghost" data-plan-link="divin">' + t('ia.upsell_cta_divin') + '</button>';
+    }
+
+    var el = document.createElement('div');
+    el.id = 'ia-quota-modal';
+    el.className = 'ia-quota-modal';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'ia-quota-modal-title');
+    el.innerHTML =
+      '<div class="ia-quota-sheet card stack">' +
+        '<h2 id="ia-quota-modal-title">' + t('ia.upsell_title') + '</h2>' +
+        '<p>' + t(bodyKey) + '</p>' +
+        (ctas ? '<div class="stack ia-quota-ctas">' + ctas + '</div>' : '') +
+        '<button type="button" class="btn ghost" id="ia-quota-dismiss">' + t('ia.upsell_later') + '</button>' +
+      '</div>';
+    document.body.appendChild(el);
+    el.addEventListener('click', function (ev) {
+      if (ev.target === el) closeIaQuotaModal();
+    });
+    var dismiss = document.getElementById('ia-quota-dismiss');
+    if (dismiss) dismiss.onclick = function () { closeIaQuotaModal(); };
+    el.querySelectorAll('[data-plan-link]').forEach(function (b) {
+      b.onclick = function () {
+        var kind = b.getAttribute('data-plan-link');
+        if (kind === 'celeste') openPlanLink(PLAN_LINKS.celesteCheckout);
+        else if (kind === 'divin') openPlanLink(PLAN_LINKS.divinCheckout);
+        else if (kind === 'divinPlus') openPlanLink(PLAN_LINKS.divinPlusCheckout);
+        closeIaQuotaModal();
+      };
+    });
   }
 
   function escapeHtml(s) {
@@ -4139,7 +4233,7 @@
     }
     if (state.iaBusy) return;
     if (iaLeft() <= 0) {
-      alert(t('ia.quota_exhausted'));
+      showIaQuotaModal();
       scrollReaderIaIntoView();
       return;
     }
@@ -4474,7 +4568,9 @@
         })
       }).catch(function () {});
     }
-    if (wasOpen && opts.message) {
+    if (wasOpen && opts.reason === 'quota') {
+      showIaQuotaModal();
+    } else if (wasOpen && opts.message) {
       try { window.alert(opts.message); } catch (e) { /* ignore */ }
     } else if (wasOpen && opts.reason === 'expired') {
       try { window.alert(t('ia.live_expired')); } catch (e2) { /* ignore */ }
@@ -4498,7 +4594,7 @@
       return;
     }
     if (iaLeft() <= 0) {
-      try { window.alert(t('ia.live_quota_block')); } catch (e0) { /* ignore */ }
+      showIaQuotaModal();
       return;
     }
     if (_live.open || _live.connecting) return;
@@ -5830,6 +5926,7 @@
         var kind = b.getAttribute('data-plan-link');
         if (kind === 'celeste') openPlanLink(PLAN_LINKS.celesteCheckout);
         else if (kind === 'divin') openPlanLink(PLAN_LINKS.divinCheckout);
+        else if (kind === 'divinPlus') openPlanLink(PLAN_LINKS.divinPlusCheckout);
         else if (kind === 'manage') openPlanLink(PLAN_LINKS.manageAbo);
         else if (kind === 'downgrade-celeste') {
           alert('Pour revenir à Céleste : arrête d’abord Divin via « Gérer / arrêter », puis souscris à Céleste. Ainsi tu n’es prélevé qu’une seule fois.');

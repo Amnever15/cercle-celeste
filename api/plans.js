@@ -3,14 +3,17 @@
  *
  *   Gratuit : 3 / mois
  *   Céleste : 10 / mois
- *   Divin   : 500 / mois
+ *   Divin   : 200 / mois
+ *   Divin+  : 500 / mois (upsell +44 € / mois, tag Systeme.io — garde les droits Divin)
+ *
+ * Texte + Mode IA live partagent le même pool iaUsed.
  *
  * Message IA (Claude Sonnet 5, sept. 2026) :
  *   $2 / MTok in, $10 / MTok out — https://platform.claude.com/docs/en/about-claude/pricing
  *   8 000 tokens in + 500 tokens out = $0.021
  *   × 0.86 €/$ = 0,018 €  |  ×2 sécurité = 0,036 € / message
  *   Budget max (50 % × 137 €) = 68,50 € → ~1 900 messages possibles
- *   Quota Divin = 500 / mois (assez large, et safe même en grosse promo)
+ *   Quota Divin = 200 / mois ; Divin+ = 500 / mois
  *
  * OpenAI TTS (bulles + manuscrits) : réservé au Divin (canOpenAiTts).
  */
@@ -19,6 +22,11 @@ const IA_BUDGET_SHARE = 0.5;
 /** OpenAI TTS-1 ≈ $15 / 1M chars → 180k chars/mois ≈ $2,70 / user Divin. */
 const TTS_CHARS_MONTH = 180000;
 const TTS_MAX_CHARS = 4000;
+/** Upsell Divin+ : plafond IA mensuel (texte + live). */
+const DIVIN_PLUS_IA_QUOTA = 500;
+const DIVIN_PLUS_PRICE = 44;
+/** Tag Systeme.io exact (après fold accents) : "App Plan Divin PLUS - en cours" */
+const DIVIN_PLUS_TAG_CANON = 'app plan divin plus - en cours';
 const profile = require('./profile');
 
 const PLANS = {
@@ -56,7 +64,7 @@ const PLANS = {
     dailyLimit: null,
     monthlyLimitYear: null,
     ia: true,
-    iaQuota: 500
+    iaQuota: 200
   }
 };
 
@@ -229,10 +237,23 @@ function collectRemovedTagNames(body) {
   return out;
 }
 
+function isDivinPlusName(f) {
+  if (!f) return false;
+  if (f === DIVIN_PLUS_TAG_CANON) return true;
+  if (f.indexOf('app plan divin plus') >= 0) return true;
+  if (f.indexOf('app plan divin+') >= 0) return true;
+  if (f.indexOf('plan divin plus') >= 0 && f.indexOf('en cours') >= 0) return true;
+  if (f.indexOf('plan divin+') >= 0 && f.indexOf('en cours') >= 0) return true;
+  return false;
+}
+
 function isPlanTag(name, plan) {
   var f = foldAccents(name);
   if (!f) return false;
+  if (plan === 'divinPlus') return isDivinPlusName(f);
   if (plan === 'divin') {
+    /* Ne pas confondre le tag Divin+ avec le plan Divin de base. */
+    if (isDivinPlusName(f)) return false;
     if (f === 'app plan divin - en cours') return true;
     if (f.indexOf('app plan divin') >= 0) return true;
     return f.indexOf('plan divin') >= 0 && f.indexOf('en cours') >= 0;
@@ -245,14 +266,22 @@ function isPlanTag(name, plan) {
   return false;
 }
 
+function looksLikeDivinPlusProduct(body) {
+  if (!body || typeof body !== 'object') return false;
+  var blob = foldAccents(JSON.stringify(body));
+  return /divin\s*\+|divin\s*plus|divine\s*plus|app-divine-plus/.test(blob);
+}
+
 function inspectTags(body) {
   var raw = collectTags(body);
   var removed = collectRemovedTagNames(body);
   var removedKeys = {};
   removed.forEach(function (n) { removedKeys[foldAccents(n)] = true; });
   var tags = raw.filter(function (n) { return !removedKeys[foldAccents(n)]; });
+  var hasDivinPlus = tags.some(function (n) { return isPlanTag(n, 'divinPlus'); });
   var hasDivin = tags.some(function (n) { return isPlanTag(n, 'divin'); });
   var hasCeleste = tags.some(function (n) { return isPlanTag(n, 'celeste'); });
+  var removedDivinPlus = removed.some(function (n) { return isPlanTag(n, 'divinPlus'); });
   var plan = '';
   if (hasDivin) plan = 'divin';
   else if (hasCeleste) plan = 'celeste';
@@ -262,6 +291,8 @@ function inspectTags(body) {
     removedTags: removed,
     hasDivin: hasDivin,
     hasCeleste: hasCeleste,
+    hasDivinPlus: hasDivinPlus,
+    removedDivinPlus: removedDivinPlus,
     plan: plan,
     active: !!(hasDivin || hasCeleste),
     sawTagField: hasTagContainer(body) || raw.length > 0 || removed.length > 0
@@ -355,8 +386,15 @@ function revokePlan(c) {
     c.lastPaidPlan = 'celeste';
   }
   c.active = false;
+  c.divinPlus = false;
   c.canceledAt = new Date().toISOString();
   applyPlan(c);
+}
+
+/** Active / retire l’upsell Divin+ sans toucher au plan de base. */
+function applyDivinPlus(c, on) {
+  if (!c) return;
+  c.divinPlus = !!on;
 }
 
 function applyPlan(c, planId) {
@@ -414,6 +452,7 @@ function entitlements(c) {
       iaQuota: 0,
       iaUsed: 0,
       iaLeft: 0,
+      divinPlus: false,
       iaCostEur: IA_COST_EUR,
       ttsCharsQuota: 0,
       ttsCharsUsed: 0,
@@ -431,8 +470,11 @@ function entitlements(c) {
   const pausedPaid = !active && wasEverPaid(c);
   const dailyLimit = pausedPaid ? free.dailyLimit : p.dailyLimit;
   const monthlyLimitYear = pausedPaid ? free.monthlyLimitYear : p.monthlyLimitYear;
+  /* Divin+ : upsell IA (500) tant que Divin est actif ; sinon tombe au quota du plan. */
+  const divinPlus = !pausedPaid && !!c.divinPlus && p.id === 'divin' && active;
   /* IA : tous les plans avec quota > 0 ; en pause → quotas Gratuit. */
-  const iaQuota = pausedPaid ? free.iaQuota : (p.iaQuota || 0);
+  var iaQuota = pausedPaid ? free.iaQuota : (p.iaQuota || 0);
+  if (divinPlus) iaQuota = DIVIN_PLUS_IA_QUOTA;
   const canNatal = pausedPaid ? false : !!(p.natal && active);
   const canCouple = pausedPaid ? false : !!(p.couple && active);
   const canUltime = pausedPaid ? false : !!(c.ultimeUnlocked && active);
@@ -494,6 +536,7 @@ function entitlements(c) {
     iaQuota: iaQuota,
     iaUsed: c.iaUsed || 0,
     iaLeft: iaLeft,
+    divinPlus: divinPlus,
     iaCostEur: IA_COST_EUR,
     ttsCharsQuota: ttsCharsQuota,
     ttsCharsUsed: ttsCharsUsed,
@@ -555,20 +598,28 @@ function consumeGenerate(c, kind) {
 function iaQuotaExceededError(e) {
   const planId = (e && e.plan) || 'gratuit';
   if (planId === 'divin') {
+    if (e && e.divinPlus) {
+      return {
+        error: 'Tu as utilisé tes 500 messages IA Divin+ de ce mois. Reviens le 1er pour un nouveau ciel.',
+        code: 'IA_QUOTA',
+        upgrade: null
+      };
+    }
     return {
-      error: 'Tu as utilisé tes 500 messages IA de ce mois. Reviens le 1er pour un nouveau ciel.',
-      code: 'IA_QUOTA'
+      error: 'Tu as utilisé tes 200 messages IA de ce mois. Passe Divin+ pour 500 messages / mois (+44 €), ou reviens le 1er.',
+      code: 'IA_QUOTA',
+      upgrade: 'divinPlus'
     };
   }
   if (planId === 'celeste') {
     return {
-      error: 'Tu as utilisé tes 10 messages IA de ce mois. Passe Divin pour 500 messages / mois, ou reviens le 1er.',
+      error: 'Tu as utilisé tes 10 messages IA de ce mois. Passe Divin pour 200 messages / mois, ou reviens le 1er.',
       code: 'IA_QUOTA',
       upgrade: 'divin'
     };
   }
   return {
-    error: 'Tu as utilisé tes 3 messages IA gratuits de ce mois. Passe Céleste (10) ou Divin (500) pour continuer, ou reviens le 1er.',
+    error: 'Tu as utilisé tes 3 messages IA gratuits de ce mois. Passe Céleste (10) ou Divin (200) pour continuer, ou reviens le 1er.',
     code: 'IA_QUOTA',
     upgrade: 'celeste'
   };
@@ -616,13 +667,19 @@ module.exports = {
   IA_BUDGET_SHARE,
   TTS_CHARS_MONTH,
   TTS_MAX_CHARS,
+  DIVIN_PLUS_IA_QUOTA,
+  DIVIN_PLUS_PRICE,
+  DIVIN_PLUS_TAG_CANON,
   planOf,
   detectPlan,
   detectPlanFallback,
   collectTags,
   inspectTags,
+  isPlanTag,
+  looksLikeDivinPlusProduct,
   demoPlanFromEmail,
   applyPlan,
+  applyDivinPlus,
   revokePlan,
   rememberPaidPlan,
   isPaidPlanId,
